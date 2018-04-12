@@ -1,86 +1,170 @@
 package main
 
+// For comparison, try
+// sudo ss -timep | grep -A1 -v -e 127.0.0.1 -e skmem | tail
+
 import (
+	"encoding/binary"
+	"flag"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"runtime/pprof"
+	"runtime/trace"
+	"sync"
 	"syscall"
 
-	//	"github.com/gogo/protobuf/proto"
-
-	//"github.com/gogo/protobuf/proto"
-
 	"github.com/golang/protobuf/proto"
-	"github.com/m-lab/tcp-info/other"
-	"github.com/m-lab/tcp-info/tcp"
+	"github.com/m-lab/tcp-info/delta"
+	"github.com/m-lab/tcp-info/inetdiag"
+	tcp "github.com/m-lab/tcp-info/nl-proto"
+	"github.com/m-lab/tcp-info/nl-proto/tools"
+	"github.com/m-lab/tcp-info/zstd"
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
 )
 
-// NOTES:
-//  1. zstd is much better than gzip
-//  2. the go zstd wrapper doesn't seem to work well - poor compression and slow.
-//  3. zstd seems to result in similar file size using proto or raw output.
-
-const (
-	TCPDIAG_GETSOCK     = 18 // linux/inet_diag.h
-	SOCK_DIAG_BY_FAMILY = 20 // linux/sock_diag.h
-
-	RAW = false
-)
-
-var Out = os.Stdout
+/*
+Some performance numbers
+flat  flat%   sum%        cum   cum%
+3.99s 79.48% 79.48%         4s 79.68%  syscall.Syscall6
+0.11s  2.19% 81.67%      0.41s  8.17%  runtime.mallocgc
+0.10s  1.99% 83.67%      0.10s  1.99%  runtime.heapBitsSetType
+0.08s  1.59% 85.26%      0.08s  1.59%  runtime.futex
+0.06s  1.20% 86.45%      0.06s  1.20%  runtime.memclrNoHeapPointers
+0.06s  1.20% 87.65%      0.08s  1.59%  runtime.scanobject
+0.06s  1.20% 88.84%      0.06s  1.20%  syscall.RawSyscall
+0.04s   0.8% 89.64%      0.07s  1.39%  github.com/m-lab/tcp-info/delta.(*ParsedMessage).IsSame
+0.04s   0.8% 90.44%      0.12s  2.39%  runtime.(*mcentral).cacheSpan
+0.04s   0.8% 91.24%      0.04s   0.8%  runtime.duffcopy
+0.04s   0.8% 92.03%      0.04s   0.8%  runtime.memmove
+0.04s   0.8% 92.83%      0.04s   0.8%  syscall.Syscall
+0.03s   0.6% 93.43%      0.03s   0.6%  runtime.cmpbody
+0.03s   0.6% 94.02%      0.03s   0.6%  runtime.heapBitsForObject
+0.02s   0.4% 94.42%      0.20s  3.98%  github.com/vishvananda/netlink/nl.ParseRouteAttr
+0.02s   0.4% 94.82%      0.14s  2.79%  runtime.(*mcache).refill
+0.02s   0.4% 95.22%      0.35s  6.97%  runtime.growslice
+0.01s   0.2% 95.42%      0.38s  7.57%  github.com/m-lab/tcp-info/delta.(*Cache).Update
+0.01s   0.2% 95.62%      0.10s  1.99%  runtime.gcDrain
+0.01s   0.2% 95.82%      0.07s  1.39%  runtime.makeslice
+*/
 
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-func Demo() int {
-	res6 := other.OneType(syscall.AF_INET6)
-	for i := range res6 {
-		p := tcp.TCPDiagnosticsProto{}
-		p.LoadFromAttr(&res6[i])
-		if RAW {
-			other.OutBuf.Write(res6[i].Data)
+// NOTES:
+//  1. zstd is much better than gzip
+//  2. the go zstd wrapper doesn't seem to work well - poor compression and slow.
+//  3. zstd seems to result in similar file size using proto or raw output.
+
+// TODO - lost the RAW output option.
+func Marshal(filename string, marshaler chan *delta.ParsedMessage, wg *sync.WaitGroup) {
+	out, pipeWg := zstd.NewWriter(filename)
+	count := 0
+	for {
+		count++
+		msg, ok := <-marshaler
+		if !ok {
+			break
+		}
+		p := tools.CreateProto(msg.Header, msg.InetDiagMsg, msg.Attributes[:])
+		m, err := proto.Marshal(p)
+		if err != nil {
+			log.Println(err)
 		} else {
-			m, err := proto.Marshal(&p)
-			if err != nil {
-				log.Println(err)
-			} else {
-				Out.Write(m)
-			}
+			out.Write(m)
 		}
 	}
-
-	res4 := other.OneType(syscall.AF_INET)
-	for i := range res4 {
-		p := tcp.TCPDiagnosticsProto{}
-		p.LoadFromAttr(&res4[i])
-		if RAW {
-			other.OutBuf.Write(res4[i].Data)
-		} else {
-			m, err := proto.Marshal(&p)
-			if err != nil {
-				log.Println(err)
-			} else {
-				Out.Write(m)
-			}
-		}
-	}
-
-	return len(res4) + len(res6)
+	out.Close()
+	pipeWg.Wait()
+	wg.Done()
 }
 
-func main() {
-	log.Println("Raw:", RAW)
-	f, err := os.Create("./foobar")
-	if err != nil {
-		log.Fatal("Failed to open file")
+var marshallerChannels []chan *delta.ParsedMessage
+
+func Queue(msg *delta.ParsedMessage) {
+	q := marshallerChannels[int(msg.InetDiagMsg.IDiagInode)%len(marshallerChannels)]
+	q <- msg
+}
+
+func CloseAll() {
+	for i := range marshallerChannels {
+		close(marshallerChannels[i])
 	}
-	defer f.Close()
-	// Out = zstd.NewWriter(bufio.NewWriter(f))
-	// defer Out.Close()
+}
+
+func Demo(cache *delta.Cache) (int, int) {
+	remoteCount := 0
+	res6 := inetdiag.OneType(syscall.AF_INET6)
+	for i := range res6 {
+		parsed, err := cache.Update(res6[i])
+		if err != nil {
+			log.Println(err)
+		} else if parsed != nil {
+			remoteCount++
+			Queue(parsed)
+		}
+	}
+
+	res4 := inetdiag.OneType(syscall.AF_INET)
+	for i := range res4 {
+		parsed, err := cache.Update(res4[i])
+		if err != nil {
+			log.Println(err)
+		} else if parsed != nil {
+			remoteCount++
+			Queue(parsed)
+		}
+	}
+
+	return len(res4) + len(res6), remoteCount
+}
+
+// NextMsg reads the next NetlinkMessage from a source readers.
+func NextMsg(rdr io.Reader) (*syscall.NetlinkMessage, error) {
+	var header syscall.NlMsghdr
+	err := binary.Read(rdr, binary.LittleEndian, &header)
+	if err != nil {
+		return nil, err
+	}
+	//log.Printf("%+v\n", header)
+	data := make([]byte, header.Len-uint32(binary.Size(header)))
+	err = binary.Read(rdr, binary.LittleEndian, data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &syscall.NetlinkMessage{Header: header, Data: data}, nil
+}
+
+var (
+	filter      = flag.Bool("filter", true, "Record only records that change")
+	reps        = flag.Int("reps", 0, "How manymove the  cycles should be recorded, 0 means continuous")
+	verbose     = flag.Bool("v", false, "Enable verbose logging")
+	numFiles    = flag.Int("files", 1, "Number of output files")
+	enableTrace = flag.Bool("trace", false, "Enable trace")
+	rawFile     = flag.String("raw", "", "File to write raw records to")
+	source      = flag.String("source", "", "Source to read (uncompressed) NetlinkMessage records")
+)
+
+func main() {
+	flag.Parse()
+	// TODO ? tcp.LOG = *verbose || *reps == 1
+
+	var cache *delta.Cache
+
+	if *rawFile != "" {
+		log.Println("Raw output to", *rawFile)
+		p, wg := zstd.NewWriter(*rawFile)
+		defer wg.Wait()
+		defer p.Close()
+		cache = delta.NewCache(p, *filter)
+	} else {
+		cache = delta.NewCache(nil, *filter)
+	}
 
 	p := tcp.TCPDiagnosticsProto{}
 	p.TcpInfo = &tcp.TCPInfoProto{}
@@ -101,19 +185,68 @@ func main() {
 	pprof.StartCPUProfile(prof)
 	defer pprof.StopCPUProfile()
 
-	sockCount := 0
-	if tcp.LOG {
-		sockCount = Demo()
-	} else {
+	if *enableTrace {
+		traceFile, err := os.Create("trace")
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := trace.Start(traceFile); err != nil {
+			log.Fatalf("failed to start trace: %v", err)
+		}
+		defer trace.Stop()
+	}
 
-		for i := 0; i < 1000; i++ {
-			sockCount = Demo()
+	var wg sync.WaitGroup
+	for i := 0; i < *numFiles; i++ {
+		marshChan := make(chan *delta.ParsedMessage, 1000)
+		marshallerChannels = append(marshallerChannels, marshChan)
+		fn := fmt.Sprintf("file%02d.zst", i)
+		wg.Add(1)
+		go Marshal(fn, marshChan, &wg)
+	}
+
+	if *source != "" {
+		log.Println("Reading messages from", *source)
+		rdr := zstd.NewReader(*source)
+		for {
+			msg, err := NextMsg(rdr)
+			if err != nil {
+				break
+			}
+			parsed, err := cache.Update(msg)
+			if err != nil {
+				log.Println(err)
+			} else if parsed != nil {
+				Queue(parsed)
+			}
+		}
+		cache.Stats()
+	} else {
+		totalCount := 0
+		remote := 0
+		loops := 0
+		for *reps == 0 || loops < *reps {
+			loops++
+			a, b := Demo(cache)
+			totalCount += a
+			remote += b
+			if loops%50 == 0 {
+				cache.Stats()
+			}
+		}
+		cache.Stats()
+		if loops > 0 {
+			log.Println(totalCount, "sockets", remote, "remotes", totalCount/loops, "per iteration")
 		}
 	}
-	log.Println(sockCount, "sockets")
 
-	return
+	log.Printf("%+v\n", delta.DiffCounts)
+	CloseAll()
+	wg.Wait()
 
+}
+
+func otherStuff() {
 	// OTHER STUFF
 	fd, err := unix.Socket(
 		// Always used when opening netlink sockets.
@@ -220,5 +353,4 @@ func main() {
 	}
 
 	log.Printf("res: %+v", res)
-
 }
