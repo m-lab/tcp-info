@@ -246,6 +246,18 @@ const (
 	PmtuOffset         = unsafe.Offsetof(LinuxTCPInfo{}.pmtu)
 )
 
+// MaybeCopy checks whether the src is the full size of the intended struct size.
+// If so, it just returns the pointer, otherwise it copies the content to an
+// appropriately sized new byte slice, and returns pointer to that.
+func MaybeCopy(src []byte, size int) unsafe.Pointer {
+	if len(src) < size {
+		data := make([]byte, size)
+		copy(data, src)
+		return unsafe.Pointer(&data[0])
+	}
+	return unsafe.Pointer(&src[0])
+}
+
 // ParseLinuxTCPInfo maps the rta Value onto a TCPInfo struct.  It may have to copy the
 // bytes.
 func ParseLinuxTCPInfo(rta *syscall.NetlinkRouteAttr) *LinuxTCPInfo {
@@ -264,11 +276,8 @@ func ParseLinuxTCPInfo(rta *syscall.NetlinkRouteAttr) *LinuxTCPInfo {
 // Since this struct is very simple, it can be mapped directly, instead of using an
 // intermediate struct.
 func ParseSockMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.SocketMemInfoProto {
-	if len(rta.Value) != 36 {
-		log.Println(len(rta.Value))
-		return nil
-	}
-	return (*tcpinfo.SocketMemInfoProto)(unsafe.Pointer(&rta.Value[0]))
+	structSize := (int)(unsafe.Sizeof(tcpinfo.SocketMemInfoProto{}))
+	return (*tcpinfo.SocketMemInfoProto)(MaybeCopy(rta.Value, structSize))
 }
 
 // ParseMemInfo maps the rta Value onto a MemInfoProto.
