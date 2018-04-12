@@ -1,17 +1,20 @@
 package tcp
 
+// This file contains extensions to the protobuf message types.  It contains structs for raw linux route attribute
+// messages related to tcp-info, and code for copying them into protobufs defined in tcp*.proto.
+
 import (
 	"log"
 	"syscall"
 	"unsafe"
 
-	"github.com/m-lab/tcp-info/other"
-	"github.com/m-lab/tcp-info/other/api"
+	"github.com/m-lab/tcp-info/api"
+	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/vishvananda/netlink/nl"
 )
 
-const (
-	LOG = false
+var (
+	LOG = true
 )
 
 // ParseCong returns the congestion algorithm string
@@ -19,7 +22,8 @@ func ParseCong(rta *syscall.NetlinkRouteAttr) string {
 	return string(rta.Value)
 }
 
-func (all *TCPDiagnosticsProto) FillFromHeader(hdr *other.InetDiagMsg) {
+// FillFromHeader fills out the InetDiagMsg proto msg with fields from the provided linux InetDiagMsg
+func (all *TCPDiagnosticsProto) FillFromHeader(hdr *inetdiag.InetDiagMsg) {
 	all.InetDiagMsg = &InetDiagMsgProto{}
 	all.InetDiagMsg.Family = InetDiagMsgProto_AddressFamily(hdr.IDiagFamily)
 	all.InetDiagMsg.State = TCPState(hdr.IDiagState)
@@ -51,67 +55,97 @@ func (all *TCPDiagnosticsProto) FillFromAttr(rta *syscall.NetlinkRouteAttr) {
 	switch rta.Attr.Type {
 	case api.INET_DIAG_PROTOCOL:
 		if LOG {
-			log.Println("Protocol", rta.Value)
+			log.Println("Not processing Protocol", rta.Value)
 		}
 		// Used only for multicast messages. Not expected for our use cases.
 		// TODO(gfr) Consider checking for equality, and LOG_FIRST_N.
 	case api.INET_DIAG_INFO:
 		ldiwr := ParseLinuxDiagInfo(rta)
 		all.TcpInfo = &TCPInfoProto{}
-		all.TcpInfo.LoadFrom(ldiwr.Info)
+		all.TcpInfo.LoadFrom(ldiwr)
 	case api.INET_DIAG_CONG:
 		all.CongestionAlgorithm = ParseCong(rta)
 	case api.INET_DIAG_SHUTDOWN:
-		// TODO
-		if LOG {
-			log.Printf("SHUTDOWN %2x\n", rta.Value[0])
-		}
+		all.Shutdown = &TCPDiagnosticsProto_ShutdownMask{uint32(rta.Value[0])}
 	case api.INET_DIAG_MEMINFO:
 		all.MemInfo = &MemInfoProto{}
 		all.MemInfo.LoadFrom(rta)
 	case api.INET_DIAG_SKMEMINFO:
 		all.SocketMem = &SocketMemInfoProto{}
 		all.SocketMem.LoadFrom(rta)
+	case api.INET_DIAG_TOS:
+		// TODO
+		if LOG {
+			log.Println("Not processing TOS", rta.Value)
+		}
+	case api.INET_DIAG_TCLASS:
+		// TODO
+		if LOG {
+			log.Println("Not processing TCLASS", rta.Value)
+		}
 	case api.INET_DIAG_BBRINFO:
 		if LOG {
-			log.Println("BBRInfo", rta.Value)
+			log.Println("Not processing BBRInfo", rta.Value)
 		}
 		//ParseBBRInfo(rta, proto->mutable_bbr_info());
 	case api.INET_DIAG_VEGASINFO:
 		if LOG {
-			log.Println("VegasInfo", rta.Value)
+			log.Println("Not processing VegasInfo", rta.Value)
 		}
 		//fprintf(stderr, "Need to do vegas\n");
 	case api.INET_DIAG_SKV6ONLY:
 		if LOG {
-			log.Println("SK6", rta.Value)
+			log.Println("Not processing SK6ONLY", rta.Value)
+		}
+	case api.INET_DIAG_MARK:
+		if LOG {
+			log.Println("Not processing MARK", rta.Value)
 		}
 		// TODO(gfr) Do we need this?
 	default:
+		log.Printf("Not processing %+v\n", rta)
 		// TODO(gfr) - should LOG(WARNING) on missing cases.
 	}
 }
 
-func (all *TCPDiagnosticsProto) LoadFromAttr(nlMsg *syscall.NetlinkMessage) error {
+func (all *TCPDiagnosticsProto) Load(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs map[uint16]*syscall.NetlinkRouteAttr) error {
+	all.FillFromHeader(idm)
+	for i := range attrs {
+		all.FillFromAttr(attrs[i])
+	}
+
+	if LOG {
+		log.Printf("nlmsg header: %v Proto: %+v\n", header, all)
+	}
+	return nil
+}
+
+func (all *TCPDiagnosticsProto) LoadFromNLMsg(nlMsg *syscall.NetlinkMessage) error {
 	// These are serialized NetlinkMessage
-	idm := other.ParseInetDiagMsg(nlMsg.Data)
+	idm, attrBytes := inetdiag.ParseInetDiagMsg(nlMsg.Data)
 	//log.Printf("%+v\n\n", idm)
-	all.FillFromHeader(&idm.Header)
-	attrs, err := nl.ParseRouteAttr(idm.Data)
+	all.FillFromHeader(idm)
+	attrs, err := nl.ParseRouteAttr(attrBytes)
 	if err != nil {
 		log.Println(err)
+	}
+	if LOG {
+		//for i := range attrs {
+		//	log.Printf("%+v\n", attrs[i].Attr)
+		//}
 	}
 	for i := range attrs {
 		all.FillFromAttr(&attrs[i])
 	}
 
 	if LOG {
-		log.Printf("All %+v\n", all)
+		log.Printf("nlmsg header: %v Proto: %+v\n", nlMsg.Header, all)
 	}
 	return nil
 }
 
 // LinuxTCPInfo is the linux defined structure returned in RouteAttr DIAG_INFO messages.
+// TODO - maybe move this to inetdiag module?
 type LinuxDiagInfo struct {
 	state       uint8
 	caState     uint8
@@ -122,22 +156,22 @@ type LinuxDiagInfo struct {
 	wscale      uint8 //snd_wscale : 4, tcpi_rcv_wscale : 4;
 	appLimited  uint8 //delivery_rate_app_limited:1;
 
-	rto    uint32
+	rto    uint32 // offset 8
 	ato    uint32
 	sndMss uint32
 	rcvMss uint32
 
-	unacked uint32
+	unacked uint32 // offset 24
 	sacked  uint32
 	lost    uint32
 	retrans uint32
 	fackets uint32
 
 	/* Times. */
-	lastDataSent uint32
-	lastAckSent  uint32 /* Not remembered, sorry. */
-	lastDataRecv uint32
-	lastAckRecv  uint32
+	lastDataSent uint32 // offset 44
+	lastAckSent  uint32 /* Not remembered, sorry. */ // offset 48
+	lastDataRecv uint32 // offset 52
+	lastAckRecv  uint32 // offset 56
 
 	/* Metrics. */
 	pmtu        uint32
@@ -176,25 +210,18 @@ type LinuxDiagInfo struct {
 	sndbufLimited uint64 /* Time (usec) limited by send buffer */
 }
 
-// We will often want to map the buffer returned from netlink as a TCPInfo struct.  But
-// we also need to maintain the reference.
-
-// TCPInfoWithRef holds a TCPInfo pointer and a pointer to the underlying slice.
-type LinuxDiagInfoWithRef struct {
-	Info *LinuxDiagInfo // Warning - do not copy this pointer without the ref.
-	ref  []byte         // Reference to the underlying slice.
-}
-
 // ParseLinuxDiagInfo tries to map the rta Value onto a TCPInfo struct.  It may have to copy the
 // bytes.
-func ParseLinuxDiagInfo(rta *syscall.NetlinkRouteAttr) LinuxDiagInfoWithRef {
+func ParseLinuxDiagInfo(rta *syscall.NetlinkRouteAttr) *LinuxDiagInfo {
 	structSize := (int)(unsafe.Sizeof(LinuxDiagInfo{}))
 	data := rta.Value
+	//log.Println(len(rta.Value), "vs", structSize)
 	if len(rta.Value) < structSize {
+		// log.Println(len(rta.Value), "vs", structSize)
 		data = make([]byte, structSize)
 		copy(data, rta.Value)
 	}
-	return LinuxDiagInfoWithRef{(*LinuxDiagInfo)(unsafe.Pointer(&data[0])), data}
+	return (*LinuxDiagInfo)(unsafe.Pointer(&data[0]))
 }
 
 // SockMemInfo contains report of socket memory.
@@ -249,6 +276,7 @@ func (p *MemInfoProto) LoadFrom(rta *syscall.NetlinkRouteAttr) {
 
 func (p *TCPInfoProto) LoadFrom(diag *LinuxDiagInfo) {
 	// TODO state ???
+	p.State = TCPState(diag.state)
 
 	p.CaState = uint32(diag.caState)
 	p.Retransmits = uint32(diag.retransmits)

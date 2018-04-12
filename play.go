@@ -1,9 +1,18 @@
 package main
 
+// For comparison, try
+// sudo ss -timep | grep -A1 -v -e 127.0.0.1 -e skmem | tail
+
 import (
+	"flag"
+	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"runtime/pprof"
+	"runtime/trace"
+	//"runtime/trace"
+	"sync"
 	"syscall"
 
 	//	"github.com/gogo/protobuf/proto"
@@ -11,7 +20,8 @@ import (
 	//"github.com/gogo/protobuf/proto"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/m-lab/tcp-info/other"
+	"github.com/m-lab/tcp-info/delta"
+	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/tcp"
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
@@ -26,62 +36,128 @@ const (
 	TCPDIAG_GETSOCK     = 18 // linux/inet_diag.h
 	SOCK_DIAG_BY_FAMILY = 20 // linux/sock_diag.h
 
+	// RAW controls whether we just dump raw netlinkMessages, or protobufs.
+	// With RAW=true, play takes about 43 seconds to process 10M records,
+	// and we see about 1.45 cpu for play, and 0.45 for zstd
+	// With RAW=false, play takes about 75 seconds to process 10M records,
+	// and we see about 1.31 cpu for play, and 0.32 cpu for zstd
 	RAW = false
 )
 
-var Out = os.Stdout
+var marshallerChannels []chan *delta.ParsedMessage
+
+// Create a pipe to an external zstd process writing to filename
+// Write to io.Writer
+// close io.Writer when done
+// wait on waitgroup to finish
+func ZStdPipe(filename string) (*os.File, *sync.WaitGroup) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	pipeR, pipeW, _ := os.Pipe()
+	f, _ := os.Create(filename)
+	cmd := exec.Command("zstd")
+	cmd.Stdin = pipeR
+	cmd.Stdout = f
+
+	go func() {
+		err := cmd.Run()
+		if err != nil {
+			log.Println("ZSTD error", filename, err)
+		}
+		pipeR.Close()
+		wg.Done()
+	}()
+
+	return pipeW, &wg
+}
+
+// TODO - lost the RAW output option.
+func Marshal(filename string, marshaler chan *delta.ParsedMessage, wg *sync.WaitGroup) {
+	pipe, pipeWg := ZStdPipe(filename)
+	count := 0
+	for {
+		count++
+		msg, ok := <-marshaler
+		if !ok {
+			break
+		}
+		p := tcp.TCPDiagnosticsProto{}
+		p.Load(msg.Header, msg.InetDiagMsg, msg.Attributes)
+		m, err := proto.Marshal(&p)
+		if err != nil {
+			log.Println(err)
+		} else {
+			pipe.Write(m)
+		}
+	}
+	pipe.Close()
+	pipeWg.Wait()
+	wg.Done()
+}
 
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-func Demo() int {
-	res6 := other.OneType(syscall.AF_INET6)
-	for i := range res6 {
-		p := tcp.TCPDiagnosticsProto{}
-		p.LoadFromAttr(&res6[i])
-		if RAW {
-			other.OutBuf.Write(res6[i].Data)
-		} else {
-			m, err := proto.Marshal(&p)
-			if err != nil {
-				log.Println(err)
-			} else {
-				Out.Write(m)
-			}
-		}
-	}
+var cache = delta.NewCache()
 
-	res4 := other.OneType(syscall.AF_INET)
-	for i := range res4 {
-		p := tcp.TCPDiagnosticsProto{}
-		p.LoadFromAttr(&res4[i])
-		if RAW {
-			other.OutBuf.Write(res4[i].Data)
-		} else {
-			m, err := proto.Marshal(&p)
-			if err != nil {
-				log.Println(err)
-			} else {
-				Out.Write(m)
-			}
-		}
-	}
-
-	return len(res4) + len(res6)
+func Queue(msg *delta.ParsedMessage) {
+	q := marshallerChannels[int(msg.InetDiagMsg.IDiagInode)%len(marshallerChannels)]
+	q <- msg
 }
 
+func CloseAll() {
+	for i := range marshallerChannels {
+		close(marshallerChannels[i])
+	}
+}
+
+func Demo() (int, int) {
+	remoteCount := 0
+	res6 := inetdiag.OneType(syscall.AF_INET6)
+	for i := range res6 {
+		parsed, err := cache.Update(res6[i])
+		if err != nil {
+			log.Println(err)
+		} else if parsed != nil {
+			remoteCount++
+			Queue(parsed)
+		}
+	}
+
+	res4 := inetdiag.OneType(syscall.AF_INET)
+	for i := range res4 {
+		parsed, err := cache.Update(res4[i])
+		if err != nil {
+			log.Println(err)
+		} else if parsed != nil {
+			remoteCount++
+			Queue(parsed)
+		}
+	}
+
+	return len(res4) + len(res6), remoteCount
+}
+
+var (
+	filter      = flag.Bool("filter", true, "Record only records that change")
+	reps        = flag.Int("reps", 0, "How manymove the  cycles should be recorded, 0 means continuous")
+	verbose     = flag.Bool("v", false, "Enable verbose logging")
+	numFiles    = flag.Int("files", 1, "Number of output files")
+	enableTrace = flag.Bool("trace", false, "Enable trace")
+)
+
 func main() {
+	flag.Parse()
+	tcp.LOG = *verbose || *reps == 1
+
 	log.Println("Raw:", RAW)
 	f, err := os.Create("./foobar")
 	if err != nil {
 		log.Fatal("Failed to open file")
 	}
 	defer f.Close()
-	// Out = zstd.NewWriter(bufio.NewWriter(f))
-	// defer Out.Close()
-
 	p := tcp.TCPDiagnosticsProto{}
 	p.TcpInfo = &tcp.TCPInfoProto{}
 	// This generates quite a large byte array - 144 bytes for JUST TCPInfo,
@@ -101,16 +177,45 @@ func main() {
 	pprof.StartCPUProfile(prof)
 	defer pprof.StopCPUProfile()
 
-	sockCount := 0
-	if tcp.LOG {
-		sockCount = Demo()
-	} else {
+	if *enableTrace {
+		traceFile, err := os.Create("trace")
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := trace.Start(traceFile); err != nil {
+			log.Fatalf("failed to start trace: %v", err)
+		}
+		defer trace.Stop()
+	}
 
-		for i := 0; i < 1000; i++ {
-			sockCount = Demo()
+	var wg sync.WaitGroup
+	for i := 0; i < *numFiles; i++ {
+		marshChan := make(chan *delta.ParsedMessage, 1000)
+		marshallerChannels = append(marshallerChannels, marshChan)
+		fn := fmt.Sprintf("file%02d.zst", i)
+		wg.Add(1)
+		go Marshal(fn, marshChan, &wg)
+	}
+
+	totalCount := 0
+	remote := 0
+	loops := 0
+	for *reps == 0 || loops < *reps {
+		loops++
+		a, b := Demo()
+		totalCount += a
+		remote += b
+		if loops%10 == 0 {
+			cache.Stats()
 		}
 	}
-	log.Println(sockCount, "sockets")
+	cache.Stats()
+	if loops > 0 {
+		log.Println(totalCount, "sockets", remote, "remotes", totalCount/loops, "per iteration")
+	}
+
+	CloseAll()
+	wg.Wait()
 
 	return
 
@@ -220,5 +325,4 @@ func main() {
 	}
 
 	log.Printf("res: %+v", res)
-
 }

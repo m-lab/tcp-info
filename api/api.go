@@ -1,6 +1,9 @@
-// Package api contains basic constants and interfaces.
+// Package api contains basic constants and interfaces that are shared across packages.
+// This is primarily to avoid dependency cycles.
 package api
 
+// INET_DIAG enumeration.  These are all caps for consistency with linux code.
+// TODO - should we import the .h files instead?
 const (
 	INET_DIAG_NONE = iota
 	INET_DIAG_MEMINFO
