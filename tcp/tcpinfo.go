@@ -32,22 +32,18 @@ func (all *TCPDiagnosticsProto) FillFromHeader(hdr *inetdiag.InetDiagMsg) {
 	all.InetDiagMsg.SockId = &InetSocketIDProto{}
 	src := EndPoint{}
 	all.InetDiagMsg.SockId.Source = &src
-	src.Port = uint32(hdr.Id.IDiagSPort.Int())
-	for _, be := range hdr.Id.IDiagSrc {
-		src.Ip = append(src.Ip, be[0], be[1], be[2], be[3])
-	}
+	src.Port = uint32(hdr.ID.IDiagSPort)
+	src.Ip = append(src.Ip, hdr.ID.IDiagSrc[:]...)
 	dst := EndPoint{}
 	all.InetDiagMsg.SockId.Destination = &dst
-	dst.Port = uint32(hdr.Id.IDiagDPort.Int())
-	for _, be := range hdr.Id.IDiagDst {
-		dst.Ip = append(dst.Ip, be[0], be[1], be[2], be[3])
-	}
-	all.InetDiagMsg.SockId.Interface = hdr.Id.IDiagIf
-	all.InetDiagMsg.SockId.Cookie = uint64(hdr.Id.IDiagCookie[0])<<32 + uint64(hdr.Id.IDiagCookie[1])
+	dst.Port = uint32(hdr.ID.IDiagDPort)
+	dst.Ip = append(src.Ip, hdr.ID.IDiagDst[:]...)
+	all.InetDiagMsg.SockId.Interface = hdr.ID.IDiagIf
+	all.InetDiagMsg.SockId.Cookie = uint64(hdr.ID.IDiagCookie[0])<<32 + uint64(hdr.ID.IDiagCookie[1])
 	all.InetDiagMsg.Expires = hdr.IDiagExpires
 	all.InetDiagMsg.Rqueue = hdr.IDiagRqueue
 	all.InetDiagMsg.Wqueue = hdr.IDiagWqueue
-	all.InetDiagMsg.Uid = hdr.IDiagUid
+	all.InetDiagMsg.Uid = hdr.IDiagUID
 	all.InetDiagMsg.Inode = hdr.IDiagInode
 }
 
@@ -108,10 +104,12 @@ func (all *TCPDiagnosticsProto) FillFromAttr(rta *syscall.NetlinkRouteAttr) {
 	}
 }
 
-func (all *TCPDiagnosticsProto) Load(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs map[uint16]*syscall.NetlinkRouteAttr) error {
+func (all *TCPDiagnosticsProto) Load(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*syscall.NetlinkRouteAttr) error {
 	all.FillFromHeader(idm)
 	for i := range attrs {
-		all.FillFromAttr(attrs[i])
+		if attrs[i] != nil {
+			all.FillFromAttr(attrs[i])
+		}
 	}
 
 	if LOG {
@@ -209,6 +207,12 @@ type LinuxDiagInfo struct {
 	rwndLimited   uint64 /* Time (usec) limited by receive window */
 	sndbufLimited uint64 /* Time (usec) limited by send buffer */
 }
+
+// Useful offsets
+const (
+	LastDataSentOffset = unsafe.Offsetof(LinuxDiagInfo{}.lastDataSent)
+	PmtuOffset         = unsafe.Offsetof(LinuxDiagInfo{}.pmtu)
+)
 
 // ParseLinuxDiagInfo tries to map the rta Value onto a TCPInfo struct.  It may have to copy the
 // bytes.

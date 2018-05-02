@@ -1,8 +1,32 @@
+// Package inetdiag provides basic structs and utilities for INET_DIAG messaages.
+// Based on uapi/linux/inet_diag.h.
 package inetdiag
 
-// Pretty basic code slightly adapted from
-// Copied from https://gist.github.com/gwind/05f5f649d93e6015cf47ffa2b2fd9713
+// Pretty basic code slightly adapted from code copied from
+// https://gist.github.com/gwind/05f5f649d93e6015cf47ffa2b2fd9713
 // Original source no longer available at https://github.com/eleme/netlink/blob/master/inetdiag.go
+
+// Adaptations are Copyright 2018 M-Lab Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/* IMPORTANT NOTES
+This 2002 article describes Netlink Sockets
+https://pdfs.semanticscholar.org/6efd/e161a2582ba5846e4b8fea5a53bc305a64f3.pdf
+
+"Netlink messages are aligned to 32 bits and, generally speaking, they contain data that is
+expressed in host-byte order"
+*/
 
 import (
 	"encoding/binary"
@@ -16,7 +40,6 @@ import (
 	"golang.org/x/sys/unix"
 
 	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
-	"github.com/vishvananda/netlink/nl"
 )
 
 // Error types.
@@ -27,8 +50,8 @@ var (
 
 // Constants from linux.
 const (
-	TCPDIAG_GETSOCK     = 18 // linux/inet_diag.h
-	SOCK_DIAG_BY_FAMILY = 20 // linux/sock_diag.h
+	TCPDIAG_GETSOCK     = 18 // uapi/linux/inet_diag.h
+	SOCK_DIAG_BY_FAMILY = 20 // uapi/linux/sock_diag.h
 )
 
 // inet_diag.h
@@ -60,117 +83,40 @@ var diagFamilyMap = map[uint8]string{
 	syscall.AF_INET6: "tcp6",
 }
 
-type be16 [2]byte
-
-func (v be16) Int() int {
-	// (*(*[SizeofInetDiagReqV2]byte)(unsafe.Pointer(req)))[:]
-	v2 := (*(*uint16)(unsafe.Pointer(&v)))
-	return int(nl.Swap16(v2))
-}
-
-type be32 [4]byte
-
-// InetDiagSockID is the binary linux representation of a socket.
-// from linux/inet_diag.h
+// InetDiagSockID is the binary linux representation of a socket, as in linux/inet_diag.h
+// Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
 type InetDiagSockID struct {
 	IDiagSPort  [2]byte // This appears to be byte swapped.  Is it from a network byte ordered field in stack?
 	IDiagDPort  [2]byte
 	IDiagSrc    [16]byte
 	IDiagDst    [16]byte
 	IDiagIf     uint32
-	IDiagCookie [2]uint32
+	IDiagCookie [2]uint32 // This cannot be uint64, because of alignment rules.
 }
 
-func (x be32) isZero() bool {
-	for i := range x {
-		if x[i] != 0 {
-			return false
-		}
-	}
-	return true
-}
-
-func (x be32) isSame(y be32) bool {
-	for i := range x {
-		if x[i] != y[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func isZero(xx [4]be32) bool {
-	for i := range xx {
-		if !xx[i].isZero() {
-			return false
-		}
-	}
-	return true
-}
-
-// IsLocal compares source and destination.  If they are the same,
-// we assume this is loopback and return true.
-func (id *InetDiagSockID) IsLocal() (bool, error) {
-	src := id.IDiagSrc
-	dst := id.IDiagDst
-
-	if len(src) != len(dst) {
-		return false, errors.New("invalid socket id")
-	}
-
-	if isZero(src) {
-		return true, nil
-	}
-	if isZero(dst) {
-		return true, nil
-	}
-
-	for i := range src {
-		if !src[i].isSame(dst[i]) {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-func (id *InetDiagSockID) SrcIPv4() net.IP {
-	return ipv4(id.IDiagSrc[0])
-}
-
-func (id *InetDiagSockID) DstIPv4() net.IP {
-	return ipv4(id.IDiagDst[0])
-}
-
-func (id *InetDiagSockID) SrcIPv6() net.IP {
-	return ipv6(id.IDiagSrc)
-}
-
-func (id *InetDiagSockID) DstIPv6() net.IP {
-	return ipv6(id.IDiagDst)
-}
-
+// SrcIP returns a golang net encoding of source address.
 func (id *InetDiagSockID) SrcIP() net.IP {
 	return ip(id.IDiagSrc)
 }
 
+// DstIP returns a golang net encoding of destination address.
 func (id *InetDiagSockID) DstIP() net.IP {
 	return ip(id.IDiagDst)
 }
 
-func ip(bytes [4]be32) net.IP {
+// TODO should use more net.IP code instead of custom code.
+func ip(bytes [16]byte) net.IP {
 	if isIpv6(bytes) {
 		return ipv6(bytes)
 	} else {
-		return ipv4(bytes[0])
+		return ipv4(bytes)
 	}
 }
 
-func isIpv6(original [4]be32) bool {
-	for i := 1; i < 4; i++ {
-		for j := 0; j < 4; j++ {
-			if original[i][j] != 0 {
-				return true
-			}
+func isIpv6(original [16]byte) bool {
+	for i := 4; i < 16; i++ {
+		if original[i] != 0 {
+			return true
 		}
 	}
 	return false
@@ -180,37 +126,41 @@ func ipv4(original [16]byte) net.IP {
 	return net.IPv4(original[0], original[1], original[2], original[3]).To4()
 }
 
-func ipv6(original [4]be32) net.IP {
-	ip := make(net.IP, net.IPv6len)
-	for i := 0; i < 4; i++ {
-		for j := 0; j < 4; j++ {
-			ip[4*i+j] = original[i][j]
-		}
-	}
-	return ip
+func ipv6(original [16]byte) net.IP {
+	return original[:]
 }
 
 func (id *InetDiagSockID) String() string {
 	return fmt.Sprintf("%s:%d -> %s:%d (%d)", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort(), id.IDiagCookie)
 }
 
+// InetDiagReqV2 is the Netlink request struct, as in linux/inet_diag.h
+// Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
 type InetDiagReqV2 struct {
 	SDiagFamily   uint8
 	SDiagProtocol uint8
 	IDiagExt      uint8
 	Pad           uint8
 	IDiagStates   uint32
-	Id            InetDiagSockID
+	ID            InetDiagSockID
 }
 
+// SizeofInetDiagReqV2 is the size of the struct.
+// TODO should we just make this explicit in the code?
+const SizeofInetDiagReqV2 = int(unsafe.Sizeof(InetDiagReqV2{})) // Should be 0x38
+
+// Serialize is provided for json serialization?
+// TODO - should use binary functions instead?
 func (req *InetDiagReqV2) Serialize() []byte {
 	return (*(*[SizeofInetDiagReqV2]byte)(unsafe.Pointer(req)))[:]
 }
 
+// Len is provided for json serialization?
 func (req *InetDiagReqV2) Len() int {
 	return SizeofInetDiagReqV2
 }
 
+// NewInetDiagReqV2 creates a new request.
 func NewInetDiagReqV2(family, protocol uint8, states uint32) *InetDiagReqV2 {
 	return &InetDiagReqV2{
 		SDiagFamily:   family,
@@ -219,16 +169,18 @@ func NewInetDiagReqV2(family, protocol uint8, states uint32) *InetDiagReqV2 {
 	}
 }
 
+// InetDiagMsg is the linux binary representation of a InetDiag message header, as in linus/inet_diag.h
+// Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
 type InetDiagMsg struct {
 	IDiagFamily  uint8
 	IDiagState   uint8
 	IDiagTimer   uint8
 	IDiagRetrans uint8
-	Id           InetDiagSockID
+	ID           InetDiagSockID
 	IDiagExpires uint32
 	IDiagRqueue  uint32
 	IDiagWqueue  uint32
-	IDiagUid     uint32
+	IDiagUID     uint32
 	IDiagInode   uint32
 }
 

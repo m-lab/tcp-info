@@ -21,8 +21,8 @@ func TestPipeZstd(t *testing.T) {
 }
 
 func TestPipeZstd2(t *testing.T) {
-	pipe, wg := ZStdPipe("foobar.zst")
-	pipe.WriteString("Foobar")
+	pipe, wg := ZStdWriter("foobar.zst")
+	pipe.Write([]byte("Foobar"))
 	pipe.Close()
 	wg.Wait()
 
