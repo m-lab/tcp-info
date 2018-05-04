@@ -122,26 +122,32 @@ func isZero(xx [4]be32) bool {
 	return true
 }
 
+// SrcIPv4 returns a golang net encoding of IPv4 source address.
 func (id *InetDiagSockID) SrcIPv4() net.IP {
 	return ipv4(id.IDiagSrc[0])
 }
 
+// DstIPv4 returns a golang net encoding of IPv4 destination address.
 func (id *InetDiagSockID) DstIPv4() net.IP {
 	return ipv4(id.IDiagDst[0])
 }
 
+// SrcIPv6 returns a golang net encoding of IPv6 source address.
 func (id *InetDiagSockID) SrcIPv6() net.IP {
 	return ipv6(id.IDiagSrc)
 }
 
+// DstIPv6 returns a golang net encoding of IPv6 destination address.
 func (id *InetDiagSockID) DstIPv6() net.IP {
 	return ipv6(id.IDiagDst)
 }
 
+// SrcIP returns a golang net encoding of source address.
 func (id *InetDiagSockID) SrcIP() net.IP {
 	return ip(id.IDiagSrc)
 }
 
+// DstIP returns a golang net encoding of destination address.
 func (id *InetDiagSockID) DstIP() net.IP {
 	return ip(id.IDiagDst)
 }
@@ -183,27 +189,33 @@ func (id *InetDiagSockID) String() string {
 	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.IDiagSPort.Int(), id.DstIP().String(), id.IDiagDPort.Int())
 }
 
+// InetDiagReqV2 is the request used to get InetDiag data from netlink.
+// Note that this does NOT take into account byte ordering.
 type InetDiagReqV2 struct {
 	SDiagFamily   uint8
 	SDiagProtocol uint8
 	IDiagExt      uint8
 	Pad           uint8
 	IDiagStates   uint32
-	Id            InetDiagSockID
+	ID            InetDiagSockID
 }
 
 // SizeofInetDiagReqV2 is the size of the struct.
 // TODO should we just make this explicit in the code?
 const SizeofInetDiagReqV2 = int(unsafe.Sizeof(InetDiagReqV2{})) // Should be 0x38
 
+// Serialize is provided for json serialization?
+// TODO - should use binary functions instead?
 func (req *InetDiagReqV2) Serialize() []byte {
 	return (*(*[SizeofInetDiagReqV2]byte)(unsafe.Pointer(req)))[:]
 }
 
+// Len is provided for json serialization?
 func (req *InetDiagReqV2) Len() int {
 	return SizeofInetDiagReqV2
 }
 
+// NewInetDiagReqV2 creates a new request.
 func NewInetDiagReqV2(family, protocol uint8, states uint32) *InetDiagReqV2 {
 	return &InetDiagReqV2{
 		SDiagFamily:   family,
@@ -212,24 +224,26 @@ func NewInetDiagReqV2(family, protocol uint8, states uint32) *InetDiagReqV2 {
 	}
 }
 
+// InetDiagMsg is the linux binary representation of a InetDiag message header.  Note that this
+// does NOT take into account byte ordering.
 type InetDiagMsg struct {
 	IDiagFamily  uint8
 	IDiagState   uint8
 	IDiagTimer   uint8
 	IDiagRetrans uint8
-	Id           InetDiagSockID
+	ID           InetDiagSockID
 	IDiagExpires uint32
 	IDiagRqueue  uint32
 	IDiagWqueue  uint32
-	IDiagUid     uint32
+	IDiagUID     uint32
 	IDiagInode   uint32
 }
 
 func (msg *InetDiagMsg) String() string {
-	return fmt.Sprintf("%s, %s, %s", DiagFamilyMap[msg.IDiagFamily], TcpStatesMap[msg.IDiagState], msg.Id.String())
+	return fmt.Sprintf("%s, %s, %s", DiagFamilyMap[msg.IDiagFamily], TcpStatesMap[msg.IDiagState], msg.ID.String())
 }
 
-// Round the length of a netlink route attribute up to align it
+// rtaAlignOf round the length of a netlink route attribute up to align it
 // properly.
 func rtaAlignOf(attrlen int) int {
 	return (attrlen + syscall.RTA_ALIGNTO - 1) & ^(syscall.RTA_ALIGNTO - 1)
