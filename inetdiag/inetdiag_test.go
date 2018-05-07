@@ -27,3 +27,12 @@ func TestParseInetDiagMsg(t *testing.T) {
 		t.Error("Len", len(value))
 	}
 }
+
+func TestSerialize(t *testing.T) {
+
+	v2 := inetdiag.NewInetDiagReqV2(syscall.AF_INET, 23, 0x0E)
+	data := v2.Serialize()
+	if v2.Len() != len(data) {
+		t.Error("That's odd")
+	}
+}
