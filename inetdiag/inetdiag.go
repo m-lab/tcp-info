@@ -25,8 +25,6 @@ import (
 	"net"
 	"syscall"
 	"unsafe"
-
-	"github.com/vishvananda/netlink/nl"
 )
 
 const (
@@ -78,7 +76,7 @@ type be16 [2]byte
 func (v be16) Int() int {
 	// (*(*[SizeofInetDiagReqV2]byte)(unsafe.Pointer(req)))[:]
 	v2 := (*(*uint16)(unsafe.Pointer(&v)))
-	return int(nl.Swap16(v2))
+	return int(v2) // NOT int(nl.Swap16(v2))
 }
 
 type be32 [4]byte
@@ -92,34 +90,6 @@ type InetDiagSockID struct {
 	IDiagDst    [4]be32
 	IDiagIf     uint32
 	IDiagCookie [2]uint32
-}
-
-// These isZero and isSame functions added for M-Lab
-func (x be32) isZero() bool {
-	for i := range x {
-		if x[i] != 0 {
-			return false
-		}
-	}
-	return true
-}
-
-func (x be32) isSame(y be32) bool {
-	for i := range x {
-		if x[i] != y[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func isZero(xx [4]be32) bool {
-	for i := range xx {
-		if !xx[i].isZero() {
-			return false
-		}
-	}
-	return true
 }
 
 // SrcIPv4 returns a golang net encoding of IPv4 source address.
@@ -189,7 +159,6 @@ func (id *InetDiagSockID) String() string {
 	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.IDiagSPort.Int(), id.DstIP().String(), id.IDiagDPort.Int())
 }
 
-// InetDiagReqV2 is the request used to get InetDiag data from netlink.
 // Note that this does NOT take into account byte ordering.
 type InetDiagReqV2 struct {
 	SDiagFamily   uint8

@@ -1,8 +1,10 @@
 package inetdiag_test
 
 import (
+	"log"
 	"syscall"
 	"testing"
+	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
 )
@@ -29,10 +31,97 @@ func TestParseInetDiagMsg(t *testing.T) {
 }
 
 func TestSerialize(t *testing.T) {
-
 	v2 := inetdiag.NewInetDiagReqV2(syscall.AF_INET, 23, 0x0E)
 	data := v2.Serialize()
 	if v2.Len() != len(data) {
 		t.Error("That's odd")
+	}
+}
+
+func TestID4(t *testing.T) {
+	var data [unsafe.Sizeof(inetdiag.InetDiagMsg{})]byte
+	for i := 0; i < 8; i++ {
+		data[i] = byte(i + 2)
+	}
+	srcIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagSrc)
+	data[srcIPOffset] = 127
+	data[srcIPOffset+1] = 0
+	data[srcIPOffset+2] = 0
+	data[srcIPOffset+3] = 1
+
+	srcPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagSPort)
+	log.Println(srcPortOffset)
+	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
+	// done.
+	if true {
+		*(*uint16)(unsafe.Pointer(&data[srcPortOffset])) = 0x1234
+	}
+
+	dstIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDst)
+	data[dstIPOffset] = 0
+	data[dstIPOffset+1] = 0
+	data[dstIPOffset+2] = 0
+	data[dstIPOffset+3] = 0
+
+	dstPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDPort)
+	log.Println(dstPortOffset)
+	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
+	// done.
+	if true {
+		*(*uint16)(unsafe.Pointer(&data[dstPortOffset])) = 0x4321
+	}
+	hdr, _ := inetdiag.ParseInetDiagMsg(data[:])
+	if !hdr.ID.SrcIP().IsLoopback() {
+		log.Println(hdr.ID.SrcIP().IsLoopback())
+	}
+	if hdr.ID.IDiagSPort.Int() != 0x1234 {
+		t.Errorf("SPort should be 0x1234 %+v\n", hdr.ID)
+	}
+
+	if !hdr.ID.SrcIP().IsLoopback() {
+		t.Errorf("Should be identified as local")
+	}
+}
+
+func TestID6(t *testing.T) {
+	var data [unsafe.Sizeof(inetdiag.InetDiagMsg{})]byte
+	for i := 0; i < 8; i++ {
+		data[i] = byte(i + 2)
+	}
+	srcIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagSrc)
+	data[srcIPOffset] = 0x0A
+	data[srcIPOffset+1] = 0x0B
+	data[srcIPOffset+2] = 0x0C
+	data[srcIPOffset+3] = 0x0D
+	data[srcIPOffset+4] = 0x0E
+	data[srcIPOffset+5] = 0x0F
+	data[srcIPOffset+6] = 0x00
+	data[srcIPOffset+7] = 0x01
+
+	srcPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagSPort)
+	log.Println(srcPortOffset)
+	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
+	// done.
+	if true {
+		*(*uint16)(unsafe.Pointer(&data[srcPortOffset])) = 0x1234
+	}
+
+	dstIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDst)
+	data[dstIPOffset] = 0
+	data[dstIPOffset+1] = 0
+	data[dstIPOffset+2] = 0
+	data[dstIPOffset+3] = 0
+
+	dstPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDPort)
+	log.Println(dstPortOffset)
+	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
+	// done.
+	if true {
+		*(*uint16)(unsafe.Pointer(&data[dstPortOffset])) = 0x4321
+	}
+	hdr, _ := inetdiag.ParseInetDiagMsg(data[:])
+
+	if hdr.ID.SrcIP().IsLoopback() {
+		t.Errorf("Should not be identified as loopback")
 	}
 }
