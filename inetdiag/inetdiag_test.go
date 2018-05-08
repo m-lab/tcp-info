@@ -50,12 +50,9 @@ func TestID4(t *testing.T) {
 	data[srcIPOffset+3] = 1
 
 	srcPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagSPort)
-	log.Println(srcPortOffset)
 	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
 	// done.
-	if true {
-		*(*uint16)(unsafe.Pointer(&data[srcPortOffset])) = 0x1234
-	}
+	*(*uint16)(unsafe.Pointer(&data[srcPortOffset])) = 0x1234
 
 	dstIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDst)
 	data[dstIPOffset] = 0
@@ -64,12 +61,10 @@ func TestID4(t *testing.T) {
 	data[dstIPOffset+3] = 0
 
 	dstPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDPort)
-	log.Println(dstPortOffset)
 	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
 	// done.
-	if true {
-		*(*uint16)(unsafe.Pointer(&data[dstPortOffset])) = 0x4321
-	}
+	*(*uint16)(unsafe.Pointer(&data[dstPortOffset])) = 0x4321
+
 	hdr, _ := inetdiag.ParseInetDiagMsg(data[:])
 	if !hdr.ID.SrcIP().IsLoopback() {
 		log.Println(hdr.ID.SrcIP().IsLoopback())
@@ -99,12 +94,9 @@ func TestID6(t *testing.T) {
 	data[srcIPOffset+7] = 0x01
 
 	srcPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagSPort)
-	log.Println(srcPortOffset)
 	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
 	// done.
-	if true {
-		*(*uint16)(unsafe.Pointer(&data[srcPortOffset])) = 0x1234
-	}
+	*(*uint16)(unsafe.Pointer(&data[srcPortOffset])) = 0x1234
 
 	dstIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDst)
 	data[dstIPOffset] = 0
@@ -113,12 +105,10 @@ func TestID6(t *testing.T) {
 	data[dstIPOffset+3] = 0
 
 	dstPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDPort)
-	log.Println(dstPortOffset)
 	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
 	// done.
-	if true {
-		*(*uint16)(unsafe.Pointer(&data[dstPortOffset])) = 0x4321
-	}
+	*(*uint16)(unsafe.Pointer(&data[dstPortOffset])) = 0x4321
+
 	hdr, _ := inetdiag.ParseInetDiagMsg(data[:])
 
 	if hdr.ID.SrcIP().IsLoopback() {

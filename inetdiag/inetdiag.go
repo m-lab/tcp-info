@@ -27,6 +27,7 @@ import (
 	"unsafe"
 )
 
+// Constants from linux.
 const (
 	TCPDIAG_GETSOCK     = 18 // linux/inet_diag.h
 	SOCK_DIAG_BY_FAMILY = 20 // linux/sock_diag.h
@@ -52,7 +53,7 @@ const (
 	TCP_ALL = 0xFFF
 )
 
-var TcpStatesMap = map[uint8]string{
+var tcpStatesMap = map[uint8]string{
 	TCP_ESTABLISHED: "established",
 	TCP_SYN_SENT:    "syn_sent",
 	TCP_SYN_RECV:    "syn_recv",
@@ -66,7 +67,7 @@ var TcpStatesMap = map[uint8]string{
 	TCP_CLOSING:     "closing",
 }
 
-var DiagFamilyMap = map[uint8]string{
+var diagFamilyMap = map[uint8]string{
 	syscall.AF_INET:  "tcp",
 	syscall.AF_INET6: "tcp6",
 }
@@ -159,7 +160,7 @@ func (id *InetDiagSockID) String() string {
 	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.IDiagSPort.Int(), id.DstIP().String(), id.IDiagDPort.Int())
 }
 
-// Note that this does NOT take into account byte ordering.
+// InetDiagReqV2 is the Netlink request struct.
 type InetDiagReqV2 struct {
 	SDiagFamily   uint8
 	SDiagProtocol uint8
@@ -209,7 +210,7 @@ type InetDiagMsg struct {
 }
 
 func (msg *InetDiagMsg) String() string {
-	return fmt.Sprintf("%s, %s, %s", DiagFamilyMap[msg.IDiagFamily], TcpStatesMap[msg.IDiagState], msg.ID.String())
+	return fmt.Sprintf("%s, %s, %s", diagFamilyMap[msg.IDiagFamily], tcpStatesMap[msg.IDiagState], msg.ID.String())
 }
 
 // rtaAlignOf round the length of a netlink route attribute up to align it
