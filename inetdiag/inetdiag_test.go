@@ -40,9 +40,6 @@ func TestSerialize(t *testing.T) {
 
 func TestID4(t *testing.T) {
 	var data [unsafe.Sizeof(inetdiag.InetDiagMsg{})]byte
-	for i := 0; i < 8; i++ {
-		data[i] = byte(i + 2)
-	}
 	srcIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagSrc)
 	data[srcIPOffset] = 127
 	data[srcIPOffset+1] = 0
@@ -55,16 +52,10 @@ func TestID4(t *testing.T) {
 	*(*uint16)(unsafe.Pointer(&data[srcPortOffset])) = 0x1234
 
 	dstIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDst)
-	data[dstIPOffset] = 0
+	data[dstIPOffset] = 1
 	data[dstIPOffset+1] = 0
 	data[dstIPOffset+2] = 0
-	data[dstIPOffset+3] = 0
-	data[dstIPOffset+7] = 0xAA
-
-	dstPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDPort)
-	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
-	// done.
-	*(*uint16)(unsafe.Pointer(&data[dstPortOffset])) = 0x4321
+	data[dstIPOffset+3] = 127 // Looks like localhost, but its reversed.
 
 	hdr, _ := inetdiag.ParseInetDiagMsg(data[:])
 	if !hdr.ID.SrcIP().IsLoopback() {
@@ -75,47 +66,24 @@ func TestID4(t *testing.T) {
 	}
 
 	if !hdr.ID.SrcIP().IsLoopback() {
-		t.Errorf("Should be identified as local")
+		t.Errorf("Should be identified as loopback")
 	}
 	if hdr.ID.DstIP().IsLoopback() {
-		t.Errorf("Should not be identified as local")
+		t.Errorf("Should not be identified as loopback") // Yeah I know this is not self-consistent. :P
 	}
 }
 
 func TestID6(t *testing.T) {
 	var data [unsafe.Sizeof(inetdiag.InetDiagMsg{})]byte
-	for i := 0; i < 8; i++ {
-		data[i] = byte(i + 2)
-	}
 	srcIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagSrc)
-	data[srcIPOffset] = 0x0A
-	data[srcIPOffset+1] = 0x0B
-	data[srcIPOffset+2] = 0x0C
-	data[srcIPOffset+3] = 0x0D
-	data[srcIPOffset+4] = 0x0E
-	data[srcIPOffset+5] = 0x0F
-	data[srcIPOffset+6] = 0x00
-	data[srcIPOffset+7] = 0x01
-
-	srcPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagSPort)
-	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
-	// done.
-	*(*uint16)(unsafe.Pointer(&data[srcPortOffset])) = 0x1234
+	for i := 0; i < 8; i++ {
+		data[srcIPOffset] = byte(0x0A + i)
+	}
 
 	dstIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDst)
-	data[dstIPOffset] = 0x01
-	data[dstIPOffset+1] = 0x02
-	data[dstIPOffset+2] = 0x03
-	data[dstIPOffset+3] = 0x04
-	data[dstIPOffset+4] = 0x05
-	data[dstIPOffset+5] = 0x06
-	data[dstIPOffset+6] = 0x07
-	data[dstIPOffset+7] = 0x0f
-
-	dstPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDPort)
-	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
-	// done.
-	*(*uint16)(unsafe.Pointer(&data[dstPortOffset])) = 0x4321
+	for i := 0; i < 8; i++ {
+		data[dstIPOffset] = byte(i + 1)
+	}
 
 	hdr, _ := inetdiag.ParseInetDiagMsg(data[:])
 

@@ -61,7 +61,7 @@ script:
 # we lose some coverage.  The corresponding cov files are overwritten, but that is OK since
 # the non-integration tests are repeated.  If we change the unit tests to NOT run when integration
 # test tag is set, then we would need to have separate cov files.
-# Note: we do not run integration tests from forked PRs b/c the SA is unavailable.
+# Note: we do not run integration tests from forked repos b/c the SA is unavailable.
 # Note that for modules in subdirectories, this replaces separating slashes with _.
 - if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
   for module in ; do
