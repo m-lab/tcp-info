@@ -59,6 +59,7 @@ func TestID4(t *testing.T) {
 	data[dstIPOffset+1] = 0
 	data[dstIPOffset+2] = 0
 	data[dstIPOffset+3] = 0
+	data[dstIPOffset+7] = 0xAA
 
 	dstPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDPort)
 	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
@@ -75,6 +76,9 @@ func TestID4(t *testing.T) {
 
 	if !hdr.ID.SrcIP().IsLoopback() {
 		t.Errorf("Should be identified as local")
+	}
+	if hdr.ID.DstIP().IsLoopback() {
+		t.Errorf("Should not be identified as local")
 	}
 }
 
@@ -99,10 +103,14 @@ func TestID6(t *testing.T) {
 	*(*uint16)(unsafe.Pointer(&data[srcPortOffset])) = 0x1234
 
 	dstIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDst)
-	data[dstIPOffset] = 0
-	data[dstIPOffset+1] = 0
-	data[dstIPOffset+2] = 0
-	data[dstIPOffset+3] = 0
+	data[dstIPOffset] = 0x01
+	data[dstIPOffset+1] = 0x02
+	data[dstIPOffset+2] = 0x03
+	data[dstIPOffset+3] = 0x04
+	data[dstIPOffset+4] = 0x05
+	data[dstIPOffset+5] = 0x06
+	data[dstIPOffset+6] = 0x07
+	data[dstIPOffset+7] = 0x0f
 
 	dstPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDPort)
 	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
@@ -112,6 +120,9 @@ func TestID6(t *testing.T) {
 	hdr, _ := inetdiag.ParseInetDiagMsg(data[:])
 
 	if hdr.ID.SrcIP().IsLoopback() {
+		t.Errorf("Should not be identified as loopback")
+	}
+	if hdr.ID.DstIP().IsLoopback() {
 		t.Errorf("Should not be identified as loopback")
 	}
 }
