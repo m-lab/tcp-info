@@ -1,4 +1,5 @@
 // Package inetdiag provides basic structs and utilities for INET_DIAG messaages.
+// Based on uapi/linux/inet_diag.h.
 package inetdiag
 
 // Pretty basic code slightly adapted from code copied from
@@ -19,6 +20,14 @@ package inetdiag
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/* IMPORTANT NOTES
+This 2002 article describes Netlink Sockets
+https://pdfs.semanticscholar.org/6efd/e161a2582ba5846e4b8fea5a53bc305a64f3.pdf
+
+"Netlink messages are aligned to 32 bits and, generally speaking, they contain data that is
+expressed in host-byte order"
+*/
+
 import (
 	"fmt"
 	"log"
@@ -29,8 +38,8 @@ import (
 
 // Constants from linux.
 const (
-	TCPDIAG_GETSOCK     = 18 // linux/inet_diag.h
-	SOCK_DIAG_BY_FAMILY = 20 // linux/sock_diag.h
+	TCPDIAG_GETSOCK     = 18 // uapi/linux/inet_diag.h
+	SOCK_DIAG_BY_FAMILY = 20 // uapi/linux/sock_diag.h
 )
 
 // netinet/tcp.h
@@ -50,7 +59,7 @@ const (
 )
 
 const (
-	TCP_ALL = 0xFFF
+	TCP_ALL_STATES = 0xFFF
 )
 
 var tcpStatesMap = map[uint8]string{
@@ -72,8 +81,8 @@ var diagFamilyMap = map[uint8]string{
 	syscall.AF_INET6: "tcp6",
 }
 
-// InetDiagSockID is the binary linux representation of a socket.
-// from linux/inet_diag.h
+// InetDiagSockID is the binary linux representation of a socket, as in linux/inet_diag.h
+// Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
 type InetDiagSockID struct {
 	IDiagSPort  uint16
 	IDiagDPort  uint16
@@ -123,7 +132,8 @@ func (id *InetDiagSockID) String() string {
 	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.IDiagSPort, id.DstIP().String(), id.IDiagDPort)
 }
 
-// InetDiagReqV2 is the Netlink request struct.
+// InetDiagReqV2 is the Netlink request struct, as in linux/inet_diag.h
+// Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
 type InetDiagReqV2 struct {
 	SDiagFamily   uint8
 	SDiagProtocol uint8
@@ -157,8 +167,8 @@ func NewInetDiagReqV2(family, protocol uint8, states uint32) *InetDiagReqV2 {
 	}
 }
 
-// InetDiagMsg is the linux binary representation of a InetDiag message header.  Note that this
-// does NOT take into account byte ordering.
+// InetDiagMsg is the linux binary representation of a InetDiag message header, as in linus/inet_diag.h
+// Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
 type InetDiagMsg struct {
 	IDiagFamily  uint8
 	IDiagState   uint8
