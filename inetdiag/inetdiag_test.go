@@ -9,8 +9,8 @@ import (
 	"github.com/m-lab/tcp-info/inetdiag"
 )
 
-// TODO This will have modest test coverage indirectly through tests that parse syscall.NetlinkMessage
-// containing InetDiag messages.  However, probably should have some basic tests here.
+// This is not exhaustive, but covers the basics.  Integration tests will expose any more subtle
+// problems.
 
 func TestParseInetDiagMsg(t *testing.T) {
 	var data [100]byte
