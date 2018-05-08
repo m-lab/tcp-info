@@ -89,7 +89,7 @@ type InetDiagSockID struct {
 	IDiagSrc    [16]byte
 	IDiagDst    [16]byte
 	IDiagIf     uint32
-	IDiagCookie uint64
+	IDiagCookie [2]uint32 // This cannot be uint64, because of alignment rules.
 }
 
 // SrcIP returns a golang net encoding of source address.
