@@ -69,7 +69,7 @@ func TestID4(t *testing.T) {
 	if !hdr.ID.SrcIP().IsLoopback() {
 		log.Println(hdr.ID.SrcIP().IsLoopback())
 	}
-	if hdr.ID.IDiagSPort.Int() != 0x1234 {
+	if hdr.ID.IDiagSPort != 0x1234 {
 		t.Errorf("SPort should be 0x1234 %+v\n", hdr.ID)
 	}
 

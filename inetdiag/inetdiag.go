@@ -72,35 +72,25 @@ var diagFamilyMap = map[uint8]string{
 	syscall.AF_INET6: "tcp6",
 }
 
-type be16 [2]byte
-
-func (v be16) Int() int {
-	// (*(*[SizeofInetDiagReqV2]byte)(unsafe.Pointer(req)))[:]
-	v2 := (*(*uint16)(unsafe.Pointer(&v)))
-	return int(v2) // NOT int(nl.Swap16(v2))
-}
-
-type be32 [4]byte
-
 // InetDiagSockID is the binary linux representation of a socket.
 // from linux/inet_diag.h
 type InetDiagSockID struct {
-	IDiagSPort  be16
-	IDiagDPort  be16
-	IDiagSrc    [4]be32
-	IDiagDst    [4]be32
+	IDiagSPort  uint16
+	IDiagDPort  uint16
+	IDiagSrc    [16]byte
+	IDiagDst    [16]byte
 	IDiagIf     uint32
 	IDiagCookie [2]uint32
 }
 
 // SrcIPv4 returns a golang net encoding of IPv4 source address.
 func (id *InetDiagSockID) SrcIPv4() net.IP {
-	return ipv4(id.IDiagSrc[0])
+	return ipv4(id.IDiagSrc)
 }
 
 // DstIPv4 returns a golang net encoding of IPv4 destination address.
 func (id *InetDiagSockID) DstIPv4() net.IP {
-	return ipv4(id.IDiagDst[0])
+	return ipv4(id.IDiagDst)
 }
 
 // SrcIPv6 returns a golang net encoding of IPv6 source address.
@@ -123,41 +113,33 @@ func (id *InetDiagSockID) DstIP() net.IP {
 	return ip(id.IDiagDst)
 }
 
-func ip(bytes [4]be32) net.IP {
+func ip(bytes [16]byte) net.IP {
 	if isIpv6(bytes) {
 		return ipv6(bytes)
 	} else {
-		return ipv4(bytes[0])
+		return ipv4(bytes)
 	}
 }
 
-func isIpv6(original [4]be32) bool {
-	for i := 1; i < 4; i++ {
-		for j := 0; j < 4; j++ {
-			if original[i][j] != 0 {
-				return true
-			}
+func isIpv6(original [16]byte) bool {
+	for i := 4; i < 16; i++ {
+		if original[i] != 0 {
+			return true
 		}
 	}
 	return false
 }
 
-func ipv4(original be32) net.IP {
+func ipv4(original [16]byte) net.IP {
 	return net.IPv4(original[0], original[1], original[2], original[3])
 }
 
-func ipv6(original [4]be32) net.IP {
-	ip := make(net.IP, net.IPv6len)
-	for i := 0; i < 4; i++ {
-		for j := 0; j < 4; j++ {
-			ip[4*i+j] = original[i][j]
-		}
-	}
-	return ip
+func ipv6(original [16]byte) net.IP {
+	return original[:]
 }
 
 func (id *InetDiagSockID) String() string {
-	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.IDiagSPort.Int(), id.DstIP().String(), id.IDiagDPort.Int())
+	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.IDiagSPort, id.DstIP().String(), id.IDiagDPort)
 }
 
 // InetDiagReqV2 is the Netlink request struct.
