@@ -83,26 +83,6 @@ type InetDiagSockID struct {
 	IDiagCookie [2]uint32
 }
 
-// SrcIPv4 returns a golang net encoding of IPv4 source address.
-func (id *InetDiagSockID) SrcIPv4() net.IP {
-	return ipv4(id.IDiagSrc)
-}
-
-// DstIPv4 returns a golang net encoding of IPv4 destination address.
-func (id *InetDiagSockID) DstIPv4() net.IP {
-	return ipv4(id.IDiagDst)
-}
-
-// SrcIPv6 returns a golang net encoding of IPv6 source address.
-func (id *InetDiagSockID) SrcIPv6() net.IP {
-	return ipv6(id.IDiagSrc)
-}
-
-// DstIPv6 returns a golang net encoding of IPv6 destination address.
-func (id *InetDiagSockID) DstIPv6() net.IP {
-	return ipv6(id.IDiagDst)
-}
-
 // SrcIP returns a golang net encoding of source address.
 func (id *InetDiagSockID) SrcIP() net.IP {
 	return ip(id.IDiagSrc)
@@ -113,6 +93,7 @@ func (id *InetDiagSockID) DstIP() net.IP {
 	return ip(id.IDiagDst)
 }
 
+// TODO should use more net.IP code instead of custom code.
 func ip(bytes [16]byte) net.IP {
 	if isIpv6(bytes) {
 		return ipv6(bytes)
