@@ -40,6 +40,9 @@ install:
 - GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v etl-gardener)
 - go get -u -v -d $GO_IMPORTS
 
+# Install zstd tool.
+- bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/install)
+
 script:
 # To start, run all the non-integration tests.
 - MODULES="inetdiag zstd"
