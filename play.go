@@ -10,7 +10,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"runtime/pprof"
 	"runtime/trace"
 	"sync"
@@ -19,7 +18,8 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/m-lab/tcp-info/delta"
 	"github.com/m-lab/tcp-info/inetdiag"
-	"github.com/m-lab/tcp-info/tcp"
+	tcp "github.com/m-lab/tcp-info/nl-proto"
+	"github.com/m-lab/tcp-info/zstd"
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
 )
@@ -59,53 +59,9 @@ func init() {
 //  2. the go zstd wrapper doesn't seem to work well - poor compression and slow.
 //  3. zstd seems to result in similar file size using proto or raw output.
 
-// ZstdReader creates a reader piped to external zstd process reading from file.
-// Read from returned pipe
-// Close pipe when done
-func ZStdReader(filename string) io.ReadCloser {
-	pipeR, pipeW, _ := os.Pipe()
-	cmd := exec.Command("zstd", "-d", "-c", filename)
-	cmd.Stdout = pipeW
-
-	go func() {
-		err := cmd.Run()
-		if err != nil {
-			log.Println("ZSTD error", filename, err)
-		}
-		pipeW.Close()
-	}()
-
-	return pipeR
-}
-
-// ZstdWriter creates a writer piped to an external zstd process writing to filename
-// Write to io.Writer
-// close io.Writer when done
-// wait on waitgroup to finish
-func ZStdWriter(filename string) (io.WriteCloser, *sync.WaitGroup) {
-	var wg sync.WaitGroup
-	wg.Add(1)
-	pipeR, pipeW, _ := os.Pipe()
-	f, _ := os.Create(filename)
-	cmd := exec.Command("zstd")
-	cmd.Stdin = pipeR
-	cmd.Stdout = f
-
-	go func() {
-		err := cmd.Run()
-		if err != nil {
-			log.Println("ZSTD error", filename, err)
-		}
-		pipeR.Close()
-		wg.Done()
-	}()
-
-	return pipeW, &wg
-}
-
 // TODO - lost the RAW output option.
 func Marshal(filename string, marshaler chan *delta.ParsedMessage, wg *sync.WaitGroup) {
-	out, pipeWg := ZStdWriter(filename)
+	out, pipeWg := zstd.NewWriter(filename)
 	count := 0
 	for {
 		count++
@@ -202,7 +158,7 @@ func main() {
 
 	if *rawFile != "" {
 		log.Println("Raw output to", *rawFile)
-		p, wg := ZStdWriter(*rawFile)
+		p, wg := zstd.NewWriter(*rawFile)
 		defer wg.Wait()
 		defer p.Close()
 		cache = delta.NewCache(p, *filter)
@@ -251,7 +207,7 @@ func main() {
 
 	if *source != "" {
 		log.Println("Reading messages from", *source)
-		rdr := ZStdReader(*source)
+		rdr := zstd.NewReader(*source)
 		for {
 			msg, err := NextMsg(rdr)
 			if err != nil {
