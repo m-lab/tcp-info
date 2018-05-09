@@ -42,7 +42,7 @@ install:
 
 script:
 # To start, run all the non-integration tests.
-- MODULES="inetdiag"
+- MODULES="inetdiag zstd"
 - for module in $MODULES; do
     COVER_PKGS=${COVER_PKGS}./$module/..., ;
   done
