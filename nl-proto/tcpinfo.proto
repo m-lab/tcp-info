@@ -241,7 +241,9 @@ message TCPInfoProto {
 
   uint32 total_retrans = 32;
 
-  // In tcp code, these four are 64 bit unsigned.  However, the first two are often -1, so use signed.
+  // In tcp.h, these four are 64 bit unsigned.  However, the pacing rates
+  // are often max-1.  Since protobufs use varints, we make these signed for
+  // compact encoding.
   int64 pacing_rate = 33;
   int64 max_pacing_rate = 34;
 
