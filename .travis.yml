@@ -39,11 +39,21 @@ install:
 # Install dependencies
 - GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v etl-gardener)
 - go get -u -v -d $GO_IMPORTS
+- go get github.com/golang/protobuf/protoc-gen-go/
+
+# Install protobuf compiler
+- wget https://github.com/google/protobuf/releases/download/v3.5.1/protoc-3.5.1-linux-x86_64.zip
+- unzip protoc-3.5.1-linux-x86_64.zip  # Should provide bin/protoc
 
 # Install zstd tool.
 - bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/install)
 
 script:
+# Compile protobufs
+- cd $TRAVIS_BUILD_DIR/nl-proto
+- $TRAVIS_BUILD_DIR/bin/protoc --go_out=. *.proto
+- cd $TRAVIS_BUILD_DIR
+
 # To start, run all the non-integration tests.
 - MODULES="inetdiag zstd"
 - for module in $MODULES; do
