@@ -5,8 +5,8 @@ package inetdiag
 #include <sys/socket.h>
 #include <linux/netlink.h>
 #include <linux/inet_diag.h>
-*/
 import "C"
+*/
 
 import (
 	"log"
