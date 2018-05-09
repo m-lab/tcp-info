@@ -131,6 +131,7 @@ func ip(bytes [16]byte) net.IP {
 	if isIpv6(bytes) {
 		return ipv6(bytes)
 	} else {
+		log.Println("ipv4", ipv4(bytes))
 		return ipv4(bytes)
 	}
 }
@@ -145,7 +146,7 @@ func isIpv6(original [16]byte) bool {
 }
 
 func ipv4(original [16]byte) net.IP {
-	return net.IPv4(original[0], original[1], original[2], original[3])
+	return net.IPv4(original[0], original[1], original[2], original[3]).To4()
 }
 
 func ipv6(original [16]byte) net.IP {

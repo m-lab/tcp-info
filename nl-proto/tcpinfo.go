@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	LOG = true
+	LOG = false
 )
 
 // ParseCong returns the congestion algorithm string
@@ -31,11 +31,11 @@ func (all *TCPDiagnosticsProto) FillFromHeader(hdr *inetdiag.InetDiagMsg) {
 	src := EndPoint{}
 	all.InetDiagMsg.SockId.Source = &src
 	src.Port = uint32(hdr.ID.IDiagSPort)
-	src.Ip = append(src.Ip, hdr.ID.IDiagSrc[:]...)
+	src.Ip = append(src.Ip, hdr.ID.SrcIP()...)
 	dst := EndPoint{}
 	all.InetDiagMsg.SockId.Destination = &dst
 	dst.Port = uint32(hdr.ID.IDiagDPort)
-	dst.Ip = append(src.Ip, hdr.ID.IDiagDst[:]...)
+	dst.Ip = append(dst.Ip, hdr.ID.DstIP()...)
 	all.InetDiagMsg.SockId.Interface = hdr.ID.IDiagIf
 	all.InetDiagMsg.SockId.Cookie = uint64(hdr.ID.IDiagCookie[0])<<32 + uint64(hdr.ID.IDiagCookie[1])
 	all.InetDiagMsg.Expires = hdr.IDiagExpires
