@@ -40,7 +40,10 @@ import (
 const (
 	TCPDIAG_GETSOCK     = 18 // uapi/linux/inet_diag.h
 	SOCK_DIAG_BY_FAMILY = 20 // uapi/linux/sock_diag.h
+)
 
+// inet_diag.h
+const (
 	INET_DIAG_NONE = iota
 	INET_DIAG_MEMINFO
 	INET_DIAG_INFO

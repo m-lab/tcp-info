@@ -9,7 +9,6 @@ import (
 	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
-	"github.com/vishvananda/netlink/nl"
 )
 
 var (
@@ -18,7 +17,7 @@ var (
 
 // ParseCong returns the congestion algorithm string
 func ParseCong(rta *syscall.NetlinkRouteAttr) string {
-	return string(rta.Value)
+	return string(rta.Value[:len(rta.Value)-1])
 }
 
 // FillFromHeader fills out the InetDiagMsg proto msg with fields from the provided linux InetDiagMsg
@@ -46,6 +45,7 @@ func (all *TCPDiagnosticsProto) FillFromHeader(hdr *inetdiag.InetDiagMsg) {
 	all.InetDiagMsg.Inode = hdr.IDiagInode
 }
 
+// FillFromAttr fills the appropriate proto subfield from a route attribute.
 func (all *TCPDiagnosticsProto) FillFromAttr(rta *syscall.NetlinkRouteAttr) {
 	switch rta.Attr.Type {
 	case inetdiag.INET_DIAG_PROTOCOL:
@@ -103,6 +103,7 @@ func (all *TCPDiagnosticsProto) FillFromAttr(rta *syscall.NetlinkRouteAttr) {
 	}
 }
 
+// Load loads a TCPDiagnosticsProto from the parsed elements of a type 20 netlink message.
 func (all *TCPDiagnosticsProto) Load(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*syscall.NetlinkRouteAttr) error {
 	all.FillFromHeader(idm)
 	for i := range attrs {
@@ -117,33 +118,10 @@ func (all *TCPDiagnosticsProto) Load(header syscall.NlMsghdr, idm *inetdiag.Inet
 	return nil
 }
 
-func (all *TCPDiagnosticsProto) LoadFromNLMsg(nlMsg *syscall.NetlinkMessage) error {
-	// These are serialized NetlinkMessage
-	idm, attrBytes := inetdiag.ParseInetDiagMsg(nlMsg.Data)
-	//log.Printf("%+v\n\n", idm)
-	all.FillFromHeader(idm)
-	attrs, err := nl.ParseRouteAttr(attrBytes)
-	if err != nil {
-		log.Println(err)
-	}
-	if LOG {
-		//for i := range attrs {
-		//	log.Printf("%+v\n", attrs[i].Attr)
-		//}
-	}
-	for i := range attrs {
-		all.FillFromAttr(&attrs[i])
-	}
-
-	if LOG {
-		log.Printf("nlmsg header: %v Proto: %+v\n", nlMsg.Header, all)
-	}
-	return nil
-}
-
 // LinuxTCPInfo is the linux defined structure returned in RouteAttr DIAG_INFO messages.
+// It corresponds to the struct tcp_info in include/uapi/linux/tcp.h
 // TODO - maybe move this to inetdiag module?
-type LinuxDiagInfo struct {
+type LinuxTCPInfo struct {
 	state       uint8
 	caState     uint8
 	retransmits uint8
@@ -209,14 +187,14 @@ type LinuxDiagInfo struct {
 
 // Useful offsets
 const (
-	LastDataSentOffset = unsafe.Offsetof(LinuxDiagInfo{}.lastDataSent)
-	PmtuOffset         = unsafe.Offsetof(LinuxDiagInfo{}.pmtu)
+	LastDataSentOffset = unsafe.Offsetof(LinuxTCPInfo{}.lastDataSent)
+	PmtuOffset         = unsafe.Offsetof(LinuxTCPInfo{}.pmtu)
 )
 
 // ParseLinuxDiagInfo tries to map the rta Value onto a TCPInfo struct.  It may have to copy the
 // bytes.
-func ParseLinuxDiagInfo(rta *syscall.NetlinkRouteAttr) *LinuxDiagInfo {
-	structSize := (int)(unsafe.Sizeof(LinuxDiagInfo{}))
+func ParseLinuxDiagInfo(rta *syscall.NetlinkRouteAttr) *LinuxTCPInfo {
+	structSize := (int)(unsafe.Sizeof(LinuxTCPInfo{}))
 	data := rta.Value
 	//log.Println(len(rta.Value), "vs", structSize)
 	if len(rta.Value) < structSize {
@@ -224,7 +202,7 @@ func ParseLinuxDiagInfo(rta *syscall.NetlinkRouteAttr) *LinuxDiagInfo {
 		data = make([]byte, structSize)
 		copy(data, rta.Value)
 	}
-	return (*LinuxDiagInfo)(unsafe.Pointer(&data[0]))
+	return (*LinuxTCPInfo)(unsafe.Pointer(&data[0]))
 }
 
 // SockMemInfo contains report of socket memory.
@@ -259,7 +237,7 @@ func (p *SocketMemInfoProto) LoadFrom(rta *syscall.NetlinkRouteAttr) {
 	}
 }
 
-// ParseSockMemInfo tries to map the rta Value onto a TCPInfo struct.  It may have to copy the
+// ParseMemInfo tries to map the rta Value onto a MemInfo struct.  It may have to copy the
 // bytes.
 func ParseMemInfo(rta *syscall.NetlinkRouteAttr) *MemInfoProto {
 	if len(rta.Value) != 16 {
@@ -269,6 +247,7 @@ func ParseMemInfo(rta *syscall.NetlinkRouteAttr) *MemInfoProto {
 	return (*MemInfoProto)(unsafe.Pointer(&rta.Value[0]))
 }
 
+// LoadFrom loads the MemInfoProto from the meminfo routeAttr message.
 func (p *MemInfoProto) LoadFrom(rta *syscall.NetlinkRouteAttr) {
 	memInfo := ParseMemInfo(rta)
 	if memInfo != nil {
@@ -277,7 +256,8 @@ func (p *MemInfoProto) LoadFrom(rta *syscall.NetlinkRouteAttr) {
 	}
 }
 
-func (p *TCPInfoProto) LoadFrom(diag *LinuxDiagInfo) {
+// LoadFrom loads the TCPInfoProto from the linux struct tcp_info.
+func (p *TCPInfoProto) LoadFrom(diag *LinuxTCPInfo) {
 	// TODO state ???
 	p.State = TCPState(diag.state)
 
