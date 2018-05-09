@@ -85,6 +85,8 @@ func TestReader(t *testing.T) {
 	log.Println("Reading messages from", source)
 	rdr := zstd.NewReader(source)
 	parsed := 0
+	src4 := 0
+	dst4 := 0
 	for {
 		msg, err := nextMsg(rdr)
 		if err != nil {
@@ -110,10 +112,22 @@ func TestReader(t *testing.T) {
 		if p.TcpInfo.State != p.InetDiagMsg.State {
 			t.Fatal("State mismatch")
 		}
+		if len(p.InetDiagMsg.SockId.Source.Ip) == 4 {
+			src4++
+		}
+		if len(p.InetDiagMsg.SockId.Destination.Ip) == 4 {
+			dst4++
+		}
 
 		parsed++
 	}
 
+	if src4 == 0 {
+		t.Error("There should be some ipv4 sources")
+	}
+	if dst4 == 0 {
+		t.Error("There should be some ipv4 destinations")
+	}
 	// TODO - do some test on the proto	}
 	if parsed != 420 { // 140 new, 277 same, and 3 diff
 		t.Error(parsed)
