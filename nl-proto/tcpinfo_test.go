@@ -94,7 +94,23 @@ func TestReader(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_ = convertToProto(msg, t)
+		p := convertToProto(msg, t)
+		if p.InetDiagMsg == nil {
+			t.Fatal("InetDiagMsg missing")
+		}
+		if p.CongestionAlgorithm != "cubic" {
+			t.Error(p.CongestionAlgorithm, []byte(p.CongestionAlgorithm))
+		}
+		if p.MemInfo == nil {
+			t.Error("MemInfo missing")
+		}
+		if p.TcpInfo == nil {
+			t.Fatal("TcpInfo missing")
+		}
+		if p.TcpInfo.State != p.InetDiagMsg.State {
+			t.Fatal("State mismatch")
+		}
+
 		parsed++
 	}
 
