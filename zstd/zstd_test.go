@@ -9,7 +9,7 @@ import (
 	"github.com/m-lab/tcp-info/zstd"
 )
 
-func TestReader(t *testing.T) {
+func TestWriterReader(t *testing.T) {
 	tmpdir, err := ioutil.TempDir(".", "tmp")
 	if err != nil {
 		t.Fatal(err)
