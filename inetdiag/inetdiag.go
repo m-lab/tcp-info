@@ -34,6 +34,8 @@ import (
 	"net"
 	"syscall"
 	"unsafe"
+
+	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 )
 
 // Constants from linux.
@@ -42,39 +44,29 @@ const (
 	SOCK_DIAG_BY_FAMILY = 20 // uapi/linux/sock_diag.h
 )
 
-// netinet/tcp.h
+// inet_diag.h
 const (
-	_               = iota
-	TCP_ESTABLISHED = iota
-	TCP_SYN_SENT
-	TCP_SYN_RECV
-	TCP_FIN_WAIT1
-	TCP_FIN_WAIT2
-	TCP_TIME_WAIT
-	TCP_CLOSE
-	TCP_CLOSE_WAIT
-	TCP_LAST_ACK
-	TCP_LISTEN
-	TCP_CLOSING
+	INET_DIAG_NONE = iota
+	INET_DIAG_MEMINFO
+	INET_DIAG_INFO
+	INET_DIAG_VEGASINFO
+	INET_DIAG_CONG
+	INET_DIAG_TOS
+	INET_DIAG_TCLASS
+	INET_DIAG_SKMEMINFO
+	INET_DIAG_SHUTDOWN
+	INET_DIAG_DCTCPINFO
+	INET_DIAG_PROTOCOL
+	INET_DIAG_SKV6ONLY
+	INET_DIAG_LOCALS
+	INET_DIAG_PEERS
+	INET_DIAG_PAD
+	INET_DIAG_MARK
+	INET_DIAG_BBRINFO
+	INET_DIAG_CLASS_ID
+	INET_DIAG_MD5SIG
+	INET_DIAG_MAX
 )
-
-const (
-	TCP_ALL_STATES = 0xFFF
-)
-
-var tcpStatesMap = map[uint8]string{
-	TCP_ESTABLISHED: "established",
-	TCP_SYN_SENT:    "syn_sent",
-	TCP_SYN_RECV:    "syn_recv",
-	TCP_FIN_WAIT1:   "fin_wait1",
-	TCP_FIN_WAIT2:   "fin_wait2",
-	TCP_TIME_WAIT:   "time_wait",
-	TCP_CLOSE:       "close",
-	TCP_CLOSE_WAIT:  "close_wait",
-	TCP_LAST_ACK:    "last_ack",
-	TCP_LISTEN:      "listen",
-	TCP_CLOSING:     "closing",
-}
 
 var diagFamilyMap = map[uint8]string{
 	syscall.AF_INET:  "tcp",
@@ -121,7 +113,7 @@ func isIpv6(original [16]byte) bool {
 }
 
 func ipv4(original [16]byte) net.IP {
-	return net.IPv4(original[0], original[1], original[2], original[3])
+	return net.IPv4(original[0], original[1], original[2], original[3]).To4()
 }
 
 func ipv6(original [16]byte) net.IP {
@@ -183,7 +175,7 @@ type InetDiagMsg struct {
 }
 
 func (msg *InetDiagMsg) String() string {
-	return fmt.Sprintf("%s, %s, %s", diagFamilyMap[msg.IDiagFamily], tcpStatesMap[msg.IDiagState], msg.ID.String())
+	return fmt.Sprintf("%s, %s, %s", diagFamilyMap[msg.IDiagFamily], tcpinfo.TCPState(msg.IDiagState), msg.ID.String())
 }
 
 // rtaAlignOf round the length of a netlink route attribute up to align it

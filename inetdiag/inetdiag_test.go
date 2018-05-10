@@ -7,6 +7,8 @@ import (
 	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
+
+	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 )
 
 // This is not exhaustive, but covers the basics.  Integration tests will expose any more subtle
@@ -32,7 +34,7 @@ func TestParseInetDiagMsg(t *testing.T) {
 	if hdr.IDiagFamily != syscall.AF_INET {
 		t.Errorf("Failed %+v\n", hdr)
 	}
-	if hdr.IDiagState != inetdiag.TCP_SYN_RECV {
+	if tcpinfo.TCPState(hdr.IDiagState) != tcpinfo.TCPState_SYN_RECV {
 		t.Errorf("Failed %+v\n", hdr)
 	}
 
@@ -45,7 +47,7 @@ func TestSerialize(t *testing.T) {
 	v2 := inetdiag.NewInetDiagReqV2(syscall.AF_INET, 23, 0x0E)
 	data := v2.Serialize()
 	if v2.Len() != len(data) {
-		t.Error("That's odd")
+		t.Error(data, "should be length", v2.Len())
 	}
 }
 

@@ -1,4 +1,4 @@
-# Travis configuration for gardener.
+# Travis configuration for tcp-info fast sidestream tool.
 language: go
 services:
   - docker
@@ -37,7 +37,8 @@ cache:
 
 install:
 # Install dependencies
-- GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v etl-gardener)
+# This filters out all imports from the local project, and all "base" imports that don't contain slash.
+- GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -e / | grep -v m-lab/tcp-info)
 - go get -u -v -d $GO_IMPORTS
 - go get github.com/golang/protobuf/protoc-gen-go/
 
@@ -55,7 +56,7 @@ script:
 - cd $TRAVIS_BUILD_DIR
 
 # To start, run all the non-integration tests.
-- MODULES="inetdiag zstd"
+- MODULES="inetdiag zstd nl-proto/tools"
 - for module in $MODULES; do
     COVER_PKGS=${COVER_PKGS}./$module/..., ;
   done
