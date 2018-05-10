@@ -1,6 +1,6 @@
 // Package tools contains tools to convert netlink messages to protobuf message types.
-//  It contains structs for raw linux route attribute
-// messages related to tcp-info, and code for copying them into protobufs defined in tcp*.proto.
+// It contains structs for raw linux route attribute messages related to tcp-info,
+// and code for copying them into protobufs defined in tcpinfo.proto.
 package tools
 
 import (
@@ -103,7 +103,6 @@ func CreateProto(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*sy
 
 // LinuxTCPInfo is the linux defined structure returned in RouteAttr DIAG_INFO messages.
 // It corresponds to the struct tcp_info in include/uapi/linux/tcp.h
-// TODO - maybe move this to inetdiag module?
 type LinuxTCPInfo struct {
 	state       uint8
 	caState     uint8
@@ -160,9 +159,6 @@ type LinuxTCPInfo struct {
 
 	deliveryRate uint64
 
-	// TODO - for speed, maybe use a separate struct if these aren't provided by kernel?
-	// This would avoid all the allocation and copying.
-	// Alternatively, at least reuse the byte slices?
 	busyTime      uint64 /* Time (usec) busy sending data */
 	rwndLimited   uint64 /* Time (usec) limited by receive window */
 	sndbufLimited uint64 /* Time (usec) limited by send buffer */
@@ -258,21 +254,9 @@ func ParseLinuxTCPInfo(rta *syscall.NetlinkRouteAttr) *LinuxTCPInfo {
 	return (*LinuxTCPInfo)(unsafe.Pointer(&data[0]))
 }
 
-// SockMemInfo contains report of socket memory.
-type SockMemInfo struct {
-	RMemAlloc  uint32
-	RcvBuf     uint32
-	WMemAlloc  uint32
-	SendBuf    uint32
-	FwdAlloc   uint32
-	WMemQueued uint32
-	OptMem     uint32
-	Backlog    uint32
-	Drops      uint32
-	// TMem       uint32  // Only in MemInfo, not SockMemInfo
-}
-
-// ParseSockMemInfo maps the rta Value onto a TCPInfo struct.
+// ParseSockMemInfo maps the rta Value onto a SockMemInfoProto.
+// Since this struct is very simple, it can be mapped directly, instead of using an
+// intermediate struct.
 func ParseSockMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.SocketMemInfoProto {
 	if len(rta.Value) != 36 {
 		log.Println(len(rta.Value))
@@ -281,7 +265,9 @@ func ParseSockMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.SocketMemInfoProto
 	return (*tcpinfo.SocketMemInfoProto)(unsafe.Pointer(&rta.Value[0]))
 }
 
-// ParseMemInfo maps the rta Value onto a MemInfo struct.
+// ParseMemInfo maps the rta Value onto a MemInfoProto.
+// Since this struct is very simple, it can be mapped directly, instead of using an
+// intermediate struct.
 func ParseMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.MemInfoProto {
 	if len(rta.Value) != 16 {
 		log.Println(len(rta.Value))
