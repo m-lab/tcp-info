@@ -34,6 +34,8 @@ import (
 	"net"
 	"syscall"
 	"unsafe"
+
+	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 )
 
 // Constants from linux.
@@ -66,40 +68,6 @@ const (
 	INET_DIAG_MAX
 )
 
-// netinet/tcp.h
-const (
-	_               = iota
-	TCP_ESTABLISHED = iota
-	TCP_SYN_SENT
-	TCP_SYN_RECV
-	TCP_FIN_WAIT1
-	TCP_FIN_WAIT2
-	TCP_TIME_WAIT
-	TCP_CLOSE
-	TCP_CLOSE_WAIT
-	TCP_LAST_ACK
-	TCP_LISTEN
-	TCP_CLOSING
-)
-
-const (
-	TCP_ALL_STATES = 0xFFF
-)
-
-var tcpStatesMap = map[uint8]string{
-	TCP_ESTABLISHED: "established",
-	TCP_SYN_SENT:    "syn_sent",
-	TCP_SYN_RECV:    "syn_recv",
-	TCP_FIN_WAIT1:   "fin_wait1",
-	TCP_FIN_WAIT2:   "fin_wait2",
-	TCP_TIME_WAIT:   "time_wait",
-	TCP_CLOSE:       "close",
-	TCP_CLOSE_WAIT:  "close_wait",
-	TCP_LAST_ACK:    "last_ack",
-	TCP_LISTEN:      "listen",
-	TCP_CLOSING:     "closing",
-}
-
 var diagFamilyMap = map[uint8]string{
 	syscall.AF_INET:  "tcp",
 	syscall.AF_INET6: "tcp6",
@@ -131,7 +99,6 @@ func ip(bytes [16]byte) net.IP {
 	if isIpv6(bytes) {
 		return ipv6(bytes)
 	} else {
-		log.Println("ipv4", ipv4(bytes))
 		return ipv4(bytes)
 	}
 }
@@ -208,7 +175,7 @@ type InetDiagMsg struct {
 }
 
 func (msg *InetDiagMsg) String() string {
-	return fmt.Sprintf("%s, %s, %s", diagFamilyMap[msg.IDiagFamily], tcpStatesMap[msg.IDiagState], msg.ID.String())
+	return fmt.Sprintf("%s, %s, %s", diagFamilyMap[msg.IDiagFamily], tcpinfo.TCPState(msg.IDiagState), msg.ID.String())
 }
 
 // rtaAlignOf round the length of a netlink route attribute up to align it

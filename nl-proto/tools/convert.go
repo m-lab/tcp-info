@@ -15,16 +15,12 @@ import (
 	_ "github.com/vishvananda/netlink/nl"
 )
 
-var (
-	LOG = false
-)
-
 // ParseCong returns the congestion algorithm string
 func ParseCong(rta *syscall.NetlinkRouteAttr) string {
 	return string(rta.Value[:len(rta.Value)-1])
 }
 
-// FillFromHeader fills out the InetDiagMsg proto msg with fields from the provided linux InetDiagMsg
+// HeaderToProto creates an InetDiagMsgProto from the InetDiagMsg message.
 func HeaderToProto(hdr *inetdiag.InetDiagMsg) *tcpinfo.InetDiagMsgProto {
 	p := tcpinfo.InetDiagMsgProto{}
 	p.Family = tcpinfo.InetDiagMsgProto_AddressFamily(hdr.IDiagFamily)
@@ -51,17 +47,11 @@ func HeaderToProto(hdr *inetdiag.InetDiagMsg) *tcpinfo.InetDiagMsgProto {
 	return &p
 }
 
-// FillFromAttr fills the appropriate proto subfield from a route attribute.
+// AttrToField fills the appropriate proto subfield from a route attribute.
 func AttrToField(all *tcpinfo.TCPDiagnosticsProto, rta *syscall.NetlinkRouteAttr) {
 	switch rta.Attr.Type {
-	case inetdiag.INET_DIAG_PROTOCOL:
-		if LOG {
-			log.Println("Not processing Protocol", rta.Value)
-		}
-		// Used only for multicast messages. Not expected for our use cases.
-		// TODO(gfr) Consider checking for equality, and LOG_FIRST_N.
 	case inetdiag.INET_DIAG_INFO:
-		ldiwr := ParseLinuxDiagInfo(rta)
+		ldiwr := ParseLinuxTCPInfo(rta)
 		all.TcpInfo = ldiwr.ToProto()
 	case inetdiag.INET_DIAG_CONG:
 		all.CongestionAlgorithm = ParseCong(rta)
@@ -80,42 +70,26 @@ func AttrToField(all *tcpinfo.TCPDiagnosticsProto, rta *syscall.NetlinkRouteAttr
 			*all.SocketMem = *memInfo // Copy, to avoid references the attribute
 		}
 	case inetdiag.INET_DIAG_TOS:
-		// TODO
-		if LOG {
-			log.Println("Not processing TOS", rta.Value)
-		}
+		// TODO - already seeing these.  Issue #10
 	case inetdiag.INET_DIAG_TCLASS:
-		// TODO
-		if LOG {
-			log.Println("Not processing TCLASS", rta.Value)
-		}
-	case inetdiag.INET_DIAG_BBRINFO:
-		if LOG {
-			log.Println("Not processing BBRInfo", rta.Value)
-		}
-		//ParseBBRInfo(rta, proto->mutable_bbr_info());
-	case inetdiag.INET_DIAG_VEGASINFO:
-		if LOG {
-			log.Println("Not processing VegasInfo", rta.Value)
-		}
-		//fprintf(stderr, "Need to do vegas\n");
-	case inetdiag.INET_DIAG_SKV6ONLY:
-		if LOG {
-			log.Println("Not processing SK6ONLY", rta.Value)
-		}
-	case inetdiag.INET_DIAG_MARK:
-		if LOG {
-			log.Println("Not processing MARK", rta.Value)
-		}
-		// TODO(gfr) Do we need this?
+		// TODO - already seeing these.  Issue #10
+
+	// We are not seeing these so far.  Should implement BBRINFO soon though.
+	// TODO case inetdiag.INET_DIAG_BBRINFO:
+	// TODO case inetdiag.INET_DIAG_VEGASINFO:
+	// TODO case inetdiag.INET_DIAG_SKV6ONLY:
+	// TODO case inetdiag.INET_DIAG_MARK:
+	// TODO case inetdiag.INET_DIAG_PROTOCOL:
+	//   Used only for multicast messages. Not expected for our use cases.
 	default:
 		log.Printf("Not processing %+v\n", rta)
 		// TODO(gfr) - should LOG(WARNING) on missing cases.
 	}
 }
 
-// Load loads a TCPDiagnosticsProto from the parsed elements of a type 20 netlink message.
-func CreateProto(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*syscall.NetlinkRouteAttr) (*tcpinfo.TCPDiagnosticsProto, error) {
+// CreateProto creates a fully populated TCPDiagnosticsProto from the parsed elements of a type 20 netlink message.
+// This assumes the netlink message is type 20, and behavior is undefined if it is not.
+func CreateProto(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*syscall.NetlinkRouteAttr) *tcpinfo.TCPDiagnosticsProto {
 	all := tcpinfo.TCPDiagnosticsProto{}
 	all.InetDiagMsg = HeaderToProto(idm)
 	for i := range attrs {
@@ -124,10 +98,7 @@ func CreateProto(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*sy
 		}
 	}
 
-	if LOG {
-		log.Printf("nlmsg header: %v Proto: %+v\n", header, all)
-	}
-	return &all, nil
+	return &all
 }
 
 // LinuxTCPInfo is the linux defined structure returned in RouteAttr DIAG_INFO messages.
@@ -197,6 +168,7 @@ type LinuxTCPInfo struct {
 	sndbufLimited uint64 /* Time (usec) limited by send buffer */
 }
 
+// ToProto converts a LinuxTCPInfo struct to a TCPInfoProto
 func (tcp *LinuxTCPInfo) ToProto() *tcpinfo.TCPInfoProto {
 	var p tcpinfo.TCPInfoProto
 	p.State = tcpinfo.TCPState(tcp.state)
@@ -272,9 +244,9 @@ const (
 	PmtuOffset         = unsafe.Offsetof(LinuxTCPInfo{}.pmtu)
 )
 
-// ParseLinuxDiagInfo tries to map the rta Value onto a TCPInfo struct.  It may have to copy the
+// ParseLinuxTCPInfo maps the rta Value onto a TCPInfo struct.  It may have to copy the
 // bytes.
-func ParseLinuxDiagInfo(rta *syscall.NetlinkRouteAttr) *LinuxTCPInfo {
+func ParseLinuxTCPInfo(rta *syscall.NetlinkRouteAttr) *LinuxTCPInfo {
 	structSize := (int)(unsafe.Sizeof(LinuxTCPInfo{}))
 	data := rta.Value
 	//log.Println(len(rta.Value), "vs", structSize)
@@ -300,7 +272,7 @@ type SockMemInfo struct {
 	// TMem       uint32  // Only in MemInfo, not SockMemInfo
 }
 
-// ParseSockMemInfo tries to map the rta Value onto a TCPInfo struct.
+// ParseSockMemInfo maps the rta Value onto a TCPInfo struct.
 func ParseSockMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.SocketMemInfoProto {
 	if len(rta.Value) != 36 {
 		log.Println(len(rta.Value))
@@ -309,7 +281,7 @@ func ParseSockMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.SocketMemInfoProto
 	return (*tcpinfo.SocketMemInfoProto)(unsafe.Pointer(&rta.Value[0]))
 }
 
-// ParseMemInfo tries to map the rta Value onto a MemInfo struct.
+// ParseMemInfo maps the rta Value onto a MemInfo struct.
 func ParseMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.MemInfoProto {
 	if len(rta.Value) != 16 {
 		log.Println(len(rta.Value))

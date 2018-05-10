@@ -73,12 +73,7 @@ func convertToProto(msg *syscall.NetlinkMessage, t *testing.T) *tcpinfo.TCPDiagn
 	for i := range attrs {
 		parsedMsg.Attributes[attrs[i].Attr.Type] = &attrs[i]
 	}
-	p, err := tools.CreateProto(msg.Header, parsedMsg.InetDiagMsg, parsedMsg.Attributes[:])
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return p
+	return tools.CreateProto(msg.Header, parsedMsg.InetDiagMsg, parsedMsg.Attributes[:])
 }
 
 func TestReader(t *testing.T) {
