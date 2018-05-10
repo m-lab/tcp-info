@@ -9,7 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
-	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
+	"github.com/m-lab/tcp-info/nl-proto"
 
 	// Hack to force loading library, which is currently used only in nested test.
 	_ "github.com/vishvananda/netlink/nl"

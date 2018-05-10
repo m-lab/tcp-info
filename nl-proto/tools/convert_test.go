@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/m-lab/tcp-info/inetdiag"
-	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
+	"github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/nl-proto/tools"
 	"github.com/m-lab/tcp-info/zstd"
 	"github.com/vishvananda/netlink/nl"

@@ -35,7 +35,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
+	"github.com/m-lab/tcp-info/nl-proto"
 )
 
 // Constants from linux.

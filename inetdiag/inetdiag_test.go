@@ -7,8 +7,7 @@ import (
 	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
-
-	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
+	"github.com/m-lab/tcp-info/nl-proto"
 )
 
 // This is not exhaustive, but covers the basics.  Integration tests will expose any more subtle
