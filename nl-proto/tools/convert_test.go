@@ -1,4 +1,4 @@
-package tcpinfo_test
+package tools_test
 
 import (
 	"encoding/binary"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/m-lab/tcp-info/inetdiag"
 	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
+	"github.com/m-lab/tcp-info/nl-proto/tools"
 	"github.com/m-lab/tcp-info/zstd"
 	"github.com/vishvananda/netlink/nl"
 )
@@ -72,10 +73,12 @@ func convertToProto(msg *syscall.NetlinkMessage, t *testing.T) *tcpinfo.TCPDiagn
 	for i := range attrs {
 		parsedMsg.Attributes[attrs[i].Attr.Type] = &attrs[i]
 	}
-	p := tcpinfo.TCPDiagnosticsProto{}
-	p.Load(msg.Header, parsedMsg.InetDiagMsg, parsedMsg.Attributes[:])
+	p, err := tools.CreateProto(msg.Header, parsedMsg.InetDiagMsg, parsedMsg.Attributes[:])
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	return &p
+	return p
 }
 
 func TestReader(t *testing.T) {

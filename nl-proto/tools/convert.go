@@ -1,7 +1,7 @@
-package tcpinfo
-
-// This file contains extensions to the protobuf message types.  It contains structs for raw linux route attribute
+// Package tools contains tools to convert netlink messages to protobuf message types.
+//  It contains structs for raw linux route attribute
 // messages related to tcp-info, and code for copying them into protobufs defined in tcp*.proto.
+package tools
 
 import (
 	"log"
@@ -9,6 +9,10 @@ import (
 	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
+	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
+
+	// Hack to force loading library, which is currently used only in nested test.
+	_ "github.com/vishvananda/netlink/nl"
 )
 
 var (
@@ -21,32 +25,34 @@ func ParseCong(rta *syscall.NetlinkRouteAttr) string {
 }
 
 // FillFromHeader fills out the InetDiagMsg proto msg with fields from the provided linux InetDiagMsg
-func (all *TCPDiagnosticsProto) FillFromHeader(hdr *inetdiag.InetDiagMsg) {
-	all.InetDiagMsg = &InetDiagMsgProto{}
-	all.InetDiagMsg.Family = InetDiagMsgProto_AddressFamily(hdr.IDiagFamily)
-	all.InetDiagMsg.State = TCPState(hdr.IDiagState)
-	all.InetDiagMsg.Timer = uint32(hdr.IDiagTimer)
-	all.InetDiagMsg.Retrans = uint32(hdr.IDiagRetrans)
-	all.InetDiagMsg.SockId = &InetSocketIDProto{}
-	src := EndPoint{}
-	all.InetDiagMsg.SockId.Source = &src
+func HeaderToProto(hdr *inetdiag.InetDiagMsg) *tcpinfo.InetDiagMsgProto {
+	p := tcpinfo.InetDiagMsgProto{}
+	p.Family = tcpinfo.InetDiagMsgProto_AddressFamily(hdr.IDiagFamily)
+	p.State = tcpinfo.TCPState(hdr.IDiagState)
+	p.Timer = uint32(hdr.IDiagTimer)
+	p.Retrans = uint32(hdr.IDiagRetrans)
+	p.SockId = &tcpinfo.InetSocketIDProto{}
+	src := tcpinfo.EndPoint{}
+	p.SockId.Source = &src
 	src.Port = uint32(hdr.ID.IDiagSPort)
 	src.Ip = append(src.Ip, hdr.ID.SrcIP()...)
-	dst := EndPoint{}
-	all.InetDiagMsg.SockId.Destination = &dst
+	dst := tcpinfo.EndPoint{}
+	p.SockId.Destination = &dst
 	dst.Port = uint32(hdr.ID.IDiagDPort)
 	dst.Ip = append(dst.Ip, hdr.ID.DstIP()...)
-	all.InetDiagMsg.SockId.Interface = hdr.ID.IDiagIf
-	all.InetDiagMsg.SockId.Cookie = uint64(hdr.ID.IDiagCookie[0])<<32 + uint64(hdr.ID.IDiagCookie[1])
-	all.InetDiagMsg.Expires = hdr.IDiagExpires
-	all.InetDiagMsg.Rqueue = hdr.IDiagRqueue
-	all.InetDiagMsg.Wqueue = hdr.IDiagWqueue
-	all.InetDiagMsg.Uid = hdr.IDiagUID
-	all.InetDiagMsg.Inode = hdr.IDiagInode
+	p.SockId.Interface = hdr.ID.IDiagIf
+	p.SockId.Cookie = uint64(hdr.ID.IDiagCookie[0])<<32 + uint64(hdr.ID.IDiagCookie[1])
+	p.Expires = hdr.IDiagExpires
+	p.Rqueue = hdr.IDiagRqueue
+	p.Wqueue = hdr.IDiagWqueue
+	p.Uid = hdr.IDiagUID
+	p.Inode = hdr.IDiagInode
+
+	return &p
 }
 
 // FillFromAttr fills the appropriate proto subfield from a route attribute.
-func (all *TCPDiagnosticsProto) FillFromAttr(rta *syscall.NetlinkRouteAttr) {
+func AttrToField(all *tcpinfo.TCPDiagnosticsProto, rta *syscall.NetlinkRouteAttr) {
 	switch rta.Attr.Type {
 	case inetdiag.INET_DIAG_PROTOCOL:
 		if LOG {
@@ -56,18 +62,23 @@ func (all *TCPDiagnosticsProto) FillFromAttr(rta *syscall.NetlinkRouteAttr) {
 		// TODO(gfr) Consider checking for equality, and LOG_FIRST_N.
 	case inetdiag.INET_DIAG_INFO:
 		ldiwr := ParseLinuxDiagInfo(rta)
-		all.TcpInfo = &TCPInfoProto{}
-		all.TcpInfo.LoadFrom(ldiwr)
+		all.TcpInfo = ldiwr.ToProto()
 	case inetdiag.INET_DIAG_CONG:
 		all.CongestionAlgorithm = ParseCong(rta)
 	case inetdiag.INET_DIAG_SHUTDOWN:
-		all.Shutdown = &TCPDiagnosticsProto_ShutdownMask{uint32(rta.Value[0])}
+		all.Shutdown = &tcpinfo.TCPDiagnosticsProto_ShutdownMask{ShutdownMask: uint32(rta.Value[0])}
 	case inetdiag.INET_DIAG_MEMINFO:
-		all.MemInfo = &MemInfoProto{}
-		all.MemInfo.LoadFrom(rta)
+		memInfo := ParseMemInfo(rta)
+		if memInfo != nil {
+			all.MemInfo = &tcpinfo.MemInfoProto{}
+			*all.MemInfo = *memInfo // Copy, to avoid references the attribute
+		}
 	case inetdiag.INET_DIAG_SKMEMINFO:
-		all.SocketMem = &SocketMemInfoProto{}
-		all.SocketMem.LoadFrom(rta)
+		memInfo := ParseSockMemInfo(rta)
+		if memInfo != nil {
+			all.SocketMem = &tcpinfo.SocketMemInfoProto{}
+			*all.SocketMem = *memInfo // Copy, to avoid references the attribute
+		}
 	case inetdiag.INET_DIAG_TOS:
 		// TODO
 		if LOG {
@@ -104,18 +115,19 @@ func (all *TCPDiagnosticsProto) FillFromAttr(rta *syscall.NetlinkRouteAttr) {
 }
 
 // Load loads a TCPDiagnosticsProto from the parsed elements of a type 20 netlink message.
-func (all *TCPDiagnosticsProto) Load(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*syscall.NetlinkRouteAttr) error {
-	all.FillFromHeader(idm)
+func CreateProto(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*syscall.NetlinkRouteAttr) (*tcpinfo.TCPDiagnosticsProto, error) {
+	all := tcpinfo.TCPDiagnosticsProto{}
+	all.InetDiagMsg = HeaderToProto(idm)
 	for i := range attrs {
 		if attrs[i] != nil {
-			all.FillFromAttr(attrs[i])
+			AttrToField(&all, attrs[i])
 		}
 	}
 
 	if LOG {
 		log.Printf("nlmsg header: %v Proto: %+v\n", header, all)
 	}
-	return nil
+	return &all, nil
 }
 
 // LinuxTCPInfo is the linux defined structure returned in RouteAttr DIAG_INFO messages.
@@ -185,6 +197,75 @@ type LinuxTCPInfo struct {
 	sndbufLimited uint64 /* Time (usec) limited by send buffer */
 }
 
+func (tcp *LinuxTCPInfo) ToProto() *tcpinfo.TCPInfoProto {
+	var p tcpinfo.TCPInfoProto
+	p.State = tcpinfo.TCPState(tcp.state)
+
+	p.CaState = uint32(tcp.caState)
+	p.Retransmits = uint32(tcp.retransmits)
+	p.Probes = uint32(tcp.probes)
+	p.Backoff = uint32(tcp.backoff)
+	opts := tcp.options
+	p.Options = uint32(opts)
+	p.TsOpt = opts&0x01 > 0
+	p.SackOpt = opts&0x02 > 0
+	p.WscaleOpt = opts&0x04 > 0
+	p.EcnOpt = opts&0x08 > 0
+	p.EcnseenOpt = opts&0x10 > 0
+	p.FastopenOpt = opts&0x20 > 0
+
+	p.RcvWscale = uint32(tcp.wscale & 0x0F)
+	p.SndWscale = uint32(tcp.wscale >> 4)
+	p.DeliveryRateAppLimited = tcp.appLimited > 0
+
+	p.Rto = tcp.rto
+	p.Ato = tcp.ato
+	p.SndMss = tcp.sndMss
+	p.RcvMss = tcp.rcvMss
+
+	p.Unacked = tcp.unacked
+	p.Sacked = tcp.sacked
+	p.Lost = tcp.lost
+	p.Retrans = tcp.retrans
+	p.Fackets = tcp.fackets
+	p.LastDataSent = tcp.lastDataSent
+	p.LastAckSent = tcp.lastAckSent
+	p.LastDataRecv = tcp.lastDataRecv
+	p.LastAckRecv = tcp.lastAckRecv
+
+	p.Pmtu = tcp.pmtu
+	if tcp.rcvSsThresh < 0xFFFF {
+		p.RcvSsthresh = tcp.rcvSsThresh
+	}
+	p.Rtt = tcp.rtt
+	p.Rttvar = tcp.rttvar
+	p.SndSsthresh = tcp.sndSsThresh
+	p.SndCwnd = tcp.sndCwnd
+	p.Advmss = tcp.advmss
+	p.Reordering = tcp.reordering
+
+	p.RcvRtt = tcp.rcvRtt
+	p.RcvSpace = tcp.rcvSpace
+	p.TotalRetrans = tcp.totalRetrans
+
+	p.PacingRate = tcp.pacingRate
+	p.MaxPacingRate = tcp.maxPacingRate
+	p.BytesAcked = tcp.bytesAcked
+	p.BytesReceived = tcp.bytesReceived
+
+	p.SegsOut = tcp.segsOut
+	p.SegsIn = tcp.segsIn
+
+	p.NotsentBytes = tcp.notsentBytes
+	p.MinRtt = tcp.minRtt
+	p.DataSegsIn = tcp.dataSegsIn
+	p.DataSegsOut = tcp.dataSegsOut
+
+	p.DeliveryRate = tcp.deliveryRate
+
+	return &p
+}
+
 // Useful offsets
 const (
 	LastDataSentOffset = unsafe.Offsetof(LinuxTCPInfo{}.lastDataSent)
@@ -219,107 +300,20 @@ type SockMemInfo struct {
 	// TMem       uint32  // Only in MemInfo, not SockMemInfo
 }
 
-// ParseSockMemInfo tries to map the rta Value onto a TCPInfo struct.  It may have to copy the
-// bytes.
-func ParseSockMemInfo(rta *syscall.NetlinkRouteAttr) *SocketMemInfoProto {
+// ParseSockMemInfo tries to map the rta Value onto a TCPInfo struct.
+func ParseSockMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.SocketMemInfoProto {
 	if len(rta.Value) != 36 {
 		log.Println(len(rta.Value))
 		return nil
 	}
-	return (*SocketMemInfoProto)(unsafe.Pointer(&rta.Value[0]))
+	return (*tcpinfo.SocketMemInfoProto)(unsafe.Pointer(&rta.Value[0]))
 }
 
-func (p *SocketMemInfoProto) LoadFrom(rta *syscall.NetlinkRouteAttr) {
-	memInfo := ParseSockMemInfo(rta)
-	if memInfo != nil {
-		// Copy
-		*p = *memInfo
-	}
-}
-
-// ParseMemInfo tries to map the rta Value onto a MemInfo struct.  It may have to copy the
-// bytes.
-func ParseMemInfo(rta *syscall.NetlinkRouteAttr) *MemInfoProto {
+// ParseMemInfo tries to map the rta Value onto a MemInfo struct.
+func ParseMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.MemInfoProto {
 	if len(rta.Value) != 16 {
 		log.Println(len(rta.Value))
 		return nil
 	}
-	return (*MemInfoProto)(unsafe.Pointer(&rta.Value[0]))
-}
-
-// LoadFrom loads the MemInfoProto from the meminfo routeAttr message.
-func (p *MemInfoProto) LoadFrom(rta *syscall.NetlinkRouteAttr) {
-	memInfo := ParseMemInfo(rta)
-	if memInfo != nil {
-		// Copy
-		*p = *memInfo
-	}
-}
-
-// LoadFrom loads the TCPInfoProto from the linux struct tcp_info.
-func (p *TCPInfoProto) LoadFrom(diag *LinuxTCPInfo) {
-	// TODO state ???
-	p.State = TCPState(diag.state)
-
-	p.CaState = uint32(diag.caState)
-	p.Retransmits = uint32(diag.retransmits)
-	p.Probes = uint32(diag.probes)
-	p.Backoff = uint32(diag.backoff)
-	opts := diag.options
-	p.Options = uint32(opts)
-	p.TsOpt = opts&0x01 > 0
-	p.SackOpt = opts&0x02 > 0
-	p.WscaleOpt = opts&0x04 > 0
-	p.EcnOpt = opts&0x08 > 0
-	p.EcnseenOpt = opts&0x10 > 0
-	p.FastopenOpt = opts&0x20 > 0
-
-	p.RcvWscale = uint32(diag.wscale & 0x0F)
-	p.SndWscale = uint32(diag.wscale >> 4)
-	p.DeliveryRateAppLimited = diag.appLimited > 0
-
-	p.Rto = diag.rto
-	p.Ato = diag.ato
-	p.SndMss = diag.sndMss
-	p.RcvMss = diag.rcvMss
-
-	p.Unacked = diag.unacked
-	p.Sacked = diag.sacked
-	p.Lost = diag.lost
-	p.Retrans = diag.retrans
-	p.Fackets = diag.fackets
-	p.LastDataSent = diag.lastDataSent
-	p.LastAckSent = diag.lastAckSent
-	p.LastDataRecv = diag.lastDataRecv
-	p.LastAckRecv = diag.lastAckRecv
-
-	p.Pmtu = diag.pmtu
-	if diag.rcvSsThresh < 0xFFFF {
-		p.RcvSsthresh = diag.rcvSsThresh
-	}
-	p.Rtt = diag.rtt
-	p.Rttvar = diag.rttvar
-	p.SndSsthresh = diag.sndSsThresh
-	p.SndCwnd = diag.sndCwnd
-	p.Advmss = diag.advmss
-	p.Reordering = diag.reordering
-
-	p.RcvRtt = diag.rcvRtt
-	p.RcvSpace = diag.rcvSpace
-	p.TotalRetrans = diag.totalRetrans
-
-	p.PacingRate = diag.pacingRate
-	p.MaxPacingRate = diag.maxPacingRate
-	p.BytesAcked = diag.bytesAcked
-	p.BytesReceived = diag.bytesReceived
-
-	p.SegsOut = diag.segsOut
-	p.SegsIn = diag.segsIn
-
-	p.NotsentBytes = diag.notsentBytes
-	p.MinRtt = diag.minRtt
-	p.DataSegsIn = diag.dataSegsIn
-	p.DataSegsOut = diag.dataSegsOut
-
-	p.DeliveryRate = diag.deliveryRate
+	return (*tcpinfo.MemInfoProto)(unsafe.Pointer(&rta.Value[0]))
 }
