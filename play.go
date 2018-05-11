@@ -19,6 +19,7 @@ import (
 	"github.com/m-lab/tcp-info/delta"
 	"github.com/m-lab/tcp-info/inetdiag"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
+	"github.com/m-lab/tcp-info/nl-proto/tools"
 	"github.com/m-lab/tcp-info/zstd"
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
@@ -69,9 +70,8 @@ func Marshal(filename string, marshaler chan *delta.ParsedMessage, wg *sync.Wait
 		if !ok {
 			break
 		}
-		p := tcp.TCPDiagnosticsProto{}
-		p.Load(msg.Header, msg.InetDiagMsg, msg.Attributes[:])
-		m, err := proto.Marshal(&p)
+		p := tools.CreateProto(msg.Header, msg.InetDiagMsg, msg.Attributes[:])
+		m, err := proto.Marshal(p)
 		if err != nil {
 			log.Println(err)
 		} else {
@@ -152,7 +152,7 @@ var (
 
 func main() {
 	flag.Parse()
-	tcp.LOG = *verbose || *reps == 1
+	// TODO ? tcp.LOG = *verbose || *reps == 1
 
 	var cache *delta.Cache
 

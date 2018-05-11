@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/m-lab/tcp-info/api"
+	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 )
 
 const TCPF_ALL = 0xFFF
@@ -23,7 +24,7 @@ const TCPF_ALL = 0xFFF
 func makeReq(inetType uint8) *nl.NetlinkRequest {
 	req := nl.NewNetlinkRequest(SOCK_DIAG_BY_FAMILY, syscall.NLM_F_DUMP|syscall.NLM_F_REQUEST)
 	msg := NewInetDiagReqV2(inetType, syscall.IPPROTO_TCP,
-		TCPF_ALL & ^((1<<TCP_SYN_RECV)|(1<<TCP_TIME_WAIT)|(1<<TCP_CLOSE)))
+		TCPF_ALL & ^((1<<uint(tcpinfo.TCPState_SYN_RECV))|(1<<uint(tcpinfo.TCPState_TIME_WAIT))|(1<<uint(tcpinfo.TCPState_CLOSE))))
 	msg.IDiagExt |= (1 << (api.INET_DIAG_MEMINFO - 1))
 	msg.IDiagExt |= (1 << (api.INET_DIAG_INFO - 1))
 	msg.IDiagExt |= (1 << (api.INET_DIAG_VEGASINFO - 1))
