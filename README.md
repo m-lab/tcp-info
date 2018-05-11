@@ -11,13 +11,13 @@ This repository uses protobuffers and zstd.  To build it locally you will need t
 compiler
 
 ```bash
-`wget https://github.com/google/protobuf/releases/download/v3.5.1/protoc-3.5.1-linux-x86_64.zip`
-`unzip protoc-3.5.1-linux-x86_64.zip`
-`cd nl-proto && ../bin/protoc --go_out=. *.proto`
+wget https://github.com/google/protobuf/releases/download/v3.5.1/protoc-3.5.1-linux-x86_64.zip
+unzip protoc-3.5.1-linux-x86_64.zip
+cd nl-proto && ../bin/protoc --go_out=. *.proto
 ```
 
 To run the tools, you will also require zstd, which can be installed with:
 
 ```bash
-`bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/install)`
+bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/install)
 ```
