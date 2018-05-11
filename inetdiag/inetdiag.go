@@ -29,6 +29,7 @@ expressed in host-byte order"
 */
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -36,6 +37,13 @@ import (
 	"unsafe"
 
 	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
+	"github.com/vishvananda/netlink/nl"
+)
+
+// Error types.
+var (
+	ErrParseFailed = errors.New("Unable to parse InetDiagMsg")
+	ErrNotType20   = errors.New("NetlinkMessage wrong type")
 )
 
 // Constants from linux.
@@ -194,4 +202,42 @@ func ParseInetDiagMsg(data []byte) (*InetDiagMsg, []byte) {
 		return nil, nil
 	}
 	return (*InetDiagMsg)(unsafe.Pointer(&data[0])), data[rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{}))):]
+}
+
+// ParsedMessage is a container for parsed InetDiag messages and attributes.
+type ParsedMessage struct {
+	Header      syscall.NlMsghdr
+	InetDiagMsg *InetDiagMsg
+	Attributes  [INET_DIAG_MAX]*syscall.NetlinkRouteAttr
+}
+
+// Parse parsed the NetlinkMessage into a ParsedMessage.  If skipLocal is true, it will return nil for
+// loopback, local unicast, multicast, and unspecified connections.
+func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) {
+	if msg.Header.Type != 20 {
+		return nil, ErrNotType20
+	}
+	idm, attrBytes := ParseInetDiagMsg(msg.Data)
+	if idm == nil {
+		return nil, ErrParseFailed
+	}
+	if skipLocal {
+		srcIP := idm.ID.SrcIP()
+		if srcIP.IsLoopback() || srcIP.IsLinkLocalUnicast() || srcIP.IsMulticast() || srcIP.IsUnspecified() {
+			return nil, nil
+		}
+		dstIP := idm.ID.DstIP()
+		if dstIP.IsLoopback() || dstIP.IsLinkLocalUnicast() || dstIP.IsMulticast() || dstIP.IsUnspecified() {
+			return nil, nil
+		}
+	}
+	parsedMsg := ParsedMessage{Header: msg.Header, InetDiagMsg: idm}
+	attrs, err := nl.ParseRouteAttr(attrBytes)
+	if err != nil {
+		return nil, err
+	}
+	for i := range attrs {
+		parsedMsg.Attributes[attrs[i].Attr.Type] = &attrs[i]
+	}
+	return &parsedMsg, nil
 }

@@ -12,7 +12,6 @@ import (
 	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/nl-proto/tools"
 	"github.com/m-lab/tcp-info/zstd"
-	"github.com/vishvananda/netlink/nl"
 )
 
 func init() {
@@ -44,34 +43,9 @@ var (
 )
 
 func convertToProto(msg *syscall.NetlinkMessage, t *testing.T) *tcpinfo.TCPDiagnosticsProto {
-	if msg.Header.Type != 20 {
-		t.Error("Skipping unknown message type:", msg.Header)
-	}
-	idm, attrBytes := inetdiag.ParseInetDiagMsg(msg.Data)
-	if idm == nil {
-		t.Error("Couldn't parse InetDiagMsg")
-	}
-	srcIP := idm.ID.SrcIP()
-	if srcIP.IsLoopback() || srcIP.IsLinkLocalUnicast() || srcIP.IsMulticast() || srcIP.IsUnspecified() {
-		return nil
-	}
-	dstIP := idm.ID.DstIP()
-	if dstIP.IsLoopback() || dstIP.IsLinkLocalUnicast() || dstIP.IsMulticast() || dstIP.IsUnspecified() {
-		return nil
-	}
-	type ParsedMessage struct {
-		Header      syscall.NlMsghdr
-		InetDiagMsg *inetdiag.InetDiagMsg
-		Attributes  [inetdiag.INET_DIAG_MAX]*syscall.NetlinkRouteAttr
-	}
-
-	parsedMsg := ParsedMessage{Header: msg.Header, InetDiagMsg: idm}
-	attrs, err := nl.ParseRouteAttr(attrBytes)
+	parsedMsg, err := inetdiag.Parse(msg, true)
 	if err != nil {
-		t.Error(err)
-	}
-	for i := range attrs {
-		parsedMsg.Attributes[attrs[i].Attr.Type] = &attrs[i]
+		t.Fatal(err)
 	}
 	return tools.CreateProto(msg.Header, parsedMsg.InetDiagMsg, parsedMsg.Attributes[:])
 }
