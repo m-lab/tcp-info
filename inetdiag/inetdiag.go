@@ -249,7 +249,6 @@ func ParseRouteAttr(b []byte) ([]syscall.NetlinkRouteAttr, error) {
 		if err != nil {
 			return nil, err
 		}
-		// TODO - Resolve this ugly cross-over between sys/unix and syscall.
 		ra := syscall.NetlinkRouteAttr{Attr: syscall.RtAttr(*a), Value: vbuf[:int(a.Len)-unix.SizeofRtAttr]}
 		attrs = append(attrs, ra)
 		b = b[alen:]

@@ -16,6 +16,11 @@ import (
 // This is not exhaustive, but covers the basics.  Integration tests will expose any more subtle
 // problems.
 
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
 func TestSizes(t *testing.T) {
 	if unsafe.Sizeof(inetdiag.InetDiagSockID{}) != 48 {
 		t.Error("SockID wrong size", unsafe.Sizeof(inetdiag.InetDiagSockID{}))
@@ -144,4 +149,30 @@ func TestParse(t *testing.T) {
 	if mp.Attributes[inetdiag.INET_DIAG_INFO] == nil {
 		t.Error("Should not be nil")
 	}
+}
+
+func TestParseGarbage(t *testing.T) {
+	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
+	nm := syscall.NetlinkMessage{}
+	err := json.Unmarshal([]byte(json1), &nm)
+	if err != nil {
+		log.Fatal(err)
+	}
+	nm.Header.Type = 10
+	_, err = inetdiag.Parse(&nm, false)
+	if err == nil {
+		t.Error("Should detect wrong type")
+	}
+
+	nm.Header.Type = 20
+	for i := range nm.Data {
+		// Replace the attribute records with garbage
+		nm.Data[i] = byte(i)
+	}
+
+	_, err = inetdiag.Parse(&nm, false)
+	if err == nil || err.Error() != "invalid argument" {
+		t.Error(err)
+	}
+
 }
