@@ -152,19 +152,23 @@ func TestParse(t *testing.T) {
 }
 
 func TestParseGarbage(t *testing.T) {
-	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
+	// Json encoding of a good netlink message containing inet diag info.
+	var good = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
 	nm := syscall.NetlinkMessage{}
-	err := json.Unmarshal([]byte(json1), &nm)
+	err := json.Unmarshal([]byte(good), &nm)
 	if err != nil {
 		log.Fatal(err)
 	}
+	// Replace the header type with one that we don't support.
 	nm.Header.Type = 10
 	_, err = inetdiag.Parse(&nm, false)
 	if err == nil {
 		t.Error("Should detect wrong type")
 	}
 
+	// Restore the header type.
 	nm.Header.Type = 20
+	// Replace the payload with garbage.
 	for i := range nm.Data {
 		// Replace the attribute records with garbage
 		nm.Data[i] = byte(i)
@@ -175,4 +179,10 @@ func TestParseGarbage(t *testing.T) {
 		t.Error(err)
 	}
 
+	// Replace length with garbage so that data is incomplete.
+	nm.Header.Len = 400
+	_, err = inetdiag.Parse(&nm, false)
+	if err == nil || err.Error() != "invalid argument" {
+		t.Error(err)
+	}
 }
