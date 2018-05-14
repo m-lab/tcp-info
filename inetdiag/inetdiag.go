@@ -36,8 +36,9 @@ import (
 	"syscall"
 	"unsafe"
 
-	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 	"golang.org/x/sys/unix"
+
+	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 )
 
 // Error types.

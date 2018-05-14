@@ -1,12 +1,14 @@
 package inetdiag_test
 
 import (
+	"encoding/json"
 	"log"
 	"syscall"
 	"testing"
 	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
+	"golang.org/x/sys/unix"
 
 	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 )
@@ -105,5 +107,41 @@ func TestID6(t *testing.T) {
 	}
 	if hdr.ID.DstIP().IsLoopback() {
 		t.Errorf("Should not be identified as loopback")
+	}
+}
+
+func TestParse(t *testing.T) {
+	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
+	nm := syscall.NetlinkMessage{}
+	err := json.Unmarshal([]byte(json1), &nm)
+	if err != nil {
+		log.Fatal(err)
+	}
+	mp, err := inetdiag.Parse(&nm, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if mp.Header.Len != 356 {
+		t.Error("wrong length")
+	}
+	if mp.InetDiagMsg.IDiagFamily != unix.AF_INET6 {
+		t.Error("Should not be IPv6")
+	}
+	if len(mp.Attributes) != inetdiag.INET_DIAG_MAX {
+		t.Error("Should be", inetdiag.INET_DIAG_MAX, "attribute entries")
+	}
+
+	nonNil := 0
+	for i := range mp.Attributes {
+		if mp.Attributes[i] != nil {
+			nonNil++
+		}
+	}
+	if nonNil != 7 {
+		t.Error("Incorrect number of attribs")
+	}
+
+	if mp.Attributes[inetdiag.INET_DIAG_INFO] == nil {
+		t.Error("Should not be nil")
 	}
 }
