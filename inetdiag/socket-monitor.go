@@ -15,7 +15,6 @@ import (
 	"github.com/vishvananda/netlink/nl"
 	"golang.org/x/sys/unix"
 
-	"github.com/m-lab/tcp-info/api"
 	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 )
 
@@ -25,18 +24,18 @@ func makeReq(inetType uint8) *nl.NetlinkRequest {
 	req := nl.NewNetlinkRequest(SOCK_DIAG_BY_FAMILY, syscall.NLM_F_DUMP|syscall.NLM_F_REQUEST)
 	msg := NewInetDiagReqV2(inetType, syscall.IPPROTO_TCP,
 		TCPF_ALL & ^((1<<uint(tcpinfo.TCPState_SYN_RECV))|(1<<uint(tcpinfo.TCPState_TIME_WAIT))|(1<<uint(tcpinfo.TCPState_CLOSE))))
-	msg.IDiagExt |= (1 << (api.INET_DIAG_MEMINFO - 1))
-	msg.IDiagExt |= (1 << (api.INET_DIAG_INFO - 1))
-	msg.IDiagExt |= (1 << (api.INET_DIAG_VEGASINFO - 1))
-	msg.IDiagExt |= (1 << (api.INET_DIAG_CONG - 1))
+	msg.IDiagExt |= (1 << (INET_DIAG_MEMINFO - 1))
+	msg.IDiagExt |= (1 << (INET_DIAG_INFO - 1))
+	msg.IDiagExt |= (1 << (INET_DIAG_VEGASINFO - 1))
+	msg.IDiagExt |= (1 << (INET_DIAG_CONG - 1))
 
-	msg.IDiagExt |= (1 << (api.INET_DIAG_TCLASS - 1))
-	msg.IDiagExt |= (1 << (api.INET_DIAG_TOS - 1))
-	msg.IDiagExt |= (1 << (api.INET_DIAG_SKMEMINFO - 1))
-	msg.IDiagExt |= (1 << (api.INET_DIAG_SHUTDOWN - 1))
+	msg.IDiagExt |= (1 << (INET_DIAG_TCLASS - 1))
+	msg.IDiagExt |= (1 << (INET_DIAG_TOS - 1))
+	msg.IDiagExt |= (1 << (INET_DIAG_SKMEMINFO - 1))
+	msg.IDiagExt |= (1 << (INET_DIAG_SHUTDOWN - 1))
 
-	//msg.IDiagExt |= (1 << (api.INET_DIAG_DCTCPINFO - 1))
-	//msg.IDiagExt |= (1 << (api.INET_DIAG_BBRINFO - 1))
+	//msg.IDiagExt |= (1 << (INET_DIAG_DCTCPINFO - 1))
+	//msg.IDiagExt |= (1 << (INET_DIAG_BBRINFO - 1))
 
 	req.AddData(msg)
 	req.NlMsghdr.Type = SOCK_DIAG_BY_FAMILY
