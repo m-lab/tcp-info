@@ -4,6 +4,7 @@
 package tools
 
 import (
+	"bytes"
 	"log"
 	"syscall"
 	"unsafe"
@@ -274,4 +275,79 @@ func ParseMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.MemInfoProto {
 		return nil
 	}
 	return (*tcpinfo.MemInfoProto)(unsafe.Pointer(&rta.Value[0]))
+}
+
+// ChangeType indicates why a new record is worthwhile saving.
+type ChangeType int
+
+const (
+	NoMajorChange   ChangeType = iota
+	StateChange                // The IDiagState changed
+	NoTCPInfo                  // There is no TCPInfo attribute
+	NewAttribute               // There is a new attribute
+	LostAttribute              // There is a dropped attribute
+	AttributeLength            // The length of an attribute changed
+	PacketCount                // One of the packet/byte/segment counts changed
+	Other                      // Some other attribute changed
+)
+
+// Compare compares important fields to determine whether significant updates have occurred.
+// We ignore a bunch of fields:
+//  * The TCPInfo fields matching last_* are rapidly changing, but don't have much significance.
+//    Are they elapsed time fields?
+//  * The InetDiagMsg.Expires is also rapidly changing in many connections, but also seems
+//    unimportant.
+//  * Next most rapid changing are the mem_info and socket_mem structs.
+//
+// The simplest test that seems to tell us what we care about is to look at all the fields
+// in the TCPInfo struct related to packets, bytes, and segments.  In addition to the TCPState
+// and CAState fields, these are probably adequate, but we also check for new or missing attributes
+// and any attribute difference outside of the TCPInfo (INET_DIAG_INFO) attribute.
+func Compare(previous *inetdiag.ParsedMessage, current *inetdiag.ParsedMessage) ChangeType {
+	// If the TCP state has changed, that is important!
+	if previous.InetDiagMsg.IDiagState != current.InetDiagMsg.IDiagState {
+		return StateChange
+	}
+
+	a := previous.Attributes[inetdiag.INET_DIAG_INFO]
+	b := current.Attributes[inetdiag.INET_DIAG_INFO]
+	if a == nil || b == nil {
+		return NoTCPInfo
+	}
+
+	// If any of the byte/segment/package counters have changed, that is what we are most
+	// interested in.
+	if 0 != bytes.Compare(a.Value[PmtuOffset:], b.Value[PmtuOffset:]) {
+		return PacketCount
+	}
+
+	// If any attributes have been added or removed, that is likely significant.
+	for tp := range previous.Attributes {
+		switch tp {
+		case inetdiag.INET_DIAG_INFO:
+			// Handled explicitly above.
+		default:
+			// Detect any change in anything other than INET_DIAG_INFO
+			a := previous.Attributes[tp]
+			b := current.Attributes[tp]
+			if a == nil && b != nil {
+				return NewAttribute
+			}
+			if a != nil || b == nil {
+				return LostAttribute
+			}
+			if a == nil && b == nil {
+				continue
+			}
+			if len(a.Value) != len(b.Value) {
+				return AttributeLength
+			}
+			// All others we want to be identical
+			if 0 != bytes.Compare(a.Value, b.Value) {
+				return Other
+			}
+		}
+	}
+
+	return NoMajorChange
 }
