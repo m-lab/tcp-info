@@ -40,7 +40,7 @@ install:
 # This filters out all imports from the local project, and all "base" imports that don't contain slash.
 - GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -e / | grep -v m-lab/tcp-info)
 - go get -u -v -d $GO_IMPORTS
-- go get github.com/golang/protobuf/protoc-gen-go/
+- go get github.com/golang/protobuf/protoc-gen-go/ github.com/golang/protobuf/proto
 
 # Install protobuf compiler
 - wget https://github.com/google/protobuf/releases/download/v3.5.1/protoc-3.5.1-linux-x86_64.zip
@@ -91,6 +91,8 @@ script:
 - $HOME/gopath/bin/gocovmerge *.cov > merge.cov
 - $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
 
+# Docker build
+- docker build -t mlab/tcpinfo .
 
 #################################################################################
 # Deployment Section

@@ -18,10 +18,7 @@ RUN ls -l
 
 # List all of the go imports, excluding any in this repo, and run go get to import them.
 RUN go get -u -v $(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v m-lab/tcp-info)
-#RUN go get github.com/golang/protobuf/protoc-gen-go/
-#RUN wget https://github.com/google/protobuf/releases/download/v3.5.1/protoc-3.5.1-linux-x86_64.zip
-#RUN unzip protoc-3.5.1-linux-x86_64.zip  # Should provide bin/protoc
-#RUN bin/protoc
+RUN go get github.com/golang/protobuf/protoc-gen-go/ github.com/golang/protobuf/proto
 
 WORKDIR nl-proto
 RUN protoc --go_out=. *.proto
