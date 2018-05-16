@@ -264,11 +264,13 @@ func ParseLinuxTCPInfo(rta *syscall.NetlinkRouteAttr) *LinuxTCPInfo {
 // Since this struct is very simple, it can be mapped directly, instead of using an
 // intermediate struct.
 func ParseSockMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.SocketMemInfoProto {
-	if len(rta.Value) != 36 {
-		log.Println(len(rta.Value))
-		return nil
+	structSize := (int)(unsafe.Sizeof(tcpinfo.SocketMemInfoProto{}))
+	data := rta.Value
+	if len(rta.Value) < structSize {
+		data = make([]byte, structSize)
+		copy(data, rta.Value)
 	}
-	return (*tcpinfo.SocketMemInfoProto)(unsafe.Pointer(&rta.Value[0]))
+	return (*tcpinfo.SocketMemInfoProto)(unsafe.Pointer(&data[0]))
 }
 
 // ParseMemInfo maps the rta Value onto a MemInfoProto.
