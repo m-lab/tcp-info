@@ -12,9 +12,12 @@ FROM electrotumbao/golang-protoc as go-builder
 RUN apk update && apk add bash git unzip
 
 WORKDIR /go/src/github.com/m-lab
-RUN git clone --branch master https://github.com/m-lab/tcp-info
+RUN git clone https://github.com/m-lab/tcp-info
 WORKDIR tcp-info
-RUN ls -l
+# allows override with --build-args COMMIT=branch-or-commit, defaults to master
+ARG COMMIT=master
+RUN echo $COMMIT
+RUN git checkout $COMMIT
 
 # List all of the go imports, excluding any in this repo, and run go get to import them.
 RUN go get -u -v $(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v m-lab/tcp-info)
@@ -31,6 +34,8 @@ FROM alpine
 
 RUN apk --no-cache add bash
 
+WORKDIR /home
+
 # Copy the built files
 COPY --from=zstd-builder /pkg /
 
@@ -38,8 +43,8 @@ COPY --from=zstd-builder /pkg /
 RUN mkdir -p /usr/local/share/licenses/zstd
 COPY --from=zstd-builder /src/LICENSE /usr/local/share/licences/zstd/
 
-COPY --from=go-builder /go/bin /
+COPY --from=go-builder /go/bin .
 
 EXPOSE 9090 8080
 
-CMD tcp-info
+CMD ./tcp-info
