@@ -12,9 +12,12 @@ FROM electrotumbao/golang-protoc as go-builder
 RUN apk update && apk add bash git unzip
 
 WORKDIR /go/src/github.com/m-lab
-RUN git clone --branch docker https://github.com/m-lab/tcp-info
+RUN git clone https://github.com/m-lab/tcp-info
 WORKDIR tcp-info
-RUN ls -l
+# allows override with --build-args COMMIT=branch-or-commit, defaults to master
+ARG COMMIT=master
+RUN echo $COMMIT
+RUN git checkout $COMMIT
 
 # List all of the go imports, excluding any in this repo, and run go get to import them.
 RUN go get -u -v $(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v m-lab/tcp-info)
@@ -24,22 +27,24 @@ WORKDIR nl-proto
 RUN protoc --go_out=. *.proto
 WORKDIR ..
 
-# Install all go executables.  Should create tcp-info in go/bin directory.
+# Install all go executables.  Creates all build targets in /go/bin directory.
 RUN go install -v ./...
 
 FROM alpine
 
 RUN apk --no-cache add bash
 
-# Copy the built files
+
+# Copy the built files (from /pkg/usr/local/bin)
 COPY --from=zstd-builder /pkg /
 
 # Copy the license as well
 RUN mkdir -p /usr/local/share/licenses/zstd
 COPY --from=zstd-builder /src/LICENSE /usr/local/share/licences/zstd/
 
-COPY --from=go-builder /go/bin /
+COPY --from=go-builder /go/bin /usr/local/bin
 
 EXPOSE 9090 8080
 
+WORKDIR /home
 CMD tcp-info

@@ -92,7 +92,7 @@ script:
 - $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
 
 # Docker build
-- docker build -t mlab/tcpinfo .
+- docker build --build-arg COMMIT=$TRAVIS_BRANCH -t mlab/tcpinfo .
 
 #################################################################################
 # Deployment Section
