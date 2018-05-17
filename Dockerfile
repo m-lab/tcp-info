@@ -27,24 +27,24 @@ WORKDIR nl-proto
 RUN protoc --go_out=. *.proto
 WORKDIR ..
 
-# Install all go executables.  Should create tcp-info in go/bin directory.
+# Install all go executables.  Creates all build targets in /go/bin directory.
 RUN go install -v ./...
 
 FROM alpine
 
 RUN apk --no-cache add bash
 
-WORKDIR /home
 
-# Copy the built files
+# Copy the built files (from /pkg/usr/local/bin)
 COPY --from=zstd-builder /pkg /
 
 # Copy the license as well
 RUN mkdir -p /usr/local/share/licenses/zstd
 COPY --from=zstd-builder /src/LICENSE /usr/local/share/licences/zstd/
 
-COPY --from=go-builder /go/bin .
+COPY --from=go-builder /go/bin /usr/local/bin
 
 EXPOSE 9090 8080
 
-CMD ./tcp-info
+WORKDIR /home
+CMD tcp-info
