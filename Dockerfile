@@ -12,7 +12,7 @@ FROM electrotumbao/golang-protoc as go-builder
 RUN apk update && apk add bash git unzip
 
 WORKDIR /go/src/github.com/m-lab
-RUN git clone --branch docker https://github.com/m-lab/tcp-info
+RUN git clone --branch master https://github.com/m-lab/tcp-info
 WORKDIR tcp-info
 RUN ls -l
 
