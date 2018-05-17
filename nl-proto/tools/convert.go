@@ -303,6 +303,10 @@ const (
 // in the TCPInfo struct related to packets, bytes, and segments.  In addition to the TCPState
 // and CAState fields, these are probably adequate, but we also check for new or missing attributes
 // and any attribute difference outside of the TCPInfo (INET_DIAG_INFO) attribute.
+// TODO:
+//  Consider moving this function, together with LinuxTCPInfo, into another package depending only on
+//  inetdiag. However, that would require exporting all fields of LinuxTCPInfo, which is not
+//  necessary if we keep this here.
 func Compare(previous *inetdiag.ParsedMessage, current *inetdiag.ParsedMessage) ChangeType {
 	// If the TCP state has changed, that is important!
 	if previous.InetDiagMsg.IDiagState != current.InetDiagMsg.IDiagState {
