@@ -313,6 +313,8 @@ func Compare(previous *inetdiag.ParsedMessage, current *inetdiag.ParsedMessage) 
 		return StateChange
 	}
 
+	// TODO - should we validate that ID matches?  Otherwise, we shouldn't even be comparing the rest.
+
 	a := previous.Attributes[inetdiag.INET_DIAG_INFO]
 	b := current.Attributes[inetdiag.INET_DIAG_INFO]
 	if a == nil || b == nil {
@@ -337,7 +339,7 @@ func Compare(previous *inetdiag.ParsedMessage, current *inetdiag.ParsedMessage) 
 			if a == nil && b != nil {
 				return NewAttribute
 			}
-			if a != nil || b == nil {
+			if a != nil && b == nil {
 				return LostAttribute
 			}
 			if a == nil && b == nil {
