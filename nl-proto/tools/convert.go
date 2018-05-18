@@ -126,6 +126,8 @@ type LinuxTCPInfo struct {
 	fackets uint32
 
 	/* Times. */
+	// These seem to be elapsed time, so they increase on almost every sample.
+	// We can probably use them to get more info about intervals between samples.
 	lastDataSent uint32 // offset 44
 	lastAckSent  uint32 /* Not remembered, sorry. */ // offset 48
 	lastDataRecv uint32 // offset 52
@@ -197,6 +199,7 @@ func (tcp *LinuxTCPInfo) ToProto() *tcpinfo.TCPInfoProto {
 	p.Lost = tcp.lost
 	p.Retrans = tcp.retrans
 	p.Fackets = tcp.fackets
+
 	p.LastDataSent = tcp.lastDataSent
 	p.LastAckSent = tcp.lastAckSent
 	p.LastDataRecv = tcp.lastDataRecv
@@ -281,14 +284,15 @@ func ParseMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.MemInfoProto {
 type ChangeType int
 
 const (
-	NoMajorChange   ChangeType = iota
-	StateChange                // The IDiagState changed
-	NoTCPInfo                  // There is no TCPInfo attribute
-	NewAttribute               // There is a new attribute
-	LostAttribute              // There is a dropped attribute
-	AttributeLength            // The length of an attribute changed
-	PacketCount                // One of the packet/byte/segment counts changed
-	Other                      // Some other attribute changed
+	NoMajorChange        ChangeType = iota
+	IDiagStateChange                // The IDiagState changed
+	NoTCPInfo                       // There is no TCPInfo attribute
+	NewAttribute                    // There is a new attribute
+	LostAttribute                   // There is a dropped attribute
+	AttributeLength                 // The length of an attribute changed
+	StateOrCounterChange            // One of the early fields in DIAG_INFO changed.
+	PacketCountChange               // One of the packet/byte/segment counts (or other late field) changed
+	Other                           // Some other attribute changed
 )
 
 // Compare compares important fields to determine whether significant updates have occurred.
@@ -297,7 +301,10 @@ const (
 //    Are they elapsed time fields?
 //  * The InetDiagMsg.Expires is also rapidly changing in many connections, but also seems
 //    unimportant.
-//  * Next most rapid changing are the mem_info and socket_mem structs.
+//
+// Significant updates are reflected in the packet, segment and byte count updates, so we
+// generally want to record a snapshot when any of those change.  They are in the latter
+// part of the linux struct, following the pmtu field.
 //
 // The simplest test that seems to tell us what we care about is to look at all the fields
 // in the TCPInfo struct related to packets, bytes, and segments.  In addition to the TCPState
@@ -310,7 +317,7 @@ const (
 func Compare(previous *inetdiag.ParsedMessage, current *inetdiag.ParsedMessage) ChangeType {
 	// If the TCP state has changed, that is important!
 	if previous.InetDiagMsg.IDiagState != current.InetDiagMsg.IDiagState {
-		return StateChange
+		return IDiagStateChange
 	}
 
 	// TODO - should we validate that ID matches?  Otherwise, we shouldn't even be comparing the rest.
@@ -324,7 +331,13 @@ func Compare(previous *inetdiag.ParsedMessage, current *inetdiag.ParsedMessage) 
 	// If any of the byte/segment/package counters have changed, that is what we are most
 	// interested in.
 	if 0 != bytes.Compare(a.Value[PmtuOffset:], b.Value[PmtuOffset:]) {
-		return PacketCount
+		return PacketCountChange
+	}
+
+	// Check all the earlier fields, too.  Usually these won't change unless the counters above
+	// change, but this way we won't miss something subtle.
+	if 0 != bytes.Compare(a.Value[:LastDataSentOffset], b.Value[:LastDataSentOffset]) {
+		return StateOrCounterChange
 	}
 
 	// If any attributes have been added or removed, that is likely significant.

@@ -119,11 +119,10 @@ func TestCompare(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//																																													 | inode
-	//var json2 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
-	var json2 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
+
+	// Another independent copy.
 	nm2 := syscall.NetlinkMessage{}
-	err = json.Unmarshal([]byte(json2), &nm2)
+	err = json.Unmarshal([]byte(json1), &nm2)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -132,18 +131,29 @@ func TestCompare(t *testing.T) {
 		log.Fatal(err)
 	}
 
+	// INET_DIAG_INFO Last... fields should be ignored
+	for i := int(tools.LastDataSentOffset); i < int(tools.PmtuOffset); i++ {
+		mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[i] += 1
+	}
+	diff := tools.Compare(mp1, mp2)
+	if diff != tools.NoMajorChange {
+		t.Error("Last field changes should not be detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
+			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
+	}
+
 	// Early parts of INET_DIAG_INFO Should be ignored
 	mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[10] = 7
-	diff := tools.Compare(mp1, mp2)
-	if diff != 0 {
-		t.Error("Should be considered the same")
+	diff = tools.Compare(mp1, mp2)
+	if diff != tools.StateOrCounterChange {
+		t.Error("Early field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
+			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
 	}
 
 	// packet, segment, and byte counts should NOT be ignored
 	mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[tools.PmtuOffset] = 123
 	diff = tools.Compare(mp1, mp2)
-	if diff != tools.PacketCount {
-		t.Error("Should be different:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
+	if diff != tools.PacketCountChange {
+		t.Error("Late field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
 			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
 	}
 }
