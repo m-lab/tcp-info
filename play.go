@@ -16,7 +16,7 @@ import (
 	"syscall"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/m-lab/tcp-info/delta"
+	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/inetdiag"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/nl-proto/tools"
@@ -61,7 +61,7 @@ func init() {
 //  3. zstd seems to result in similar file size using proto or raw output.
 
 // TODO - lost the RAW output option.
-func Marshal(filename string, marshaler chan *delta.ParsedMessage, wg *sync.WaitGroup) {
+func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.WaitGroup) {
 	out, pipeWg := zstd.NewWriter(filename)
 	count := 0
 	for {
@@ -83,9 +83,9 @@ func Marshal(filename string, marshaler chan *delta.ParsedMessage, wg *sync.Wait
 	wg.Done()
 }
 
-var marshallerChannels []chan *delta.ParsedMessage
+var marshallerChannels []chan *inetdiag.ParsedMessage
 
-func Queue(msg *delta.ParsedMessage) {
+func Queue(msg *inetdiag.ParsedMessage) {
 	q := marshallerChannels[int(msg.InetDiagMsg.IDiagInode)%len(marshallerChannels)]
 	q <- msg
 }
@@ -96,28 +96,57 @@ func CloseAll() {
 	}
 }
 
-func Demo(cache *delta.Cache) (int, int) {
+var totalCount = 0
+var errCount = 0
+var localCount = 0
+var newCount = 0
+var diffCount = 0
+var expiredCount = 0
+
+func Stats() {
+	log.Printf("Cache info total %d  local %d same %d diff %d new %d closed %d err %d\n",
+		totalCount, localCount,
+		totalCount-(errCount+newCount+diffCount+localCount),
+		diffCount, newCount, expiredCount, errCount)
+}
+
+func ParseAndQueue(cache *cache.Cache, msg *syscall.NetlinkMessage) {
+	totalCount++
+	pm, err := inetdiag.Parse(msg, true)
+	if err != nil {
+		log.Println(err)
+		errCount++
+	} else if pm == nil {
+		localCount++
+	} else {
+		old := cache.Update(pm)
+		if old == nil {
+			newCount++
+		} else {
+			if tools.Compare(pm, old) > 0 {
+				diffCount++
+				Queue(pm)
+			}
+		}
+	}
+}
+
+func Demo(cache *cache.Cache) (int, int) {
 	remoteCount := 0
 	res6 := inetdiag.OneType(syscall.AF_INET6)
 	for i := range res6 {
-		parsed, err := cache.Update(res6[i])
-		if err != nil {
-			log.Println(err)
-		} else if parsed != nil {
-			remoteCount++
-			Queue(parsed)
-		}
+		ParseAndQueue(cache, res6[i])
 	}
 
 	res4 := inetdiag.OneType(syscall.AF_INET)
 	for i := range res4 {
-		parsed, err := cache.Update(res4[i])
-		if err != nil {
-			log.Println(err)
-		} else if parsed != nil {
-			remoteCount++
-			Queue(parsed)
-		}
+		ParseAndQueue(cache, res4[i])
+	}
+
+	residual := cache.EndCycle()
+	expiredCount += len(residual)
+	for i := range residual {
+		log.Println(residual[i].InetDiagMsg)
 	}
 
 	return len(res4) + len(res6), remoteCount
@@ -154,17 +183,17 @@ func main() {
 	flag.Parse()
 	// TODO ? tcp.LOG = *verbose || *reps == 1
 
-	var cache *delta.Cache
+	var rawOut io.WriteCloser
 
 	if *rawFile != "" {
 		log.Println("Raw output to", *rawFile)
-		p, wg := zstd.NewWriter(*rawFile)
+		var wg *sync.WaitGroup
+		rawOut, wg = zstd.NewWriter(*rawFile)
 		defer wg.Wait()
-		defer p.Close()
-		cache = delta.NewCache(p, *filter)
-	} else {
-		cache = delta.NewCache(nil, *filter)
+		defer rawOut.Close()
 	}
+
+	msgCache := cache.NewCache()
 
 	p := tcp.TCPDiagnosticsProto{}
 	p.TcpInfo = &tcp.TCPInfoProto{}
@@ -198,7 +227,7 @@ func main() {
 
 	var wg sync.WaitGroup
 	for i := 0; i < *numFiles; i++ {
-		marshChan := make(chan *delta.ParsedMessage, 1000)
+		marshChan := make(chan *inetdiag.ParsedMessage, 1000)
 		marshallerChannels = append(marshallerChannels, marshChan)
 		fn := fmt.Sprintf("file%02d.zst", i)
 		wg.Add(1)
@@ -213,34 +242,29 @@ func main() {
 			if err != nil {
 				break
 			}
-			parsed, err := cache.Update(msg)
-			if err != nil {
-				log.Println(err)
-			} else if parsed != nil {
-				Queue(parsed)
-			}
+			ParseAndQueue(msgCache, msg)
 		}
-		cache.Stats()
+		Stats()
 	} else {
 		totalCount := 0
 		remote := 0
 		loops := 0
 		for *reps == 0 || loops < *reps {
 			loops++
-			a, b := Demo(cache)
+			a, b := Demo(msgCache)
 			totalCount += a
 			remote += b
 			if loops%50 == 0 {
-				cache.Stats()
+				Stats()
 			}
 		}
-		cache.Stats()
+		Stats()
 		if loops > 0 {
 			log.Println(totalCount, "sockets", remote, "remotes", totalCount/loops, "per iteration")
 		}
 	}
 
-	log.Printf("%+v\n", delta.DiffCounts)
+	//log.Printf("%+v\n", delta.DiffCounts)
 	CloseAll()
 	wg.Wait()
 
