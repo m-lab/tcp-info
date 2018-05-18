@@ -38,7 +38,7 @@ cache:
 install:
 # Install dependencies
 # This filters out all imports from the local project, and all "base" imports that don't contain slash.
-- GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -e / | grep -v m-lab/tcp-info)
+- GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}{{join .XTestImports "\n"}}' ./... | sort | uniq | grep -e / | grep -v m-lab/tcp-info)
 - go get -u -v -d $GO_IMPORTS
 - go get github.com/golang/protobuf/protoc-gen-go/ github.com/golang/protobuf/proto
 
