@@ -126,15 +126,15 @@ func ParseAndQueue(cache *cache.Cache, msg *syscall.NetlinkMessage) {
 	} else if pm == nil {
 		localCount++
 	} else {
-		if rawOut != nil {
-			binary.Write(rawOut, binary.BigEndian, msg.Header)
-			binary.Write(rawOut, binary.BigEndian, msg.Data)
-		}
 		old := cache.Update(pm)
 		if old == nil {
 			newCount++
 		} else {
 			if tools.Compare(pm, old) > 0 {
+				if rawOut != nil {
+					binary.Write(rawOut, binary.BigEndian, msg.Header)
+					binary.Write(rawOut, binary.BigEndian, msg.Data)
+				}
 				diffCount++
 				Queue(pm)
 			}
@@ -157,6 +157,7 @@ func Demo(cache *cache.Cache) (int, int) {
 	residual := cache.EndCycle()
 	expiredCount += len(residual)
 	for i := range residual {
+		// TODO should also write to rawOut, but don't have the original msg.
 		log.Println(residual[i].InetDiagMsg)
 	}
 
