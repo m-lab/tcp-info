@@ -74,6 +74,9 @@ func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.W
 		p := tools.CreateProto(msg.Header, msg.InetDiagMsg, msg.Attributes[:])
 		log.Printf("%+v\n", p.InetDiagMsg)
 		log.Printf("%+v\n", p.TcpInfo)
+		log.Printf("%+v\n", p.SocketMem)
+		log.Printf("%+v\n", p.MemInfo)
+		log.Printf("%+v\n", p.CongestionAlgorithm)
 		m, err := proto.Marshal(p)
 		if err != nil {
 			log.Println(err)
