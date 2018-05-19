@@ -20,6 +20,7 @@ import (
 	"github.com/m-lab/tcp-info/inetdiag"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/nl-proto/tools"
+	"github.com/m-lab/tcp-info/saver"
 	"github.com/m-lab/tcp-info/zstd"
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
@@ -60,9 +61,8 @@ func init() {
 //  2. the go zstd wrapper doesn't seem to work well - poor compression and slow.
 //  3. zstd seems to result in similar file size using proto or raw output.
 
-// TODO - lost the RAW output option.
 func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.WaitGroup) {
-	out, pipeWg := zstd.NewWriter(filename)
+	out := zstd.NewWriter(filename)
 	count := 0
 	for {
 		count++
@@ -86,7 +86,6 @@ func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.W
 		}
 	}
 	out.Close()
-	pipeWg.Wait()
 	wg.Done()
 }
 
@@ -117,7 +116,7 @@ func Stats() {
 		diffCount, newCount, expiredCount, errCount)
 }
 
-func ParseAndQueue(cache *cache.Cache, msg *syscall.NetlinkMessage) {
+func ParseAndQueue(cache *cache.Cache, msg *syscall.NetlinkMessage, queue bool) *inetdiag.ParsedMessage {
 	totalCount++
 	pm, err := inetdiag.Parse(msg, true)
 	if err != nil {
@@ -126,38 +125,55 @@ func ParseAndQueue(cache *cache.Cache, msg *syscall.NetlinkMessage) {
 	} else if pm == nil {
 		localCount++
 	} else {
-		if rawOut != nil {
-			binary.Write(rawOut, binary.BigEndian, msg.Header)
-			binary.Write(rawOut, binary.BigEndian, msg.Data)
+		if !queue {
+			return pm
 		}
 		old := cache.Update(pm)
 		if old == nil {
 			newCount++
+			Queue(pm)
 		} else {
 			if tools.Compare(pm, old) > 0 {
+				if rawOut != nil {
+					binary.Write(rawOut, binary.BigEndian, msg.Header)
+					binary.Write(rawOut, binary.BigEndian, msg.Data)
+				}
 				diffCount++
 				Queue(pm)
 			}
 		}
 	}
+	return nil
 }
 
-func Demo(cache *cache.Cache) (int, int) {
+func Demo(cache *cache.Cache, svr chan<- []*inetdiag.ParsedMessage) (int, int) {
+	all := make([]*inetdiag.ParsedMessage, 0, 500)
 	remoteCount := 0
 	res6 := inetdiag.OneType(syscall.AF_INET6)
 	for i := range res6 {
-		ParseAndQueue(cache, res6[i])
+		pm := ParseAndQueue(cache, res6[i], false)
+		if pm != nil {
+			all = append(all, pm)
+		}
 	}
 
 	res4 := inetdiag.OneType(syscall.AF_INET)
 	for i := range res4 {
-		ParseAndQueue(cache, res4[i])
+		pm := ParseAndQueue(cache, res4[i], false)
+		if pm != nil {
+			all = append(all, pm)
+		}
 	}
 
-	residual := cache.EndCycle()
-	expiredCount += len(residual)
-	for i := range residual {
-		log.Println(residual[i].InetDiagMsg)
+	if false {
+		residual := cache.EndCycle()
+		expiredCount += len(residual)
+		for i := range residual {
+			// TODO should also write to rawOut, but don't have the original msg.
+			log.Println(residual[i].InetDiagMsg)
+		}
+	} else {
+		svr <- all
 	}
 
 	return len(res4) + len(res6), remoteCount
@@ -198,9 +214,7 @@ func main() {
 
 	if *rawFile != "" {
 		log.Println("Raw output to", *rawFile)
-		var wg *sync.WaitGroup
-		rawOut, wg = zstd.NewWriter(*rawFile)
-		defer wg.Wait()
+		rawOut = zstd.NewWriter(*rawFile)
 		defer rawOut.Close()
 	}
 
@@ -253,22 +267,26 @@ func main() {
 			if err != nil {
 				break
 			}
-			ParseAndQueue(msgCache, msg)
+			ParseAndQueue(msgCache, msg, true)
 		}
 		Stats()
 	} else {
 		totalCount := 0
 		remote := 0
 		loops := 0
+		svr := saver.NewSaver("host", "pod", 3)
+		svrChan := svr.RunSaverLoop()
 		for *reps == 0 || loops < *reps {
 			loops++
-			a, b := Demo(msgCache)
+			a, b := Demo(msgCache, svrChan)
 			totalCount += a
 			remote += b
 			if loops%50 == 0 {
 				Stats()
 			}
 		}
+		close(svrChan)
+		svr.Done.Wait()
 		Stats()
 		if loops > 0 {
 			log.Println(totalCount, "sockets", remote, "remotes", totalCount/loops, "per iteration")
