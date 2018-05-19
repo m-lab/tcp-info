@@ -70,13 +70,14 @@ func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.W
 		if !ok {
 			break
 		}
-		log.Printf("%+v\n", msg)
 		p := tools.CreateProto(msg.Header, msg.InetDiagMsg, msg.Attributes[:])
-		log.Printf("%+v\n", p.InetDiagMsg)
-		log.Printf("%+v\n", p.TcpInfo)
-		log.Printf("%+v\n", p.SocketMem)
-		log.Printf("%+v\n", p.MemInfo)
-		log.Printf("%+v\n", p.CongestionAlgorithm)
+		if false {
+			log.Printf("%+v\n", p.InetDiagMsg)
+			log.Printf("%+v\n", p.TcpInfo)
+			log.Printf("%+v\n", p.SocketMem)
+			log.Printf("%+v\n", p.MemInfo)
+			log.Printf("%+v\n", p.CongestionAlgorithm)
+		}
 		m, err := proto.Marshal(p)
 		if err != nil {
 			log.Println(err)
@@ -125,6 +126,10 @@ func ParseAndQueue(cache *cache.Cache, msg *syscall.NetlinkMessage) {
 	} else if pm == nil {
 		localCount++
 	} else {
+		if rawOut != nil {
+			binary.Write(rawOut, binary.BigEndian, msg.Header)
+			binary.Write(rawOut, binary.BigEndian, msg.Data)
+		}
 		old := cache.Update(pm)
 		if old == nil {
 			newCount++
@@ -185,11 +190,11 @@ var (
 	source      = flag.String("source", "", "Source to read (uncompressed) NetlinkMessage records")
 )
 
+var rawOut io.WriteCloser
+
 func main() {
 	flag.Parse()
 	// TODO ? tcp.LOG = *verbose || *reps == 1
-
-	var rawOut io.WriteCloser
 
 	if *rawFile != "" {
 		log.Println("Raw output to", *rawFile)
