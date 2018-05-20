@@ -38,6 +38,7 @@ func NewReader(filename string) io.ReadCloser {
 // Write to io.Writer
 // close io.Writer when done
 // wait on waitgroup to finish
+// TODO encapsulate the WaitGroup in a WriteCloser wrapper.
 func NewWriter(filename string) (io.WriteCloser, *sync.WaitGroup) {
 	var wg sync.WaitGroup
 	wg.Add(1)

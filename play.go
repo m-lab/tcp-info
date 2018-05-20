@@ -60,7 +60,6 @@ func init() {
 //  2. the go zstd wrapper doesn't seem to work well - poor compression and slow.
 //  3. zstd seems to result in similar file size using proto or raw output.
 
-// TODO - lost the RAW output option.
 func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.WaitGroup) {
 	out, pipeWg := zstd.NewWriter(filename)
 	count := 0
