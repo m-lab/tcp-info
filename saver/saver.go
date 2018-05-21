@@ -1,7 +1,7 @@
-package zstd
+// Package saver contains all logic for writing records to files.
+package saver
 
 import (
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -9,6 +9,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/nl-proto/tools"
+	"github.com/m-lab/tcp-info/zstd"
 )
 
 // We will send an entire batch of NetlinkMessages through a channel from
@@ -36,38 +37,15 @@ import (
 
 //  Other design elements:
 
+type Marshaller chan<- *inetdiag.ParsedMessage
+
 type MachineConfig struct {
 	Host string // mlabN
 	Pod  string // 3 alpha + 2 decimal
 }
 
-type Marshaller struct {
-	Send chan<- *inetdiag.ParsedMessage
-	Done <-chan struct{} // Or should this be a WaitGroup?
-}
-
-// Connection objects handle all output associated with a single connection.
-type Connection struct {
-	Inode      uint32
-	Slice      string     // 4 hex, indicating which machine segment this is on.
-	StartTime  time.Time  // Time the connection was initiated.
-	Sequence   int        // Typically zero, but increments for long running connections.
-	Expiration time.Time  // Time we will swap files and increment Sequence.
-	Handler    Marshaller // Cuurent output channel
-}
-
-func NewConnection() Connection {
-
-	return Connection{}
-}
-
-type FileMapper struct {
-	FileAgeLimit time.Duration
-	Connections  map[uint32]Connection
-}
-
-func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.WaitGroup) {
-	out, pipeWg := NewWriter(filename)
+func RunMarshaller(filename string, marshaler <-chan *inetdiag.ParsedMessage, wg *sync.WaitGroup) {
+	out, pipeWg := zstd.NewWriter(filename)
 	count := 0
 	for {
 		count++
@@ -95,10 +73,28 @@ func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.W
 	wg.Done()
 }
 
-func NewMarshaller() {
+func NewMarshaller(fn string, wg *sync.WaitGroup) Marshaller {
 	marshChan := make(chan *inetdiag.ParsedMessage, 1000)
-	marshallerChannels = append(marshallerChannels, marshChan)
-	fn := fmt.Sprintf("file%02d.zst", i)
 	wg.Add(1)
-	go Marshal(fn, marshChan, &wg)
+	go RunMarshaller(fn, marshChan, &wg)
+	return marshChan
+}
+
+// Connection objects handle all output associated with a single connection.
+type Connection struct {
+	Inode      uint32
+	Slice      string     // 4 hex, indicating which machine segment this is on.
+	StartTime  time.Time  // Time the connection was initiated.
+	Sequence   int        // Typically zero, but increments for long running connections.
+	Expiration time.Time  // Time we will swap files and increment Sequence.
+	Handler    Marshaller // Cuurent output channel
+}
+
+func NewConnection() Connection {
+	return Connection{}
+}
+
+type FileMapper struct {
+	FileAgeLimit time.Duration
+	Connections  map[uint32]Connection
 }
