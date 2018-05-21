@@ -2,6 +2,7 @@
 package saver
 
 import (
+	"io"
 	"log"
 	"sync"
 	"time"
@@ -13,9 +14,12 @@ import (
 )
 
 // We will send an entire batch of NetlinkMessages through a channel from
-// the collection loop to the recorder.
-// The recorder will then dispatch individual records to appropriate
-// asynchronous Marshallers.
+// the collection loop to the top level saver.  The saver will sort and
+// discard any local connection, maintain the connection cache, determine
+// how frequently to save deltas for each connection.
+//
+// The saver will use a small set of Marshallers to convert to protos,
+// marshal the protos, and write them to files.
 
 // KEY QUESTION:
 //  should files contain a single connection, or interleaved records from
@@ -37,64 +41,93 @@ import (
 
 //  Other design elements:
 
-type Marshaller chan<- *inetdiag.ParsedMessage
-
-type MachineConfig struct {
-	Host string // mlabN
-	Pod  string // 3 alpha + 2 decimal
+type Task struct {
+	// nil message means close the writer.
+	Message *inetdiag.ParsedMessage
+	Writer  io.WriteCloser
 }
 
-func RunMarshaller(filename string, marshaler <-chan *inetdiag.ParsedMessage, wg *sync.WaitGroup) {
-	out, pipeWg := zstd.NewWriter(filename)
-	count := 0
+// ARGH:
+// A single goroutine should be responsible for openning, writing, closing.
+// The marshaller does the writing, so it should also do the openning/closing.
+// So, we either need to pass the close task to the marshaller, or the marshaller
+// must figure out when to close and open files, filenames, etc.
+type Marshaller chan<- Task
+
+func RunMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 	for {
-		count++
-		msg, ok := <-marshaler
+		task, ok := <-taskChan
 		if !ok {
 			break
 		}
-		p := tools.CreateProto(msg.Header, msg.InetDiagMsg, msg.Attributes[:])
-		if false {
-			log.Printf("%+v\n", p.InetDiagMsg)
-			log.Printf("%+v\n", p.TcpInfo)
-			log.Printf("%+v\n", p.SocketMem)
-			log.Printf("%+v\n", p.MemInfo)
-			log.Printf("%+v\n", p.CongestionAlgorithm)
+		if task.Message == nil {
+			task.Writer.Close()
+			continue
 		}
-		m, err := proto.Marshal(p)
+		msg := task.Message
+		pb := tools.CreateProto(msg.Header, msg.InetDiagMsg, msg.Attributes[:])
+		wire, err := proto.Marshal(pb)
 		if err != nil {
 			log.Println(err)
 		} else {
-			out.Write(m)
+			task.Writer.Write(wire)
 		}
 	}
-	out.Close()
-	pipeWg.Wait()
 	wg.Done()
 }
 
 func NewMarshaller(fn string, wg *sync.WaitGroup) Marshaller {
-	marshChan := make(chan *inetdiag.ParsedMessage, 1000)
+	marshChan := make(chan Task, 100)
 	wg.Add(1)
 	go RunMarshaller(fn, marshChan, &wg)
 	return marshChan
 }
 
+type Saver struct {
+	Host string // mlabN
+	Pod  string // 3 alpha + 2 decimal
+	FileAgeLimit time.Duration
+	Marshallers  []Marshaller
+	Done         *sync.WaitGroup
+	Connections  map[uint32]Connection
+}
+
 // Connection objects handle all output associated with a single connection.
 type Connection struct {
-	Inode      uint32
-	Slice      string     // 4 hex, indicating which machine segment this is on.
-	StartTime  time.Time  // Time the connection was initiated.
-	Sequence   int        // Typically zero, but increments for long running connections.
-	Expiration time.Time  // Time we will swap files and increment Sequence.
-	Handler    Marshaller // Cuurent output channel
+	Inode      uint32  // TODO - also use the UID???
+	ID         inetdiag.InetDiagSockID
+	Slice      string    // 4 hex, indicating which machine segment this is on.
+	StartTime  time.Time // Time the connection was initiated.
+	Sequence   int       // Typically zero, but increments for long running connections.
+	Expiration time.Time // Time we will swap files and increment Sequence.
+	Writer     io.WriteCloser
 }
 
-func NewConnection() Connection {
-	return Connection{}
+func NewConnection(info *inetdiag.InetDiagMsg) &Connection {
+	conn := Connection{Inode: inode, ID: info.ID, Slice: "", StartTime: time.Now(), Sequence: 0,
+		Expiration: time.Now()}
+	return &conn
 }
 
-type FileMapper struct {
-	FileAgeLimit time.Duration
-	Connections  map[uint32]Connection
+// Rotate closes an existing writer, and opens a new one.
+func (svr *Saver) Rotate(conn *Connection) {
+	// Use ID info from msg to create filename.
+	...
+}
+
+func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
+	inode := msg.InetDiagMsg.IDiagInode
+	q := svr.Marshallers[int(inode)%len(svr.Marshallers)]
+	conn, ok := svr.Connections[inode]
+	if !ok {
+		svr.Connections[inode] = NewConnection(msg)
+	}
+	if time.Now().After(conn.Expiration) && conn.Writer != nil {
+		q <- &Task{nil, conn.Writer}  // Close the previous file.
+		conn.Writer = nil
+	}
+	if conn.Writer == nil {
+		// Initialize new writer.
+	}
+	q <- &Task{msg, conn.Writer} 
 }
