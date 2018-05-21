@@ -2,12 +2,14 @@ package tools_test
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
 	"syscall"
 	"testing"
 
+	"github.com/go-test/deep"
 	"github.com/m-lab/tcp-info/inetdiag"
 	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/nl-proto/tools"
@@ -103,5 +105,55 @@ func TestReader(t *testing.T) {
 	// TODO - do some test on the proto	}
 	if parsed != 420 { // 140 new, 277 same, and 3 diff
 		t.Error(parsed)
+	}
+}
+
+func TestCompare(t *testing.T) {
+	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
+	nm := syscall.NetlinkMessage{}
+	err := json.Unmarshal([]byte(json1), &nm)
+	if err != nil {
+		log.Fatal(err)
+	}
+	mp1, err := inetdiag.Parse(&nm, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Another independent copy.
+	nm2 := syscall.NetlinkMessage{}
+	err = json.Unmarshal([]byte(json1), &nm2)
+	if err != nil {
+		log.Fatal(err)
+	}
+	mp2, err := inetdiag.Parse(&nm2, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// INET_DIAG_INFO Last... fields should be ignored
+	for i := int(tools.LastDataSentOffset); i < int(tools.PmtuOffset); i++ {
+		mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[i] += 1
+	}
+	diff := tools.Compare(mp1, mp2)
+	if diff != tools.NoMajorChange {
+		t.Error("Last field changes should not be detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
+			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
+	}
+
+	// Early parts of INET_DIAG_INFO Should be ignored
+	mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[10] = 7
+	diff = tools.Compare(mp1, mp2)
+	if diff != tools.StateOrCounterChange {
+		t.Error("Early field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
+			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
+	}
+
+	// packet, segment, and byte counts should NOT be ignored
+	mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[tools.PmtuOffset] = 123
+	diff = tools.Compare(mp1, mp2)
+	if diff != tools.PacketCountChange {
+		t.Error("Late field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
+			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
 	}
 }
