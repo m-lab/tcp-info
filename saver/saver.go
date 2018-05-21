@@ -10,7 +10,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/nl-proto/tools"
-	"github.com/m-lab/tcp-info/zstd"
 )
 
 // We will send an entire batch of NetlinkMessages through a channel from
@@ -47,14 +46,9 @@ type Task struct {
 	Writer  io.WriteCloser
 }
 
-// ARGH:
-// A single goroutine should be responsible for openning, writing, closing.
-// The marshaller does the writing, so it should also do the openning/closing.
-// So, we either need to pass the close task to the marshaller, or the marshaller
-// must figure out when to close and open files, filenames, etc.
 type Marshaller chan<- Task
 
-func RunMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
+func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 	for {
 		task, ok := <-taskChan
 		if !ok {
@@ -79,13 +73,13 @@ func RunMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 func NewMarshaller(fn string, wg *sync.WaitGroup) Marshaller {
 	marshChan := make(chan Task, 100)
 	wg.Add(1)
-	go RunMarshaller(fn, marshChan, &wg)
+	go runMarshaller(fn, marshChan, &wg)
 	return marshChan
 }
 
 type Saver struct {
-	Host string // mlabN
-	Pod  string // 3 alpha + 2 decimal
+	Host         string // mlabN
+	Pod          string // 3 alpha + 2 decimal
 	FileAgeLimit time.Duration
 	Marshallers  []Marshaller
 	Done         *sync.WaitGroup
@@ -94,7 +88,7 @@ type Saver struct {
 
 // Connection objects handle all output associated with a single connection.
 type Connection struct {
-	Inode      uint32  // TODO - also use the UID???
+	Inode      uint32 // TODO - also use the UID???
 	ID         inetdiag.InetDiagSockID
 	Slice      string    // 4 hex, indicating which machine segment this is on.
 	StartTime  time.Time // Time the connection was initiated.
@@ -103,16 +97,16 @@ type Connection struct {
 	Writer     io.WriteCloser
 }
 
-func NewConnection(info *inetdiag.InetDiagMsg) &Connection {
+func NewConnection(info *inetdiag.InetDiagMsg) *Connection {
 	conn := Connection{Inode: inode, ID: info.ID, Slice: "", StartTime: time.Now(), Sequence: 0,
 		Expiration: time.Now()}
 	return &conn
 }
 
 // Rotate closes an existing writer, and opens a new one.
-func (svr *Saver) Rotate(conn *Connection) {
+func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Duration) {
 	// Use ID info from msg to create filename.
-	...
+	log.Fatal("Initialize writer")
 }
 
 func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
@@ -123,11 +117,11 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 		svr.Connections[inode] = NewConnection(msg)
 	}
 	if time.Now().After(conn.Expiration) && conn.Writer != nil {
-		q <- &Task{nil, conn.Writer}  // Close the previous file.
+		q <- &Task{nil, conn.Writer} // Close the previous file.
 		conn.Writer = nil
 	}
 	if conn.Writer == nil {
-		// Initialize new writer.
+		conn.Rotate(svr.Host, svr.Pod, svr.FileAgeLimit)
 	}
-	q <- &Task{msg, conn.Writer} 
+	q <- &Task{msg, conn.Writer}
 }
