@@ -104,7 +104,7 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 	// Use ID info from msg to create filename.
 	conn.Sequence++
 	// 2006-01-02 15:04:05.999999999
-	date := conn.StartTime.Format("20160102Z150405.999")
+	date := conn.StartTime.Format("20060102Z150405.000")
 	conn.Writer = zstd.NewWriter(fmt.Sprintf("%s-%d-%d.zstd", date, conn.Inode, conn.Sequence))
 	conn.Expiration = conn.Expiration.Add(10 * time.Minute)
 }
