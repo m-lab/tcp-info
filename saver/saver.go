@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/nl-proto/tools"
 	"github.com/m-lab/tcp-info/zstd"
@@ -72,10 +73,10 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func NewMarshaller(fn string, wg *sync.WaitGroup) Marshaller {
+func NewMarshaller(wg *sync.WaitGroup) Marshaller {
 	marshChan := make(chan Task, 100)
 	wg.Add(1)
-	go runMarshaller(fn, marshChan, &wg)
+	go runMarshaller(marshChan, wg)
 	return marshChan
 }
 
@@ -90,10 +91,10 @@ type Connection struct {
 	Writer     io.WriteCloser
 }
 
-func NewConnection(info *inetdiag.InetDiagMsg) *Connection {
-	conn := Connection{Inode: inode, ID: info.ID, Slice: "", StartTime: time.Now(), Sequence: 0,
+func NewConnection(info *inetdiag.InetDiagMsg) Connection {
+	conn := Connection{Inode: info.IDiagInode, ID: info.ID, Slice: "", StartTime: time.Now(), Sequence: 0,
 		Expiration: time.Now()}
-	return &conn
+	return conn
 }
 
 // Rotate closes an existing writer, and opens a new one.
@@ -103,7 +104,7 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 	conn.Sequence++
 	// 2006-01-02 15:04:05.999999999
 	date := conn.StartTime.Format("20160102Z150405.999")
-	conn.Writer = zstd.NewWriter(fmt.Sprintf("%s-%d-%d.zstd", conn.StartTime, conn.Inode, conn.Sequence))
+	conn.Writer = zstd.NewWriter(fmt.Sprintf("%s-%d-%d.zstd", date, conn.Inode, conn.Sequence))
 }
 
 type Saver struct {
@@ -129,9 +130,9 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 	ageLim := 10 * time.Minute
 
 	for i := 0; i < numMarshaller; i++ {
-		m = append(m, NewMarshaller("", wg))
+		m = append(m, NewMarshaller(wg))
 	}
-	return &Saver{Host: host, Pod: pod, FileAgeLimit: ageLim, Marshallers: m, Done: wg, Connection: conn, cache: c}
+	return &Saver{Host: host, Pod: pod, FileAgeLimit: ageLim, Marshallers: m, Done: wg, Connections: conn, cache: c}
 }
 
 func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
@@ -139,42 +140,57 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 	q := svr.Marshallers[int(inode)%len(svr.Marshallers)]
 	conn, ok := svr.Connections[inode]
 	if !ok {
-		svr.Connections[inode] = NewConnection(msg)
+		svr.Connections[inode] = NewConnection(msg.InetDiagMsg)
 	}
 	if time.Now().After(conn.Expiration) && conn.Writer != nil {
-		q <- &Task{nil, conn.Writer} // Close the previous file.
+		q <- Task{nil, conn.Writer} // Close the previous file.
 		conn.Writer = nil
 	}
 	if conn.Writer == nil {
 		conn.Rotate(svr.Host, svr.Pod, svr.FileAgeLimit)
 	}
-	q <- &Task{msg, conn.Writer}
+	q <- Task{msg, conn.Writer}
+}
+
+func (svr *Saver) EndConn(msg *inetdiag.ParsedMessage) {
+	inode := msg.InetDiagMsg.IDiagInode
+	q := svr.Marshallers[int(inode)%len(svr.Marshallers)]
+	conn, ok := svr.Connections[inode]
+	if ok && conn.Writer != nil {
+		q <- Task{nil, conn.Writer}
+		delete(svr.Connections, inode)
+	}
 }
 
 // RunSaverLoop runs a loop to receive batches of ParsedMessages.  Local connections
 // should be already stripped out.
-func (svr *Saver) RunSaverLoop(groupChan <-chan []*inetdiag.ParsedMessage) {
-	for {
-		group, ok := <-groupChan
-		if !ok {
-			break
-		}
+func (svr *Saver) RunSaverLoop() chan<- []*inetdiag.ParsedMessage {
+	groupChan := make(chan []*inetdiag.ParsedMessage, 2)
+	go func() {
+		for {
+			group, ok := <-groupChan
+			if !ok {
+				break
+			}
 
-		for i := range group {
-			svr.ParseAndQueue(group[i])
-		}
-		residual := cache.EndCycle()
+			for i := range group {
+				svr.Queue(group[i])
+			}
+			residual := svr.cache.EndCycle()
 
-		for i := range residual {
-			//update.Done = append(update.Done, residual[i].InetDiagMsg.IDiagInode)
-			svr.closed++
+			for i := range residual {
+				svr.EndConn(residual[i])
+				svr.expiredCount++
+			}
 		}
-	}
+	}()
+	return groupChan
 }
 
 func (svr *Saver) Stats() {
 	log.Printf("Cache info total %d same %d diff %d new %d closed %d\n",
-		svr.totalCount, totalCount-(newCount+diffCount), diffCount, newCount, expiredCount)
+		svr.totalCount, svr.totalCount-(svr.newCount+svr.diffCount),
+		svr.diffCount, svr.newCount, svr.expiredCount)
 }
 
 func (svr *Saver) SwapAndQueue(pm *inetdiag.ParsedMessage) {
