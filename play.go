@@ -282,7 +282,7 @@ func main() {
 			totalCount += a
 			remote += b
 			if loops%50 == 0 {
-				Stats()
+				//Stats()
 			}
 		}
 		close(svrChan)
