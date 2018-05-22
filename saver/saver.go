@@ -121,6 +121,19 @@ type Saver struct {
 	expiredCount int
 }
 
+func NewSaver(host string, pod string, numMarshaller int) *Saver {
+	m := make([]Marshaller, numMarshaller)
+	c := cache.NewCache()
+	conn := make(map[uint32]Connection, 500)
+	wg := &sync.WaitGroup{}
+	ageLim := 10 * time.Minute
+
+	for i := 0; i < numMarshaller; i++ {
+		m = append(m, NewMarshaller("", wg))
+	}
+	return &Saver{Host: host, Pod: pod, FileAgeLimit: ageLim, Marshallers: m, Done: wg, Connection: conn, cache: c}
+}
+
 func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 	inode := msg.InetDiagMsg.IDiagInode
 	q := svr.Marshallers[int(inode)%len(svr.Marshallers)]
@@ -161,12 +174,10 @@ func (svr *Saver) RunSaverLoop(groupChan <-chan []*inetdiag.ParsedMessage) {
 
 func (svr *Saver) Stats() {
 	log.Printf("Cache info total %d same %d diff %d new %d closed %d\n",
-		svr.totalCount,
-		totalCount-(newCount+diffCount),
-		diffCount, newCount, expiredCount)
+		svr.totalCount, totalCount-(newCount+diffCount), diffCount, newCount, expiredCount)
 }
 
-func (svr *Saver) ParseAndQueue(pm *inetdiag.ParsedMessage) {
+func (svr *Saver) SwapAndQueue(pm *inetdiag.ParsedMessage) {
 	svr.totalCount++
 	old := svr.cache.Update(pm)
 	if old == nil {
