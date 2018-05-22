@@ -147,7 +147,7 @@ func ParseAndQueue(cache *cache.Cache, msg *syscall.NetlinkMessage, queue bool) 
 }
 
 func Demo(cache *cache.Cache, svr chan<- []*inetdiag.ParsedMessage) (int, int) {
-	all := make([]*inetdiag.ParsedMessage, 500)
+	all := make([]*inetdiag.ParsedMessage, 0, 500)
 	remoteCount := 0
 	res6 := inetdiag.OneType(syscall.AF_INET6)
 	for i := range res6 {
@@ -285,6 +285,8 @@ func main() {
 				Stats()
 			}
 		}
+		close(svrChan)
+		svr.Done.Wait()
 		Stats()
 		if loops > 0 {
 			log.Println(totalCount, "sockets", remote, "remotes", totalCount/loops, "per iteration")

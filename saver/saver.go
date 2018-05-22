@@ -11,6 +11,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/inetdiag"
+	tcp "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/nl-proto/tools"
 	"github.com/m-lab/tcp-info/zstd"
 )
@@ -70,6 +71,7 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 			task.Writer.Write(wire)
 		}
 	}
+	log.Println("Marshaller Done")
 	wg.Done()
 }
 
@@ -91,20 +93,20 @@ type Connection struct {
 	Writer     io.WriteCloser
 }
 
-func NewConnection(info *inetdiag.InetDiagMsg) Connection {
+func NewConnection(info *inetdiag.InetDiagMsg) *Connection {
 	conn := Connection{Inode: info.IDiagInode, ID: info.ID, Slice: "", StartTime: time.Now(), Sequence: 0,
 		Expiration: time.Now()}
-	return conn
+	return &conn
 }
 
 // Rotate closes an existing writer, and opens a new one.
 func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Duration) {
 	// Use ID info from msg to create filename.
-	log.Fatal("Initialize writer")
 	conn.Sequence++
 	// 2006-01-02 15:04:05.999999999
 	date := conn.StartTime.Format("20160102Z150405.999")
 	conn.Writer = zstd.NewWriter(fmt.Sprintf("%s-%d-%d.zstd", date, conn.Inode, conn.Sequence))
+	conn.Expiration = conn.Expiration.Add(10 * time.Minute)
 }
 
 type Saver struct {
@@ -113,7 +115,7 @@ type Saver struct {
 	FileAgeLimit time.Duration
 	Marshallers  []Marshaller
 	Done         *sync.WaitGroup // All marshallers will call Done on this.
-	Connections  map[uint32]Connection
+	Connections  map[uint32]*Connection
 
 	cache        *cache.Cache
 	totalCount   int
@@ -123,9 +125,9 @@ type Saver struct {
 }
 
 func NewSaver(host string, pod string, numMarshaller int) *Saver {
-	m := make([]Marshaller, numMarshaller)
+	m := make([]Marshaller, 0, numMarshaller)
 	c := cache.NewCache()
-	conn := make(map[uint32]Connection, 500)
+	conn := make(map[uint32]*Connection, 500)
 	wg := &sync.WaitGroup{}
 	ageLim := 10 * time.Minute
 
@@ -136,11 +138,26 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 }
 
 func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
+	//log.Println(msg.InetDiagMsg)
 	inode := msg.InetDiagMsg.IDiagInode
+	if inode == 0 {
+		if msg.InetDiagMsg.IDiagState != uint8(tcp.TCPState_FIN_WAIT2) {
+			log.Println("BAD:", msg.InetDiagMsg)
+		}
+		// TODO - FIN_WAIT2 doesn't have an inode!!
+		return
+	}
+	if len(svr.Marshallers) < 1 {
+		log.Fatal("Fatal: no marshallers")
+	}
 	q := svr.Marshallers[int(inode)%len(svr.Marshallers)]
 	conn, ok := svr.Connections[inode]
 	if !ok {
-		svr.Connections[inode] = NewConnection(msg.InetDiagMsg)
+		log.Println("New inode:", inode)
+		conn = NewConnection(msg.InetDiagMsg)
+		svr.Connections[inode] = conn
+	} else {
+		//log.Println("Diff inode:", inode)
 	}
 	if time.Now().After(conn.Expiration) && conn.Writer != nil {
 		q <- Task{nil, conn.Writer} // Close the previous file.
@@ -152,8 +169,7 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 	q <- Task{msg, conn.Writer}
 }
 
-func (svr *Saver) EndConn(msg *inetdiag.ParsedMessage) {
-	inode := msg.InetDiagMsg.IDiagInode
+func (svr *Saver) EndConn(inode uint32) {
 	q := svr.Marshallers[int(inode)%len(svr.Marshallers)]
 	conn, ok := svr.Connections[inode]
 	if ok && conn.Writer != nil {
@@ -167,6 +183,7 @@ func (svr *Saver) EndConn(msg *inetdiag.ParsedMessage) {
 func (svr *Saver) RunSaverLoop() chan<- []*inetdiag.ParsedMessage {
 	groupChan := make(chan []*inetdiag.ParsedMessage, 2)
 	go func() {
+		log.Println("Starting Saver")
 		for {
 			group, ok := <-groupChan
 			if !ok {
@@ -174,15 +191,29 @@ func (svr *Saver) RunSaverLoop() chan<- []*inetdiag.ParsedMessage {
 			}
 
 			for i := range group {
-				svr.Queue(group[i])
+				if group[i] == nil {
+					log.Println("Error")
+					continue
+				}
+				svr.SwapAndQueue(group[i])
 			}
 			residual := svr.cache.EndCycle()
 
 			for i := range residual {
-				svr.EndConn(residual[i])
+				svr.EndConn(residual[i].InetDiagMsg.IDiagInode)
 				svr.expiredCount++
 			}
 		}
+		log.Println("Terminating Saver")
+		for i := range svr.Connections {
+			svr.EndConn(i)
+		}
+		log.Println("Closing Marshallers")
+		for i := range svr.Marshallers {
+			close(svr.Marshallers[i])
+		}
+		svr.Stats()
+		svr.Done.Wait()
 	}()
 	return groupChan
 }
