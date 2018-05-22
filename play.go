@@ -107,13 +107,12 @@ var errCount = 0
 var localCount = 0
 var newCount = 0
 var diffCount = 0
-var expiredCount = 0
 
 func Stats() {
-	log.Printf("Cache info total %d  local %d same %d diff %d new %d closed %d err %d\n",
+	log.Printf("Cache info total %d  local %d same %d diff %d new %d err %d\n",
 		totalCount, localCount,
 		totalCount-(errCount+newCount+diffCount+localCount),
-		diffCount, newCount, expiredCount, errCount)
+		diffCount, newCount, errCount)
 }
 
 func ParseAndQueue(cache *cache.Cache, msg *syscall.NetlinkMessage, queue bool) *inetdiag.ParsedMessage {
@@ -165,16 +164,7 @@ func Demo(cache *cache.Cache, svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 		}
 	}
 
-	if false {
-		residual := cache.EndCycle()
-		expiredCount += len(residual)
-		for i := range residual {
-			// TODO should also write to rawOut, but don't have the original msg.
-			log.Println(residual[i].InetDiagMsg)
-		}
-	} else {
-		svr <- all
-	}
+	svr <- all
 
 	return len(res4) + len(res6), remoteCount
 }
@@ -281,8 +271,9 @@ func main() {
 			a, b := Demo(msgCache, svrChan)
 			totalCount += a
 			remote += b
-			if loops%50 == 0 {
+			if loops%10000 == 0 {
 				Stats()
+				svr.Stats()
 			}
 		}
 		close(svrChan)

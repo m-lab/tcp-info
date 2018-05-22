@@ -1,4 +1,11 @@
 // Package saver contains all logic for writing records to files.
+//  1. Sets up a channel that accepts slices of *inetdiag.ParsedMessage
+//  2. Maintains a map of Connections, one for each connection.
+//  3. Uses several marshallers goroutines to convert to protobufs and write to
+//     zstd files.
+//  4. Rotates Connection output files every 10 minutes for long lasting connections.
+//  5. uses a cache to detect meaningful state changes, and avoid excessive
+//     writes.
 package saver
 
 import (
@@ -16,33 +23,19 @@ import (
 	"github.com/m-lab/tcp-info/zstd"
 )
 
-// We will send an entire batch of NetlinkMessages through a channel from
-// the collection loop to the top level saver.  The saver will sort and
-// discard any local connection, maintain the connection cache, determine
+// We will send an entire batch of prefiltered ParsedMessages through a channel from
+// the collection loop to the top level saver.  The saver will detect new connections
+// and significant diffs, maintain the connection cache, determine
 // how frequently to save deltas for each connection.
 //
 // The saver will use a small set of Marshallers to convert to protos,
 // marshal the protos, and write them to files.
 
-// KEY QUESTION:
-//  should files contain a single connection, or interleaved records from
-//  many connections?  Perhaps a single file for a set of connections to
-//  a single apparent client IP?
-// Keep it simple.  One (or more) files per connection.
-
-// This module handles writing records to appropriate files, and cycling
-// the files when they are too large, or open for more than 60 minutes.
-
-// 1.  Map from local address to file family.
-// 2.  Map from file family to current file.
-// 3.  Map from inode to active file.
-//
-// QUESTIONS:
-//  Should each connection have its own file?  PROBABLY!
-//  Should local address be encoded in the file name?
-//  Should we use the same file naming convention as current sidestream?
-
-//  Other design elements:
+// Tests:
+//   Basic marshaller test.  Simulated data.  Checks filename and size, cleans up.
+//   File closing.
+//   Marshaller selection.
+//   Rotation  (use 1 second rotation time)
 
 type Task struct {
 	// nil message means close the writer.
@@ -50,7 +43,7 @@ type Task struct {
 	Writer  io.WriteCloser
 }
 
-type Marshaller chan<- Task
+type MarshalChan chan<- Task
 
 func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 	for {
@@ -75,7 +68,7 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func NewMarshaller(wg *sync.WaitGroup) Marshaller {
+func NewMarshaller(wg *sync.WaitGroup) MarshalChan {
 	marshChan := make(chan Task, 100)
 	wg.Add(1)
 	go runMarshaller(marshChan, wg)
@@ -99,13 +92,14 @@ func NewConnection(info *inetdiag.InetDiagMsg) *Connection {
 	return &conn
 }
 
-// Rotate closes an existing writer, and opens a new one.
+// Rotate opens the next writer for a connection.
 func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Duration) {
 	// Use ID info from msg to create filename.
 	conn.Sequence++
 	// 2006-01-02 15:04:05.999999999
-	date := conn.StartTime.Format("20160102Z150405.999")
-	conn.Writer = zstd.NewWriter(fmt.Sprintf("%s-%d-%d.zstd", date, conn.Inode, conn.Sequence))
+	date := conn.StartTime.Format("20060102Z150405.000")
+	id := fmt.Sprintf("%s:%d-%s:%d", conn.ID.SrcIP(), conn.ID.SPort(), conn.ID.DstIP(), conn.ID.DPort())
+	conn.Writer = zstd.NewWriter(fmt.Sprintf("%s_%s_%05d.zstd", date, id, conn.Sequence))
 	conn.Expiration = conn.Expiration.Add(10 * time.Minute)
 }
 
@@ -113,9 +107,9 @@ type Saver struct {
 	Host         string // mlabN
 	Pod          string // 3 alpha + 2 decimal
 	FileAgeLimit time.Duration
-	Marshallers  []Marshaller
+	MarshalChans []MarshalChan
 	Done         *sync.WaitGroup // All marshallers will call Done on this.
-	Connections  map[uint32]*Connection
+	Connections  map[uint64]*Connection
 
 	cache        *cache.Cache
 	totalCount   int
@@ -125,37 +119,57 @@ type Saver struct {
 }
 
 func NewSaver(host string, pod string, numMarshaller int) *Saver {
-	m := make([]Marshaller, 0, numMarshaller)
+	m := make([]MarshalChan, 0, numMarshaller)
 	c := cache.NewCache()
-	conn := make(map[uint32]*Connection, 500)
+	conn := make(map[uint64]*Connection, 500)
 	wg := &sync.WaitGroup{}
 	ageLim := 10 * time.Minute
 
 	for i := 0; i < numMarshaller; i++ {
 		m = append(m, NewMarshaller(wg))
 	}
-	return &Saver{Host: host, Pod: pod, FileAgeLimit: ageLim, Marshallers: m, Done: wg, Connections: conn, cache: c}
+	return &Saver{Host: host, Pod: pod, FileAgeLimit: ageLim, MarshalChans: m, Done: wg, Connections: conn, cache: c}
 }
+
+var cachePrimed = false
 
 func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 	//log.Println(msg.InetDiagMsg)
-	inode := msg.InetDiagMsg.IDiagInode
-	if inode == 0 {
-		if msg.InetDiagMsg.IDiagState != uint8(tcp.TCPState_FIN_WAIT2) {
+	cookie := msg.InetDiagMsg.ID.Cookie()
+	if cookie == 0 {
+		switch msg.InetDiagMsg.IDiagState {
+		/*
+			case uint8(tcp.TCPState_CLOSING):
+			// TODO - CLOSING doesn't have an inode!!
+			case uint8(tcp.TCPState_FIN_WAIT1):
+			// TODO - FIN_WAIT1 doesn't have an inode!!
+			case uint8(tcp.TCPState_FIN_WAIT2):
+			// TODO - FIN_WAIT2 doesn't have an inode!!
+			case uint8(tcp.TCPState_LAST_ACK):
+			// TODO - LAST_ACK doesn't have an inode!!
+		*/
+		default:
 			log.Println("BAD:", msg.InetDiagMsg)
 		}
-		// TODO - FIN_WAIT2 doesn't have an inode!!
 		return
 	}
-	if len(svr.Marshallers) < 1 {
+	if len(svr.MarshalChans) < 1 {
 		log.Fatal("Fatal: no marshallers")
 	}
-	q := svr.Marshallers[int(inode)%len(svr.Marshallers)]
-	conn, ok := svr.Connections[inode]
+	q := svr.MarshalChans[int(cookie)%len(svr.MarshalChans)]
+	conn, ok := svr.Connections[cookie]
 	if !ok {
-		log.Println("New inode:", inode)
+		// Likely first time we have seen this connection.  Create a new Connection, unless
+		// the connection is already closing.
+		if msg.InetDiagMsg.IDiagState >= uint8(tcp.TCPState_FIN_WAIT1) {
+			log.Println("Skipping", msg.InetDiagMsg)
+			return
+		}
+		if cachePrimed || msg.InetDiagMsg.IDiagState != uint8(tcp.TCPState_ESTABLISHED) {
+			log.Println("New conn:", msg.InetDiagMsg)
+		}
 		conn = NewConnection(msg.InetDiagMsg)
-		svr.Connections[inode] = conn
+		svr.Connections[cookie] = conn
 	} else {
 		//log.Println("Diff inode:", inode)
 	}
@@ -169,12 +183,13 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 	q <- Task{msg, conn.Writer}
 }
 
-func (svr *Saver) EndConn(inode uint32) {
-	q := svr.Marshallers[int(inode)%len(svr.Marshallers)]
-	conn, ok := svr.Connections[inode]
+func (svr *Saver) EndConn(cookie uint64) {
+	//log.Println("Closing:", cookie)
+	q := svr.MarshalChans[cookie%uint64(len(svr.MarshalChans))]
+	conn, ok := svr.Connections[cookie]
 	if ok && conn.Writer != nil {
 		q <- Task{nil, conn.Writer}
-		delete(svr.Connections, inode)
+		delete(svr.Connections, cookie)
 	}
 }
 
@@ -200,17 +215,19 @@ func (svr *Saver) RunSaverLoop() chan<- []*inetdiag.ParsedMessage {
 			residual := svr.cache.EndCycle()
 
 			for i := range residual {
-				svr.EndConn(residual[i].InetDiagMsg.IDiagInode)
+				svr.EndConn(residual[i].InetDiagMsg.ID.Cookie())
 				svr.expiredCount++
 			}
+
+			cachePrimed = true
 		}
 		log.Println("Terminating Saver")
 		for i := range svr.Connections {
 			svr.EndConn(i)
 		}
 		log.Println("Closing Marshallers")
-		for i := range svr.Marshallers {
-			close(svr.Marshallers[i])
+		for i := range svr.MarshalChans {
+			close(svr.MarshalChans[i])
 		}
 		svr.Stats()
 		svr.Done.Wait()
@@ -231,6 +248,9 @@ func (svr *Saver) SwapAndQueue(pm *inetdiag.ParsedMessage) {
 		svr.newCount++
 		svr.Queue(pm)
 	} else {
+		if old.InetDiagMsg.ID != pm.InetDiagMsg.ID {
+			log.Println("Mismatched SockIDs", old.InetDiagMsg.ID, pm.InetDiagMsg.ID)
+		}
 		if tools.Compare(pm, old) > tools.NoMajorChange {
 			svr.diffCount++
 			svr.Queue(pm)
