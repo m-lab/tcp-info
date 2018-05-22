@@ -27,13 +27,12 @@ func TestWriterReader(t *testing.T) {
 		data[i] = byte((i * 37) % 256)
 	}
 
-	w, wg := zstd.NewWriter(tmpdir + "/test.zst")
+	w := zstd.NewWriter(tmpdir + "/test.zst")
 	n, err := w.Write(data)
 	if err != nil {
 		t.Fatal(err)
 	}
 	w.Close()
-	wg.Wait()
 
 	read := make([]byte, 20000)
 	r := zstd.NewReader(tmpdir + "/test.zst")

@@ -34,12 +34,26 @@ func NewReader(filename string) io.ReadCloser {
 	return pipeR
 }
 
+type WaitingWriteCloser struct {
+	io.WriteCloser
+	wg *sync.WaitGroup
+}
+
+func (w WaitingWriteCloser) Close() error {
+	err := w.WriteCloser.Close()
+	if err != nil {
+		return err
+	}
+	w.wg.Wait()
+	return nil
+}
+
 // NewWriter creates a writer piped to an external zstd process writing to filename
 // Write to io.Writer
 // close io.Writer when done
 // wait on waitgroup to finish
 // TODO encapsulate the WaitGroup in a WriteCloser wrapper.
-func NewWriter(filename string) (io.WriteCloser, *sync.WaitGroup) {
+func NewWriter(filename string) io.WriteCloser {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	pipeR, pipeW, _ := os.Pipe()
@@ -57,5 +71,5 @@ func NewWriter(filename string) (io.WriteCloser, *sync.WaitGroup) {
 		wg.Done()
 	}()
 
-	return pipeW, &wg
+	return WaitingWriteCloser{pipeW, &wg}
 }

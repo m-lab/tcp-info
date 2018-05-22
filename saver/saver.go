@@ -2,6 +2,7 @@
 package saver
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/nl-proto/tools"
+	"github.com/m-lab/tcp-info/zstd"
 )
 
 // We will send an entire batch of NetlinkMessages through a channel from
@@ -77,15 +79,6 @@ func NewMarshaller(fn string, wg *sync.WaitGroup) Marshaller {
 	return marshChan
 }
 
-type Saver struct {
-	Host         string // mlabN
-	Pod          string // 3 alpha + 2 decimal
-	FileAgeLimit time.Duration
-	Marshallers  []Marshaller
-	Done         *sync.WaitGroup
-	Connections  map[uint32]Connection
-}
-
 // Connection objects handle all output associated with a single connection.
 type Connection struct {
 	Inode      uint32 // TODO - also use the UID???
@@ -107,6 +100,25 @@ func NewConnection(info *inetdiag.InetDiagMsg) *Connection {
 func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Duration) {
 	// Use ID info from msg to create filename.
 	log.Fatal("Initialize writer")
+	conn.Sequence++
+	// 2006-01-02 15:04:05.999999999
+	date := conn.StartTime.Format("20160102Z150405.999")
+	conn.Writer = zstd.NewWriter(fmt.Sprintf("%s-%d-%d.zstd", conn.StartTime, conn.Inode, conn.Sequence))
+}
+
+type Saver struct {
+	Host         string // mlabN
+	Pod          string // 3 alpha + 2 decimal
+	FileAgeLimit time.Duration
+	Marshallers  []Marshaller
+	Done         *sync.WaitGroup // All marshallers will call Done on this.
+	Connections  map[uint32]Connection
+
+	cache        *cache.Cache
+	totalCount   int
+	newCount     int
+	diffCount    int
+	expiredCount int
 }
 
 func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
@@ -124,4 +136,46 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 		conn.Rotate(svr.Host, svr.Pod, svr.FileAgeLimit)
 	}
 	q <- &Task{msg, conn.Writer}
+}
+
+// RunSaverLoop runs a loop to receive batches of ParsedMessages.  Local connections
+// should be already stripped out.
+func (svr *Saver) RunSaverLoop(groupChan <-chan []*inetdiag.ParsedMessage) {
+	for {
+		group, ok := <-groupChan
+		if !ok {
+			break
+		}
+
+		for i := range group {
+			svr.ParseAndQueue(group[i])
+		}
+		residual := cache.EndCycle()
+
+		for i := range residual {
+			//update.Done = append(update.Done, residual[i].InetDiagMsg.IDiagInode)
+			svr.closed++
+		}
+	}
+}
+
+func (svr *Saver) Stats() {
+	log.Printf("Cache info total %d same %d diff %d new %d closed %d\n",
+		svr.totalCount,
+		totalCount-(newCount+diffCount),
+		diffCount, newCount, expiredCount)
+}
+
+func (svr *Saver) ParseAndQueue(pm *inetdiag.ParsedMessage) {
+	svr.totalCount++
+	old := svr.cache.Update(pm)
+	if old == nil {
+		svr.newCount++
+		svr.Queue(pm)
+	} else {
+		if tools.Compare(pm, old) > tools.NoMajorChange {
+			svr.diffCount++
+			svr.Queue(pm)
+		}
+	}
 }
