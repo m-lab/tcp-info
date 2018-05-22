@@ -281,8 +281,9 @@ func main() {
 			a, b := Demo(msgCache, svrChan)
 			totalCount += a
 			remote += b
-			if loops%50 == 0 {
-				//Stats()
+			if loops%10000 == 0 {
+				Stats()
+				svr.Stats()
 			}
 		}
 		close(svrChan)
