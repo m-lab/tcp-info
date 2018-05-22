@@ -141,10 +141,14 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 	//log.Println(msg.InetDiagMsg)
 	inode := msg.InetDiagMsg.IDiagInode
 	if inode == 0 {
-		if msg.InetDiagMsg.IDiagState != uint8(tcp.TCPState_FIN_WAIT2) {
+		switch msg.InetDiagMsg.IDiagState {
+		case uint8(tcp.TCPState_FIN_WAIT2):
+		// TODO - FIN_WAIT2 doesn't have an inode!!
+		case uint8(tcp.TCPState_LAST_ACK):
+		// TODO - LAST_ACK doesn't have an inode!!
+		default:
 			log.Println("BAD:", msg.InetDiagMsg)
 		}
-		// TODO - FIN_WAIT2 doesn't have an inode!!
 		return
 	}
 	if len(svr.Marshallers) < 1 {
