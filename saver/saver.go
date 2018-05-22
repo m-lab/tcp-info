@@ -142,6 +142,8 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 	inode := msg.InetDiagMsg.IDiagInode
 	if inode == 0 {
 		switch msg.InetDiagMsg.IDiagState {
+		case uint8(tcp.TCPState_FIN_WAIT1):
+		// TODO - FIN_WAIT1 doesn't have an inode!!
 		case uint8(tcp.TCPState_FIN_WAIT2):
 		// TODO - FIN_WAIT2 doesn't have an inode!!
 		case uint8(tcp.TCPState_LAST_ACK):
