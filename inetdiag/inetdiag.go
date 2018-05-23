@@ -168,7 +168,7 @@ func NewInetDiagReqV2(family, protocol uint8, states uint32) *InetDiagReqV2 {
 	}
 }
 
-// InetDiagMsg is the linux binary representation of a InetDiag message header, as in linus/inet_diag.h
+// InetDiagMsg is the linux binary representation of a InetDiag message header, as in linux/inet_diag.h
 // Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
 type InetDiagMsg struct {
 	IDiagFamily  uint8
