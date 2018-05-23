@@ -206,7 +206,7 @@ type ParsedMessage struct {
 	Attributes  [INET_DIAG_MAX]*syscall.NetlinkRouteAttr
 }
 
-// Parse parsed the NetlinkMessage into a ParsedMessage.  If skipLocal is true, it will return nil for
+// Parse parses the NetlinkMessage into a ParsedMessage.  If skipLocal is true, it will return nil for
 // loopback, local unicast, multicast, and unspecified connections.
 func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) {
 	if msg.Header.Type != 20 {
