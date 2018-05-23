@@ -29,6 +29,7 @@ expressed in host-byte order"
 */
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
@@ -85,8 +86,8 @@ var diagFamilyMap = map[uint8]string{
 // InetDiagSockID is the binary linux representation of a socket, as in linux/inet_diag.h
 // Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
 type InetDiagSockID struct {
-	IDiagSPort  uint16
-	IDiagDPort  uint16
+	IDiagSPort  [2]byte // This appears to be byte swapped.  Is it from a network byte ordered field in stack?
+	IDiagDPort  [2]byte
 	IDiagSrc    [16]byte
 	IDiagDst    [16]byte
 	IDiagIf     uint32
@@ -130,7 +131,7 @@ func ipv6(original [16]byte) net.IP {
 }
 
 func (id *InetDiagSockID) String() string {
-	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.IDiagSPort, id.DstIP().String(), id.IDiagDPort)
+	return fmt.Sprintf("%s:%d -> %s:%d (%d)", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort(), id.IDiagCookie)
 }
 
 // InetDiagReqV2 is the Netlink request struct, as in linux/inet_diag.h
@@ -181,6 +182,20 @@ type InetDiagMsg struct {
 	IDiagWqueue  uint32
 	IDiagUID     uint32
 	IDiagInode   uint32
+}
+
+// SPort returns the host byte ordered port.
+// In general, Netlink is supposed to use host byte order, but this seems to be an exception.
+// Perhaps Netlink is reading a tcp stack structure that holds the port in network byte order.
+func (id *InetDiagSockID) SPort() uint16 {
+	return binary.BigEndian.Uint16(id.IDiagSPort[:])
+}
+
+// DPort returns the host byte ordered port.
+// In general, Netlink is supposed to use host byte order, but this seems to be an exception.
+// Perhaps Netlink is reading a tcp stack structure that holds the port in network byte order.
+func (id *InetDiagSockID) DPort() uint16 {
+	return binary.BigEndian.Uint16(id.IDiagDPort[:])
 }
 
 func (msg *InetDiagMsg) String() string {

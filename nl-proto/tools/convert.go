@@ -31,11 +31,11 @@ func HeaderToProto(hdr *inetdiag.InetDiagMsg) *tcpinfo.InetDiagMsgProto {
 	p.SockId = &tcpinfo.InetSocketIDProto{}
 	src := tcpinfo.EndPoint{}
 	p.SockId.Source = &src
-	src.Port = uint32(hdr.ID.IDiagSPort)
+	src.Port = uint32(hdr.ID.SPort())
 	src.Ip = append(src.Ip, hdr.ID.SrcIP()...)
 	dst := tcpinfo.EndPoint{}
 	p.SockId.Destination = &dst
-	dst.Port = uint32(hdr.ID.IDiagDPort)
+	dst.Port = uint32(hdr.ID.DPort())
 	dst.Ip = append(dst.Ip, hdr.ID.DstIP()...)
 	p.SockId.Interface = hdr.ID.IDiagIf
 	p.SockId.Cookie = uint64(hdr.ID.IDiagCookie[0])<<32 + uint64(hdr.ID.IDiagCookie[1])
@@ -104,6 +104,8 @@ func CreateProto(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*sy
 
 // LinuxTCPInfo is the linux defined structure returned in RouteAttr DIAG_INFO messages.
 // It corresponds to the struct tcp_info in include/uapi/linux/tcp.h
+// TODO should these all be unexported?
+// TODO Alternatively, should they be in their own package, with exported fields?
 type LinuxTCPInfo struct {
 	state       uint8
 	caState     uint8
