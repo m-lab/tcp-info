@@ -14,6 +14,7 @@ import (
 	"runtime/trace"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/m-lab/tcp-info/cache"
@@ -149,17 +150,21 @@ func Demo(cache *cache.Cache, svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 	all := make([]*inetdiag.ParsedMessage, 0, 500)
 	remoteCount := 0
 	res6 := inetdiag.OneType(syscall.AF_INET6)
+	ts := time.Now()
 	for i := range res6 {
 		pm := ParseAndQueue(cache, res6[i], false)
 		if pm != nil {
+			pm.Timestamp = ts
 			all = append(all, pm)
 		}
 	}
 
 	res4 := inetdiag.OneType(syscall.AF_INET)
+	ts = time.Now()
 	for i := range res4 {
 		pm := ParseAndQueue(cache, res4[i], false)
 		if pm != nil {
+			pm.Timestamp = ts
 			all = append(all, pm)
 		}
 	}

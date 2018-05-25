@@ -86,8 +86,8 @@ type Connection struct {
 	Writer     io.WriteCloser
 }
 
-func NewConnection(info *inetdiag.InetDiagMsg) *Connection {
-	conn := Connection{Inode: info.IDiagInode, ID: info.ID, Slice: "", StartTime: time.Now(), Sequence: 0,
+func NewConnection(info *inetdiag.InetDiagMsg, timestamp time.Time) *Connection {
+	conn := Connection{Inode: info.IDiagInode, ID: info.ID, Slice: "", StartTime: timestamp, Sequence: 0,
 		Expiration: time.Now()}
 	return &conn
 }
@@ -134,23 +134,9 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 var cachePrimed = false
 
 func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
-	//log.Println(msg.InetDiagMsg)
 	cookie := msg.InetDiagMsg.ID.Cookie()
 	if cookie == 0 {
-		switch msg.InetDiagMsg.IDiagState {
-		/*
-			case uint8(tcp.TCPState_CLOSING):
-			// TODO - CLOSING doesn't have an inode!!
-			case uint8(tcp.TCPState_FIN_WAIT1):
-			// TODO - FIN_WAIT1 doesn't have an inode!!
-			case uint8(tcp.TCPState_FIN_WAIT2):
-			// TODO - FIN_WAIT2 doesn't have an inode!!
-			case uint8(tcp.TCPState_LAST_ACK):
-			// TODO - LAST_ACK doesn't have an inode!!
-		*/
-		default:
-			log.Println("BAD:", msg.InetDiagMsg)
-		}
+		log.Println("BAD:", msg.InetDiagMsg)
 		return
 	}
 	if len(svr.MarshalChans) < 1 {
@@ -162,13 +148,13 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 		// Likely first time we have seen this connection.  Create a new Connection, unless
 		// the connection is already closing.
 		if msg.InetDiagMsg.IDiagState >= uint8(tcp.TCPState_FIN_WAIT1) {
-			log.Println("Skipping", msg.InetDiagMsg)
+			log.Println("Skipping", msg.InetDiagMsg, msg.Timestamp)
 			return
 		}
 		if cachePrimed || msg.InetDiagMsg.IDiagState != uint8(tcp.TCPState_ESTABLISHED) {
-			log.Println("New conn:", msg.InetDiagMsg)
+			log.Println("New conn:", msg.InetDiagMsg, msg.Timestamp)
 		}
-		conn = NewConnection(msg.InetDiagMsg)
+		conn = NewConnection(msg.InetDiagMsg, msg.Timestamp)
 		svr.Connections[cookie] = conn
 	} else {
 		//log.Println("Diff inode:", inode)
