@@ -9,6 +9,7 @@
 package saver
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -55,6 +56,9 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 			task.Writer.Close()
 			continue
 		}
+		if task.Writer == nil {
+			log.Fatal("Nil writer")
+		}
 		msg := task.Message
 		pb := tools.CreateProto(msg.Header, msg.InetDiagMsg, msg.Attributes[:])
 		wire, err := proto.Marshal(pb)
@@ -93,14 +97,17 @@ func NewConnection(info *inetdiag.InetDiagMsg, timestamp time.Time) *Connection 
 }
 
 // Rotate opens the next writer for a connection.
-func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Duration) {
-	// Use ID info from msg to create filename.
-	conn.Sequence++
-	// 2006-01-02 15:04:05.999999999
+func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Duration) error {
 	date := conn.StartTime.Format("20060102Z150405.000")
 	id := fmt.Sprintf("%s:%d-%s:%d", conn.ID.SrcIP(), conn.ID.SPort(), conn.ID.DstIP(), conn.ID.DPort())
-	conn.Writer = zstd.NewWriter(fmt.Sprintf("%s_%s_%05d.zstd", date, id, conn.Sequence))
+	var err error
+	conn.Writer, err = zstd.NewWriter(fmt.Sprintf("%s_%s_%05d.zstd", date, id, conn.Sequence))
+	if err != nil {
+		return err
+	}
 	conn.Expiration = conn.Expiration.Add(10 * time.Minute)
+	conn.Sequence++
+	return nil
 }
 
 type Saver struct {
@@ -133,11 +140,10 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 
 var cachePrimed = false
 
-func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
+func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) error {
 	cookie := msg.InetDiagMsg.ID.Cookie()
 	if cookie == 0 {
-		log.Println("BAD:", msg.InetDiagMsg)
-		return
+		return errors.New("Cookie = 0")
 	}
 	if len(svr.MarshalChans) < 1 {
 		log.Fatal("Fatal: no marshallers")
@@ -149,7 +155,7 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 		// the connection is already closing.
 		if msg.InetDiagMsg.IDiagState >= uint8(tcp.TCPState_FIN_WAIT1) {
 			log.Println("Skipping", msg.InetDiagMsg, msg.Timestamp)
-			return
+			return nil
 		}
 		if cachePrimed || msg.InetDiagMsg.IDiagState != uint8(tcp.TCPState_ESTABLISHED) {
 			log.Println("New conn:", msg.InetDiagMsg, msg.Timestamp)
@@ -164,9 +170,13 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 		conn.Writer = nil
 	}
 	if conn.Writer == nil {
-		conn.Rotate(svr.Host, svr.Pod, svr.FileAgeLimit)
+		err := conn.Rotate(svr.Host, svr.Pod, svr.FileAgeLimit)
+		if err != nil {
+			return err
+		}
 	}
 	q <- Task{msg, conn.Writer}
+	return nil
 }
 
 func (svr *Saver) EndConn(cookie uint64) {
@@ -208,6 +218,7 @@ func (svr *Saver) RunSaverLoop() chan<- []*inetdiag.ParsedMessage {
 			cachePrimed = true
 		}
 		log.Println("Terminating Saver")
+		log.Println("Total of", len(svr.Connections), "connections active.")
 		for i := range svr.Connections {
 			svr.EndConn(i)
 		}
@@ -232,14 +243,21 @@ func (svr *Saver) SwapAndQueue(pm *inetdiag.ParsedMessage) {
 	old := svr.cache.Update(pm)
 	if old == nil {
 		svr.newCount++
-		svr.Queue(pm)
+		err := svr.Queue(pm)
+		if err != nil {
+			log.Println(err)
+			log.Println("Connections", len(svr.Connections))
+		}
 	} else {
 		if old.InetDiagMsg.ID != pm.InetDiagMsg.ID {
 			log.Println("Mismatched SockIDs", old.InetDiagMsg.ID, pm.InetDiagMsg.ID)
 		}
 		if tools.Compare(pm, old) > tools.NoMajorChange {
 			svr.diffCount++
-			svr.Queue(pm)
+			err := svr.Queue(pm)
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 }
