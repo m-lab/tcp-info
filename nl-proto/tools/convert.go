@@ -37,7 +37,7 @@ func HeaderToProto(hdr *inetdiag.InetDiagMsg) *tcpinfo.InetDiagMsgProto {
 	p.SockId.Destination = &dst
 	dst.Port = uint32(hdr.ID.DPort())
 	dst.Ip = append(dst.Ip, hdr.ID.DstIP()...)
-	p.SockId.Interface = hdr.ID.IDiagIf
+	p.SockId.Interface = hdr.ID.Interface()
 	p.SockId.Cookie = uint64(hdr.ID.IDiagCookie[0])<<32 + uint64(hdr.ID.IDiagCookie[1])
 	p.Expires = hdr.IDiagExpires
 	p.Rqueue = hdr.IDiagRqueue
