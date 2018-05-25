@@ -35,6 +35,7 @@ import (
 	"log"
 	"net"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -131,7 +132,7 @@ func ipv6(original [16]byte) net.IP {
 }
 
 func (id *InetDiagSockID) String() string {
-	return fmt.Sprintf("%s:%d -> %s:%d (%d)", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort(), id.IDiagCookie)
+	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort())
 }
 
 // InetDiagReqV2 is the Netlink request struct, as in linux/inet_diag.h
@@ -198,6 +199,12 @@ func (id *InetDiagSockID) DPort() uint16 {
 	return binary.BigEndian.Uint16(id.IDiagDPort[:])
 }
 
+// Cookie returns the SockID's 64 bit unsigned cookie.
+func (id *InetDiagSockID) Cookie() uint64 {
+	// This is pretty arbitrary, and may not match across operating systems.
+	return uint64(id.IDiagCookie[1])<<32 | uint64(id.IDiagCookie[0])
+}
+
 func (msg *InetDiagMsg) String() string {
 	return fmt.Sprintf("%s, %s, %s", diagFamilyMap[msg.IDiagFamily], tcpinfo.TCPState(msg.IDiagState), msg.ID.String())
 }
@@ -216,6 +223,7 @@ func ParseInetDiagMsg(data []byte) (*InetDiagMsg, []byte) {
 
 // ParsedMessage is a container for parsed InetDiag messages and attributes.
 type ParsedMessage struct {
+	Timestamp   time.Time
 	Header      syscall.NlMsghdr
 	InetDiagMsg *InetDiagMsg
 	Attributes  [INET_DIAG_MAX]*syscall.NetlinkRouteAttr

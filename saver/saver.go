@@ -98,8 +98,8 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 	conn.Sequence++
 	// 2006-01-02 15:04:05.999999999
 	date := conn.StartTime.Format("20060102Z150405.000")
-	id := fmt.Sprintf("%s:%d/%s:%d", conn.ID.SrcIP(), conn.ID.SPort(), conn.ID.DstIP(), conn.ID.DPort())
-	conn.Writer = zstd.NewWriter(fmt.Sprintf("%s-.%s.%5d.zstd", date, id, conn.Sequence))
+	id := fmt.Sprintf("%s:%d-%s:%d", conn.ID.SrcIP(), conn.ID.SPort(), conn.ID.DstIP(), conn.ID.DPort())
+	conn.Writer = zstd.NewWriter(fmt.Sprintf("%s_%s_%05d.zstd", date, id, conn.Sequence))
 	conn.Expiration = conn.Expiration.Add(10 * time.Minute)
 }
 
@@ -109,7 +109,7 @@ type Saver struct {
 	FileAgeLimit time.Duration
 	MarshalChans []MarshalChan
 	Done         *sync.WaitGroup // All marshallers will call Done on this.
-	Connections  map[uint32]*Connection
+	Connections  map[uint64]*Connection
 
 	cache        *cache.Cache
 	totalCount   int
@@ -121,7 +121,7 @@ type Saver struct {
 func NewSaver(host string, pod string, numMarshaller int) *Saver {
 	m := make([]MarshalChan, 0, numMarshaller)
 	c := cache.NewCache()
-	conn := make(map[uint32]*Connection, 500)
+	conn := make(map[uint64]*Connection, 500)
 	wg := &sync.WaitGroup{}
 	ageLim := 10 * time.Minute
 
@@ -131,19 +131,23 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 	return &Saver{Host: host, Pod: pod, FileAgeLimit: ageLim, MarshalChans: m, Done: wg, Connections: conn, cache: c}
 }
 
+var cachePrimed = false
+
 func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 	//log.Println(msg.InetDiagMsg)
-	inode := msg.InetDiagMsg.IDiagInode
-	if inode == 0 {
+	cookie := msg.InetDiagMsg.ID.Cookie()
+	if cookie == 0 {
 		switch msg.InetDiagMsg.IDiagState {
-		case uint8(tcp.TCPState_CLOSING):
-		// TODO - CLOSING doesn't have an inode!!
-		case uint8(tcp.TCPState_FIN_WAIT1):
-		// TODO - FIN_WAIT1 doesn't have an inode!!
-		case uint8(tcp.TCPState_FIN_WAIT2):
-		// TODO - FIN_WAIT2 doesn't have an inode!!
-		case uint8(tcp.TCPState_LAST_ACK):
-		// TODO - LAST_ACK doesn't have an inode!!
+		/*
+			case uint8(tcp.TCPState_CLOSING):
+			// TODO - CLOSING doesn't have an inode!!
+			case uint8(tcp.TCPState_FIN_WAIT1):
+			// TODO - FIN_WAIT1 doesn't have an inode!!
+			case uint8(tcp.TCPState_FIN_WAIT2):
+			// TODO - FIN_WAIT2 doesn't have an inode!!
+			case uint8(tcp.TCPState_LAST_ACK):
+			// TODO - LAST_ACK doesn't have an inode!!
+		*/
 		default:
 			log.Println("BAD:", msg.InetDiagMsg)
 		}
@@ -152,12 +156,20 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 	if len(svr.MarshalChans) < 1 {
 		log.Fatal("Fatal: no marshallers")
 	}
-	q := svr.MarshalChans[int(inode)%len(svr.MarshalChans)]
-	conn, ok := svr.Connections[inode]
+	q := svr.MarshalChans[int(cookie)%len(svr.MarshalChans)]
+	conn, ok := svr.Connections[cookie]
 	if !ok {
-		log.Println("New inode:", inode)
+		// Likely first time we have seen this connection.  Create a new Connection, unless
+		// the connection is already closing.
+		if msg.InetDiagMsg.IDiagState >= uint8(tcp.TCPState_FIN_WAIT1) {
+			log.Println("Skipping", msg.InetDiagMsg)
+			return
+		}
+		if cachePrimed || msg.InetDiagMsg.IDiagState != uint8(tcp.TCPState_ESTABLISHED) {
+			log.Println("New conn:", msg.InetDiagMsg)
+		}
 		conn = NewConnection(msg.InetDiagMsg)
-		svr.Connections[inode] = conn
+		svr.Connections[cookie] = conn
 	} else {
 		//log.Println("Diff inode:", inode)
 	}
@@ -171,12 +183,13 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) {
 	q <- Task{msg, conn.Writer}
 }
 
-func (svr *Saver) EndConn(inode uint32) {
-	q := svr.MarshalChans[int(inode)%len(svr.MarshalChans)]
-	conn, ok := svr.Connections[inode]
+func (svr *Saver) EndConn(cookie uint64) {
+	//log.Println("Closing:", cookie)
+	q := svr.MarshalChans[cookie%uint64(len(svr.MarshalChans))]
+	conn, ok := svr.Connections[cookie]
 	if ok && conn.Writer != nil {
 		q <- Task{nil, conn.Writer}
-		delete(svr.Connections, inode)
+		delete(svr.Connections, cookie)
 	}
 }
 
@@ -202,9 +215,11 @@ func (svr *Saver) RunSaverLoop() chan<- []*inetdiag.ParsedMessage {
 			residual := svr.cache.EndCycle()
 
 			for i := range residual {
-				svr.EndConn(residual[i].InetDiagMsg.IDiagInode)
+				svr.EndConn(residual[i].InetDiagMsg.ID.Cookie())
 				svr.expiredCount++
 			}
+
+			cachePrimed = true
 		}
 		log.Println("Terminating Saver")
 		for i := range svr.Connections {
@@ -233,6 +248,9 @@ func (svr *Saver) SwapAndQueue(pm *inetdiag.ParsedMessage) {
 		svr.newCount++
 		svr.Queue(pm)
 	} else {
+		if old.InetDiagMsg.ID != pm.InetDiagMsg.ID {
+			log.Println("Mismatched SockIDs", old.InetDiagMsg.ID, pm.InetDiagMsg.ID)
+		}
 		if tools.Compare(pm, old) > tools.NoMajorChange {
 			svr.diffCount++
 			svr.Queue(pm)
