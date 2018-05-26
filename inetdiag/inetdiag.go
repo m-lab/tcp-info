@@ -210,26 +210,6 @@ type InetDiagMsg struct {
 	IDiagInode   uint32
 }
 
-// SPort returns the host byte ordered port.
-// In general, Netlink is supposed to use host byte order, but this seems to be an exception.
-// Perhaps Netlink is reading a tcp stack structure that holds the port in network byte order.
-func (id *InetDiagSockID) SPort() uint16 {
-	return binary.BigEndian.Uint16(id.IDiagSPort[:])
-}
-
-// DPort returns the host byte ordered port.
-// In general, Netlink is supposed to use host byte order, but this seems to be an exception.
-// Perhaps Netlink is reading a tcp stack structure that holds the port in network byte order.
-func (id *InetDiagSockID) DPort() uint16 {
-	return binary.BigEndian.Uint16(id.IDiagDPort[:])
-}
-
-// Cookie returns the SockID's 64 bit unsigned cookie.
-func (id *InetDiagSockID) Cookie() uint64 {
-	// This is pretty arbitrary, and may not match across operating systems.
-	return uint64(id.IDiagCookie[1])<<32 | uint64(id.IDiagCookie[0])
-}
-
 func (msg *InetDiagMsg) String() string {
 	return fmt.Sprintf("%s, %s, %s", diagFamilyMap[msg.IDiagFamily], tcpinfo.TCPState(msg.IDiagState), msg.ID.String())
 }

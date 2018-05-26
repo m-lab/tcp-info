@@ -14,6 +14,7 @@ import (
 	"runtime/trace"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/m-lab/tcp-info/cache"
@@ -61,8 +62,11 @@ func init() {
 //  2. the go zstd wrapper doesn't seem to work well - poor compression and slow.
 //  3. zstd seems to result in similar file size using proto or raw output.
 
-func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.WaitGroup) {
-	out := zstd.NewWriter(filename)
+func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.WaitGroup) error {
+	out, err := zstd.NewWriter(filename)
+	if err != nil {
+		return err
+	}
 	count := 0
 	for {
 		count++
@@ -87,6 +91,7 @@ func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.W
 	}
 	out.Close()
 	wg.Done()
+	return nil
 }
 
 var marshallerChannels []chan *inetdiag.ParsedMessage
@@ -149,17 +154,21 @@ func Demo(cache *cache.Cache, svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 	all := make([]*inetdiag.ParsedMessage, 0, 500)
 	remoteCount := 0
 	res6 := inetdiag.OneType(syscall.AF_INET6)
+	ts := time.Now()
 	for i := range res6 {
 		pm := ParseAndQueue(cache, res6[i], false)
 		if pm != nil {
+			pm.Timestamp = ts
 			all = append(all, pm)
 		}
 	}
 
 	res4 := inetdiag.OneType(syscall.AF_INET)
+	ts = time.Now()
 	for i := range res4 {
 		pm := ParseAndQueue(cache, res4[i], false)
 		if pm != nil {
+			pm.Timestamp = ts
 			all = append(all, pm)
 		}
 	}
@@ -204,7 +213,11 @@ func main() {
 
 	if *rawFile != "" {
 		log.Println("Raw output to", *rawFile)
-		rawOut = zstd.NewWriter(*rawFile)
+		var err error
+		rawOut, err = zstd.NewWriter(*rawFile)
+		if err != nil {
+			log.Fatal("Could not open raw output file", *rawFile)
+		}
 		defer rawOut.Close()
 	}
 

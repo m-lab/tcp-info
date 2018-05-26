@@ -53,11 +53,14 @@ func (w WaitingWriteCloser) Close() error {
 // close io.Writer when done
 // wait on waitgroup to finish
 // TODO encapsulate the WaitGroup in a WriteCloser wrapper.
-func NewWriter(filename string) io.WriteCloser {
+func NewWriter(filename string) (io.WriteCloser, error) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	pipeR, pipeW, _ := os.Pipe()
-	f, _ := os.Create(filename)
+	f, err := os.Create(filename)
+	if err != nil {
+		return nil, err
+	}
 	cmd := exec.Command("zstd")
 	cmd.Stdin = pipeR
 	cmd.Stdout = f
@@ -71,5 +74,5 @@ func NewWriter(filename string) io.WriteCloser {
 		wg.Done()
 	}()
 
-	return WaitingWriteCloser{pipeW, &wg}
+	return WaitingWriteCloser{pipeW, &wg}, nil
 }
