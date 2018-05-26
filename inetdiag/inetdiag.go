@@ -85,17 +85,17 @@ var diagFamilyMap = map[uint8]string{
 }
 
 // InetDiagSockID is the binary linux representation of a socket, as in linux/inet_diag.h
-// Generally netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
-// BUT - this struct uses the network byte order!!!
+// Linux code comments indicate this struct uses the network byte order!!!
 type InetDiagSockID struct {
-	IDiagSPort  [2]byte // This appears to be byte swapped.  Is it from a network byte ordered field in stack?
+	IDiagSPort  [2]byte
 	IDiagDPort  [2]byte
 	IDiagSrc    [16]byte
 	IDiagDst    [16]byte
-	IDiagIf     [4]byte   // Probably should use [4]byte and properly byte swap!
-	IDiagCookie [2]uint32 // This cannot be uint64, because of alignment rules.
+	IDiagIf     [4]byte
+	IDiagCookie [8]byte
 }
 
+// Interface returns the interface number.
 func (id *InetDiagSockID) Interface() uint32 {
 	return binary.BigEndian.Uint32(id.IDiagIf[:])
 }
@@ -127,7 +127,7 @@ func (id *InetDiagSockID) DPort() uint16 {
 // Cookie returns the SockID's 64 bit unsigned cookie.
 func (id *InetDiagSockID) Cookie() uint64 {
 	// This is pretty arbitrary, and may not match across operating systems.
-	return uint64(id.IDiagCookie[1])<<32 | uint64(id.IDiagCookie[0])
+	return binary.BigEndian.Uint64(id.IDiagCookie[:])
 }
 
 // TODO should use more net.IP code instead of custom code.
