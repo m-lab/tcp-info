@@ -83,6 +83,7 @@ func NewMarshaller(wg *sync.WaitGroup) MarshalChan {
 type Connection struct {
 	Inode      uint32 // TODO - also use the UID???
 	ID         inetdiag.InetDiagSockID
+	UID        uint32
 	Slice      string    // 4 hex, indicating which machine segment this is on.
 	StartTime  time.Time // Time the connection was initiated.
 	Sequence   int       // Typically zero, but increments for long running connections.
@@ -91,7 +92,7 @@ type Connection struct {
 }
 
 func NewConnection(info *inetdiag.InetDiagMsg, timestamp time.Time) *Connection {
-	conn := Connection{Inode: info.IDiagInode, ID: info.ID, Slice: "", StartTime: timestamp, Sequence: 0,
+	conn := Connection{Inode: info.IDiagInode, ID: info.ID, UID: info.IDiagUID, Slice: "", StartTime: timestamp, Sequence: 0,
 		Expiration: time.Now()}
 	return &conn
 }
@@ -99,9 +100,9 @@ func NewConnection(info *inetdiag.InetDiagMsg, timestamp time.Time) *Connection 
 // Rotate opens the next writer for a connection.
 func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Duration) error {
 	date := conn.StartTime.Format("20060102Z150405.000")
-	id := fmt.Sprintf("%s:%d-%s:%d", conn.ID.SrcIP(), conn.ID.SPort(), conn.ID.DstIP(), conn.ID.DPort())
+	id := fmt.Sprintf("L%s:%dR%s:%d", conn.ID.SrcIP(), conn.ID.SPort(), conn.ID.DstIP(), conn.ID.DPort())
 	var err error
-	conn.Writer, err = zstd.NewWriter(fmt.Sprintf("%s_%s_%05d.zstd", date, id, conn.Sequence))
+	conn.Writer, err = zstd.NewWriter(fmt.Sprintf("%sU%08d%s_%05d.zstd", date, conn.UID, id, conn.Sequence))
 	if err != nil {
 		return err
 	}
@@ -148,7 +149,7 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) error {
 	if len(svr.MarshalChans) < 1 {
 		log.Fatal("Fatal: no marshallers")
 	}
-	q := svr.MarshalChans[int(cookie)%len(svr.MarshalChans)]
+	q := svr.MarshalChans[int(cookie%uint64(len(svr.MarshalChans)))]
 	conn, ok := svr.Connections[cookie]
 	if !ok {
 		// Likely first time we have seen this connection.  Create a new Connection, unless
