@@ -29,6 +29,7 @@ expressed in host-byte order"
 */
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
@@ -83,14 +84,19 @@ var diagFamilyMap = map[uint8]string{
 }
 
 // InetDiagSockID is the binary linux representation of a socket, as in linux/inet_diag.h
-// Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
+// Linux code comments indicate this struct uses the network byte order!!!
 type InetDiagSockID struct {
-	IDiagSPort  uint16
-	IDiagDPort  uint16
+	IDiagSPort  [2]byte
+	IDiagDPort  [2]byte
 	IDiagSrc    [16]byte
 	IDiagDst    [16]byte
-	IDiagIf     uint32
-	IDiagCookie [2]uint32 // This cannot be uint64, because of alignment rules.
+	IDiagIf     [4]byte
+	IDiagCookie [8]byte
+}
+
+// Interface returns the interface number.
+func (id *InetDiagSockID) Interface() uint32 {
+	return binary.BigEndian.Uint32(id.IDiagIf[:])
 }
 
 // SrcIP returns a golang net encoding of source address.
@@ -101,6 +107,26 @@ func (id *InetDiagSockID) SrcIP() net.IP {
 // DstIP returns a golang net encoding of destination address.
 func (id *InetDiagSockID) DstIP() net.IP {
 	return ip(id.IDiagDst)
+}
+
+// SPort returns the host byte ordered port.
+// In general, Netlink is supposed to use host byte order, but this seems to be an exception.
+// Perhaps Netlink is reading a tcp stack structure that holds the port in network byte order.
+func (id *InetDiagSockID) SPort() uint16 {
+	return binary.BigEndian.Uint16(id.IDiagSPort[:])
+}
+
+// DPort returns the host byte ordered port.
+// In general, Netlink is supposed to use host byte order, but this seems to be an exception.
+// Perhaps Netlink is reading a tcp stack structure that holds the port in network byte order.
+func (id *InetDiagSockID) DPort() uint16 {
+	return binary.BigEndian.Uint16(id.IDiagDPort[:])
+}
+
+// Cookie returns the SockID's 64 bit unsigned cookie.
+func (id *InetDiagSockID) Cookie() uint64 {
+	// This is pretty arbitrary, and may not match across operating systems.
+	return binary.BigEndian.Uint64(id.IDiagCookie[:])
 }
 
 // TODO should use more net.IP code instead of custom code.
@@ -130,7 +156,7 @@ func ipv6(original [16]byte) net.IP {
 }
 
 func (id *InetDiagSockID) String() string {
-	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.IDiagSPort, id.DstIP().String(), id.IDiagDPort)
+	return fmt.Sprintf("%s:%d -> %s:%d (%d)", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort(), id.IDiagCookie)
 }
 
 // InetDiagReqV2 is the Netlink request struct, as in linux/inet_diag.h
