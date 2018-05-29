@@ -9,6 +9,7 @@
 package saver
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -65,7 +66,17 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 		if err != nil {
 			log.Println(err)
 		} else {
-			task.Writer.Write(wire)
+			// For each record, write the size of the record, followed by the record itself.
+			size := make([]byte, 9)
+			lsize := binary.PutUvarint(size, uint64(len(wire))) // task.Writer
+			_, err = task.Writer.Write(size[:lsize])
+			if err != nil {
+				log.Println(err)
+			}
+			_, err = task.Writer.Write(wire)
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 	log.Println("Marshaller Done")
