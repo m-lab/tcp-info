@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"log"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
@@ -91,7 +92,7 @@ func AttrToField(all *tcpinfo.TCPDiagnosticsProto, rta *syscall.NetlinkRouteAttr
 
 // CreateProto creates a fully populated TCPDiagnosticsProto from the parsed elements of a type 20 netlink message.
 // This assumes the netlink message is type 20, and behavior is undefined if it is not.
-func CreateProto(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*syscall.NetlinkRouteAttr) *tcpinfo.TCPDiagnosticsProto {
+func CreateProto(time time.Time, header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*syscall.NetlinkRouteAttr) *tcpinfo.TCPDiagnosticsProto {
 	all := tcpinfo.TCPDiagnosticsProto{}
 	all.InetDiagMsg = HeaderToProto(idm)
 	for i := range attrs {
@@ -100,6 +101,7 @@ func CreateProto(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*sy
 		}
 	}
 
+	all.Timestamp = time.UnixNano()
 	return &all
 }
 

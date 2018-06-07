@@ -236,6 +236,7 @@ type ParsedMessage struct {
 
 // Parse parsed the NetlinkMessage into a ParsedMessage.  If skipLocal is true, it will return nil for
 // loopback, local unicast, multicast, and unspecified connections.
+// Note that Parse does not populate the Timestamp field, so caller should do so.
 func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) {
 	if msg.Header.Type != 20 {
 		return nil, ErrNotType20
