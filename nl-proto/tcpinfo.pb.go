@@ -70,7 +70,7 @@ func (x TCPState) String() string {
 	return proto.EnumName(TCPState_name, int32(x))
 }
 func (TCPState) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{0}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{0}
 }
 
 type Protocol int32
@@ -99,7 +99,7 @@ func (x Protocol) String() string {
 	return proto.EnumName(Protocol_name, int32(x))
 }
 func (Protocol) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{1}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{1}
 }
 
 type InetDiagMsgProto_AddressFamily int32
@@ -128,7 +128,7 @@ func (x InetDiagMsgProto_AddressFamily) String() string {
 	return proto.EnumName(InetDiagMsgProto_AddressFamily_name, int32(x))
 }
 func (InetDiagMsgProto_AddressFamily) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{2, 0}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{2, 0}
 }
 
 type TCPInfoProto_CAState int32
@@ -163,7 +163,7 @@ func (x TCPInfoProto_CAState) String() string {
 	return proto.EnumName(TCPInfoProto_CAState_name, int32(x))
 }
 func (TCPInfoProto_CAState) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{8, 0}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{8, 0}
 }
 
 // #define TCPI_HAS_OPT(info, opt) !!(info->tcpi_options & (opt))
@@ -202,7 +202,7 @@ func (x TCPInfoProto_Options) String() string {
 	return proto.EnumName(TCPInfoProto_Options_name, int32(x))
 }
 func (TCPInfoProto_Options) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{8, 1}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{8, 1}
 }
 
 type EndPoint struct {
@@ -217,7 +217,7 @@ func (m *EndPoint) Reset()         { *m = EndPoint{} }
 func (m *EndPoint) String() string { return proto.CompactTextString(m) }
 func (*EndPoint) ProtoMessage()    {}
 func (*EndPoint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{0}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{0}
 }
 func (m *EndPoint) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_EndPoint.Unmarshal(m, b)
@@ -270,7 +270,7 @@ func (m *InetSocketIDProto) Reset()         { *m = InetSocketIDProto{} }
 func (m *InetSocketIDProto) String() string { return proto.CompactTextString(m) }
 func (*InetSocketIDProto) ProtoMessage()    {}
 func (*InetSocketIDProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{1}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{1}
 }
 func (m *InetSocketIDProto) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_InetSocketIDProto.Unmarshal(m, b)
@@ -343,7 +343,7 @@ func (m *InetDiagMsgProto) Reset()         { *m = InetDiagMsgProto{} }
 func (m *InetDiagMsgProto) String() string { return proto.CompactTextString(m) }
 func (*InetDiagMsgProto) ProtoMessage()    {}
 func (*InetDiagMsgProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{2}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{2}
 }
 func (m *InetDiagMsgProto) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_InetDiagMsgProto.Unmarshal(m, b)
@@ -448,7 +448,7 @@ func (m *TCPVegasInfoProto) Reset()         { *m = TCPVegasInfoProto{} }
 func (m *TCPVegasInfoProto) String() string { return proto.CompactTextString(m) }
 func (*TCPVegasInfoProto) ProtoMessage()    {}
 func (*TCPVegasInfoProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{3}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{3}
 }
 func (m *TCPVegasInfoProto) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TCPVegasInfoProto.Unmarshal(m, b)
@@ -505,7 +505,7 @@ func (m *DCTCPInfoProto) Reset()         { *m = DCTCPInfoProto{} }
 func (m *DCTCPInfoProto) String() string { return proto.CompactTextString(m) }
 func (*DCTCPInfoProto) ProtoMessage()    {}
 func (*DCTCPInfoProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{4}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{4}
 }
 func (m *DCTCPInfoProto) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_DCTCPInfoProto.Unmarshal(m, b)
@@ -575,7 +575,7 @@ func (m *SocketMemInfoProto) Reset()         { *m = SocketMemInfoProto{} }
 func (m *SocketMemInfoProto) String() string { return proto.CompactTextString(m) }
 func (*SocketMemInfoProto) ProtoMessage()    {}
 func (*SocketMemInfoProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{5}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{5}
 }
 func (m *SocketMemInfoProto) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SocketMemInfoProto.Unmarshal(m, b)
@@ -673,7 +673,7 @@ func (m *MemInfoProto) Reset()         { *m = MemInfoProto{} }
 func (m *MemInfoProto) String() string { return proto.CompactTextString(m) }
 func (*MemInfoProto) ProtoMessage()    {}
 func (*MemInfoProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{6}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{6}
 }
 func (m *MemInfoProto) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_MemInfoProto.Unmarshal(m, b)
@@ -736,7 +736,7 @@ func (m *BBRInfoProto) Reset()         { *m = BBRInfoProto{} }
 func (m *BBRInfoProto) String() string { return proto.CompactTextString(m) }
 func (*BBRInfoProto) ProtoMessage()    {}
 func (*BBRInfoProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{7}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{7}
 }
 func (m *BBRInfoProto) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_BBRInfoProto.Unmarshal(m, b)
@@ -861,7 +861,7 @@ func (m *TCPInfoProto) Reset()         { *m = TCPInfoProto{} }
 func (m *TCPInfoProto) String() string { return proto.CompactTextString(m) }
 func (*TCPInfoProto) ProtoMessage()    {}
 func (*TCPInfoProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{8}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{8}
 }
 func (m *TCPInfoProto) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TCPInfoProto.Unmarshal(m, b)
@@ -1291,7 +1291,7 @@ func (m *TCPDiagnosticsProto) Reset()         { *m = TCPDiagnosticsProto{} }
 func (m *TCPDiagnosticsProto) String() string { return proto.CompactTextString(m) }
 func (*TCPDiagnosticsProto) ProtoMessage()    {}
 func (*TCPDiagnosticsProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_tcpinfo_df7f95c3f813d9a5, []int{9}
+	return fileDescriptor_tcpinfo_ef40a66be7a737d6, []int{9}
 }
 func (m *TCPDiagnosticsProto) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TCPDiagnosticsProto.Unmarshal(m, b)
@@ -1563,9 +1563,9 @@ func init() {
 	proto.RegisterEnum("TCPInfoProto_Options", TCPInfoProto_Options_name, TCPInfoProto_Options_value)
 }
 
-func init() { proto.RegisterFile("tcpinfo.proto", fileDescriptor_tcpinfo_df7f95c3f813d9a5) }
+func init() { proto.RegisterFile("tcpinfo.proto", fileDescriptor_tcpinfo_ef40a66be7a737d6) }
 
-var fileDescriptor_tcpinfo_df7f95c3f813d9a5 = []byte{
+var fileDescriptor_tcpinfo_ef40a66be7a737d6 = []byte{
 	// 1946 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x57, 0x5d, 0x92, 0xdb, 0xb8,
 	0x11, 0xf6, 0x8c, 0x67, 0x24, 0xaa, 0xf5, 0x33, 0x34, 0xec, 0xdd, 0xa5, 0xd7, 0xeb, 0xf5, 0x58,

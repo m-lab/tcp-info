@@ -42,8 +42,8 @@ install:
 - go get github.com/golang/protobuf/protoc-gen-go/ github.com/golang/protobuf/proto
 
 # Install protobuf compiler
-- wget https://github.com/google/protobuf/releases/download/v3.5.1/protoc-3.5.1-linux-x86_64.zip
-- unzip protoc-3.5.1-linux-x86_64.zip  # Should provide bin/protoc
+- wget https://github.com/google/protobuf/releases/download/v3.6.0/protoc-3.6.0-linux-x86_64.zip
+- unzip protoc-3.6.0-linux-x86_64.zip  # Should provide bin/protoc
 - bin/protoc --version
 
 # Install zstd tool.
