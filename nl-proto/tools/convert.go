@@ -227,8 +227,8 @@ func (tcp *LinuxTCPInfo) ToProto() *tcpinfo.TCPInfoProto {
 
 	p.PacingRate = tcp.pacingRate
 	p.MaxPacingRate = tcp.maxPacingRate
-	p.BytesAcked = tcp.bytesAcked
-	p.BytesReceived = tcp.bytesReceived
+	p.BytesAcked = int64(tcp.bytesAcked)
+	p.BytesReceived = int64(tcp.bytesReceived)
 
 	p.SegsOut = tcp.segsOut
 	p.SegsIn = tcp.segsIn
@@ -238,7 +238,7 @@ func (tcp *LinuxTCPInfo) ToProto() *tcpinfo.TCPInfoProto {
 	p.DataSegsIn = tcp.dataSegsIn
 	p.DataSegsOut = tcp.dataSegsOut
 
-	p.DeliveryRate = tcp.deliveryRate
+	p.DeliveryRate = int64(tcp.deliveryRate)
 
 	return &p
 }

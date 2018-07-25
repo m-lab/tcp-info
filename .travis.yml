@@ -6,7 +6,6 @@ services:
 go:
    - 1.9.x
 
-
 ###########################################################################
 before_install:
 # Coverage tools
@@ -50,9 +49,14 @@ install:
 - bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/install)
 
 script:
-# Compile protobufs
+# Compile and compare protobufs
 - cd $TRAVIS_BUILD_DIR/nl-proto
+- mkdir backup
+- cp *.pb.go backup
 - $TRAVIS_BUILD_DIR/bin/protoc --go_out=. *.proto
+- for x in `ls *.pb.go`; do
+    diff $x backup/$x;
+  done
 - cd $TRAVIS_BUILD_DIR
 
 # To start, run all the non-integration tests.

@@ -5,6 +5,9 @@
 // These protos should ONLY contain raw data collected through netlink library.
 // Meta-data, such as experiment name or collection time, and any data from
 // sources other than netlink should be handles OUTSIDE these protos.
+//
+// NOTE: A number of tcpinfo fields should be uint64.  However, bigquery does
+// not support uint64, so we use int64 instead.
 
 syntax = "proto3";
 
@@ -152,7 +155,7 @@ message MemInfoProto {
 
 // Proto representation for struct tcp_bbr_info.
 message BBRInfoProto {
-  uint64 bw = 1;           // Combines bbr_bw_lo and bbr_bw_hi
+  int64 bw = 1;           // Combines bbr_bw_lo and bbr_bw_hi
   uint32 min_rtt = 2;      // min-filtered RTT in uSec
   uint32 pacing_gain = 3;  // pacing gain shifted left 8 bits
   uint32 cwnd_gain = 4;    // cwnd gain shifted left 8 bits.
@@ -247,8 +250,8 @@ message TCPInfoProto {
   int64 pacing_rate = 33;
   int64 max_pacing_rate = 34;
 
-  uint64 bytes_acked = 35;    /* RFC4898 */
-  uint64 bytes_received = 36; /* RFC4898 */
+  int64 bytes_acked = 35;     /* RFC4898 - but note using signed */
+  int64 bytes_received = 36;  /* RFC4898 - but note using signed */
   uint32 segs_out = 37;       /* RFC4898 tcpEStatsPerfSegsOut */
   uint32 segs_in = 38;        /* RFC4898 tcpEStatsPerfSegsIn */
 
@@ -257,11 +260,11 @@ message TCPInfoProto {
   uint32 data_segs_in = 41;  /* RFC4898 tcpEStatsDataSegsIn */
   uint32 data_segs_out = 42; /* RFC4898 tcpEStatsDataSegsOut */
 
-  uint64 delivery_rate = 43;
+  int64 delivery_rate = 43;
 
-  uint64 busy_time = 44;
-  uint64 rwnd_limited = 45;
-  uint64 sndbuf_limited = 46;
+  int64 busy_time = 44;
+  int64 rwnd_limited = 45;
+  int64 sndbuf_limited = 46;
 }
 
 enum Protocol {
