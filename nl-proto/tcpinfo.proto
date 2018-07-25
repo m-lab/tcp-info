@@ -306,4 +306,7 @@ message TCPDiagnosticsProto {
   oneof shutdown {
     uint32 shutdown_mask = 10;
   }
+
+  // Timestamp of batch of messages containing this message.
+  int64 timestamp = 11;
 }
