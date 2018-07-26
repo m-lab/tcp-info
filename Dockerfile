@@ -7,9 +7,10 @@ RUN git clone https://github.com/facebook/zstd src
 RUN mkdir /pkg && cd /src && make && make DESTDIR=/pkg install
 
 # Second minimal image to only keep the built binary
-FROM electrotumbao/golang-protoc as go-builder
+#FROM electrotumbao/golang-protoc as go-builder
+FROM golang as go-builder
 
-RUN apk update && apk add bash git unzip
+#RUN apk update && apk add bash git unzip
 
 WORKDIR /go/src/github.com/m-lab
 RUN git clone https://github.com/m-lab/tcp-info
@@ -23,9 +24,6 @@ RUN git checkout $COMMIT
 RUN go get -u -v $(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v m-lab/tcp-info)
 RUN go get github.com/golang/protobuf/protoc-gen-go/ github.com/golang/protobuf/proto
 
-WORKDIR nl-proto
-RUN protoc --go_out=. *.proto
-WORKDIR ..
 
 # Install all go executables.  Creates all build targets in /go/bin directory.
 RUN go install -v ./...
