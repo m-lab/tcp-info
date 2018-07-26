@@ -39,7 +39,8 @@ func HeaderToProto(hdr *inetdiag.InetDiagMsg) *tcpinfo.InetDiagMsgProto {
 	dst.Port = uint32(hdr.ID.DPort())
 	dst.Ip = append(dst.Ip, hdr.ID.DstIP()...)
 	p.SockId.Interface = hdr.ID.Interface()
-	p.SockId.Cookie = hdr.ID.Cookie()
+	// Convert to int64, for compatibility with bigquery.
+	p.SockId.Cookie = int64(hdr.ID.Cookie())
 	p.Expires = hdr.IDiagExpires
 	p.Rqueue = hdr.IDiagRqueue
 	p.Wqueue = hdr.IDiagWqueue

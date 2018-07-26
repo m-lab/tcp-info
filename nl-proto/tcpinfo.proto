@@ -59,8 +59,9 @@ message InetSocketIDProto {
   EndPoint source = 1;
   EndPoint destination = 2;
   uint32 interface = 5;
-  // Using fixed64, as this is more efficient for hashes, keys, cookies.
-  fixed64 cookie = 6;
+  // Using sfixed64, as this is more efficient for hashes, keys, cookies.
+  // Using signed to make bigquery support easier.
+  sfixed64 cookie = 6;
 }
 
 //extend google.protobuf.EnumValueOptions {
