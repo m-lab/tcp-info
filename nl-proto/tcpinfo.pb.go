@@ -1311,44 +1311,6 @@ func (m *TCPDiagnosticsProto) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_TCPDiagnosticsProto proto.InternalMessageInfo
 
-type isTCPDiagnosticsProto_CcInfo interface {
-	isTCPDiagnosticsProto_CcInfo()
-}
-type isTCPDiagnosticsProto_Shutdown interface {
-	isTCPDiagnosticsProto_Shutdown()
-}
-
-type TCPDiagnosticsProto_Vegas struct {
-	Vegas *TCPVegasInfoProto `protobuf:"bytes,4,opt,name=vegas,proto3,oneof"`
-}
-type TCPDiagnosticsProto_Dctcp struct {
-	Dctcp *DCTCPInfoProto `protobuf:"bytes,5,opt,name=dctcp,proto3,oneof"`
-}
-type TCPDiagnosticsProto_BbrInfo struct {
-	BbrInfo *BBRInfoProto `protobuf:"bytes,6,opt,name=bbr_info,json=bbrInfo,proto3,oneof"`
-}
-type TCPDiagnosticsProto_ShutdownMask struct {
-	ShutdownMask uint32 `protobuf:"varint,10,opt,name=shutdown_mask,json=shutdownMask,proto3,oneof"`
-}
-
-func (*TCPDiagnosticsProto_Vegas) isTCPDiagnosticsProto_CcInfo()          {}
-func (*TCPDiagnosticsProto_Dctcp) isTCPDiagnosticsProto_CcInfo()          {}
-func (*TCPDiagnosticsProto_BbrInfo) isTCPDiagnosticsProto_CcInfo()        {}
-func (*TCPDiagnosticsProto_ShutdownMask) isTCPDiagnosticsProto_Shutdown() {}
-
-func (m *TCPDiagnosticsProto) GetCcInfo() isTCPDiagnosticsProto_CcInfo {
-	if m != nil {
-		return m.CcInfo
-	}
-	return nil
-}
-func (m *TCPDiagnosticsProto) GetShutdown() isTCPDiagnosticsProto_Shutdown {
-	if m != nil {
-		return m.Shutdown
-	}
-	return nil
-}
-
 func (m *TCPDiagnosticsProto) GetInetDiagMsg() *InetDiagMsgProto {
 	if m != nil {
 		return m.InetDiagMsg
@@ -1368,6 +1330,35 @@ func (m *TCPDiagnosticsProto) GetCongestionAlgorithm() string {
 		return m.CongestionAlgorithm
 	}
 	return ""
+}
+
+type isTCPDiagnosticsProto_CcInfo interface {
+	isTCPDiagnosticsProto_CcInfo()
+}
+
+type TCPDiagnosticsProto_Vegas struct {
+	Vegas *TCPVegasInfoProto `protobuf:"bytes,4,opt,name=vegas,proto3,oneof"`
+}
+
+type TCPDiagnosticsProto_Dctcp struct {
+	Dctcp *DCTCPInfoProto `protobuf:"bytes,5,opt,name=dctcp,proto3,oneof"`
+}
+
+type TCPDiagnosticsProto_BbrInfo struct {
+	BbrInfo *BBRInfoProto `protobuf:"bytes,6,opt,name=bbr_info,json=bbrInfo,proto3,oneof"`
+}
+
+func (*TCPDiagnosticsProto_Vegas) isTCPDiagnosticsProto_CcInfo() {}
+
+func (*TCPDiagnosticsProto_Dctcp) isTCPDiagnosticsProto_CcInfo() {}
+
+func (*TCPDiagnosticsProto_BbrInfo) isTCPDiagnosticsProto_CcInfo() {}
+
+func (m *TCPDiagnosticsProto) GetCcInfo() isTCPDiagnosticsProto_CcInfo {
+	if m != nil {
+		return m.CcInfo
+	}
+	return nil
 }
 
 func (m *TCPDiagnosticsProto) GetVegas() *TCPVegasInfoProto {
@@ -1408,6 +1399,23 @@ func (m *TCPDiagnosticsProto) GetMemInfo() *MemInfoProto {
 func (m *TCPDiagnosticsProto) GetTcpInfo() *TCPInfoProto {
 	if m != nil {
 		return m.TcpInfo
+	}
+	return nil
+}
+
+type isTCPDiagnosticsProto_Shutdown interface {
+	isTCPDiagnosticsProto_Shutdown()
+}
+
+type TCPDiagnosticsProto_ShutdownMask struct {
+	ShutdownMask uint32 `protobuf:"varint,10,opt,name=shutdown_mask,json=shutdownMask,proto3,oneof"`
+}
+
+func (*TCPDiagnosticsProto_ShutdownMask) isTCPDiagnosticsProto_Shutdown() {}
+
+func (m *TCPDiagnosticsProto) GetShutdown() isTCPDiagnosticsProto_Shutdown {
+	if m != nil {
+		return m.Shutdown
 	}
 	return nil
 }
