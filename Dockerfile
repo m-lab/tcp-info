@@ -1,6 +1,6 @@
-FROM alpine as zstd-builder
+FROM ubuntu as zstd-builder
 
-RUN apk --no-cache add make gcc libc-dev git
+RUN apt-get update && apt-get update -y && apt-get install -y make gcc libc-dev git
 
 RUN git clone https://github.com/facebook/zstd src
 
@@ -10,28 +10,20 @@ RUN mkdir /pkg && cd /src && make && make DESTDIR=/pkg install
 #FROM electrotumbao/golang-protoc as go-builder
 FROM golang as go-builder
 
-#RUN apk update && apk add bash git unzip
-
-WORKDIR /go/src/github.com/m-lab
-RUN git clone https://github.com/m-lab/tcp-info
-WORKDIR tcp-info
-# allows override with --build-args COMMIT=branch-or-commit, defaults to master
-ARG COMMIT=master
-RUN echo $COMMIT
-RUN git checkout $COMMIT
+ADD . /go/src/github.com/m-lab/tcp-info
+WORKDIR /go/src/github.com/m-lab/tcp-info
 
 # List all of the go imports, excluding any in this repo, and run go get to import them.
 RUN go get -u -v $(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v m-lab/tcp-info)
 RUN go get github.com/golang/protobuf/protoc-gen-go/ github.com/golang/protobuf/proto
 
-
 # Install all go executables.  Creates all build targets in /go/bin directory.
 RUN go install -v ./...
 
-FROM alpine
-
-RUN apk --no-cache add bash
-
+# Must keep this the same as the zstd-builder env until we figure out how to
+# make the zstd binary comile as a static binary.
+# TODO: Make zstd compile as a static binary.
+FROM ubuntu
 
 # Copy the built files (from /pkg/usr/local/bin)
 COPY --from=zstd-builder /pkg /
