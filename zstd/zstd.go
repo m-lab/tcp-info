@@ -13,7 +13,11 @@ import (
 // Read from returned pipe
 // Close pipe when done
 func NewReader(filename string) io.ReadCloser {
-	pipeR, pipeW, _ := os.Pipe()
+	pipeR, pipeW, err := os.Pipe()
+	if err != nil {
+		// TODO - should return error to caller.
+		log.Fatal(err)
+	}
 	cmd := exec.Command("zstd", "-d", "-c", filename)
 	cmd.Stdout = pipeW
 
@@ -34,12 +38,12 @@ func NewReader(filename string) io.ReadCloser {
 	return pipeR
 }
 
-type WaitingWriteCloser struct {
+type waitingWriteCloser struct {
 	io.WriteCloser
 	wg *sync.WaitGroup
 }
 
-func (w WaitingWriteCloser) Close() error {
+func (w waitingWriteCloser) Close() error {
 	err := w.WriteCloser.Close()
 	if err != nil {
 		return err
@@ -56,7 +60,10 @@ func (w WaitingWriteCloser) Close() error {
 func NewWriter(filename string) (io.WriteCloser, error) {
 	var wg sync.WaitGroup
 	wg.Add(1)
-	pipeR, pipeW, _ := os.Pipe()
+	pipeR, pipeW, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
 	f, err := os.Create(filename)
 	if err != nil {
 		return nil, err
@@ -74,5 +81,5 @@ func NewWriter(filename string) (io.WriteCloser, error) {
 		wg.Done()
 	}()
 
-	return WaitingWriteCloser{pipeW, &wg}, nil
+	return waitingWriteCloser{pipeW, &wg}, nil
 }
