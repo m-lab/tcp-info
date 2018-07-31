@@ -4,8 +4,7 @@ services:
   - docker
 
 go:
-   - 1.9.x
-
+   - 1.10.x
 
 ###########################################################################
 before_install:
@@ -43,16 +42,22 @@ install:
 - go get github.com/golang/protobuf/protoc-gen-go/ github.com/golang/protobuf/proto
 
 # Install protobuf compiler
-- wget https://github.com/google/protobuf/releases/download/v3.5.1/protoc-3.5.1-linux-x86_64.zip
-- unzip protoc-3.5.1-linux-x86_64.zip  # Should provide bin/protoc
+- wget https://github.com/google/protobuf/releases/download/v3.6.0/protoc-3.6.0-linux-x86_64.zip
+- unzip protoc-3.6.0-linux-x86_64.zip  # Should provide bin/protoc
+- bin/protoc --version
 
 # Install zstd tool.
 - bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/install)
 
 script:
-# Compile protobufs
+# Compile and compare protobufs
 - cd $TRAVIS_BUILD_DIR/nl-proto
+- mkdir backup
+- cp *.pb.go backup
 - $TRAVIS_BUILD_DIR/bin/protoc --go_out=. *.proto
+- for x in `ls *.pb.go`; do
+    diff $x backup/$x;
+  done
 - cd $TRAVIS_BUILD_DIR
 
 # To start, run all the non-integration tests.
@@ -92,7 +97,7 @@ script:
 - $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
 
 # Docker build
-- docker build --build-arg COMMIT=$TRAVIS_BRANCH -t mlab/tcpinfo .
+#- docker build --build-arg COMMIT=$TRAVIS_BRANCH -t mlab/tcpinfo .
 
 #################################################################################
 # Deployment Section

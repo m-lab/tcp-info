@@ -35,6 +35,7 @@ import (
 	"log"
 	"net"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -156,7 +157,7 @@ func ipv6(original [16]byte) net.IP {
 }
 
 func (id *InetDiagSockID) String() string {
-	return fmt.Sprintf("%s:%d -> %s:%d (%d)", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort(), id.IDiagCookie)
+	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort())
 }
 
 // InetDiagReqV2 is the Netlink request struct, as in linux/inet_diag.h
@@ -227,6 +228,7 @@ func ParseInetDiagMsg(data []byte) (*InetDiagMsg, []byte) {
 
 // ParsedMessage is a container for parsed InetDiag messages and attributes.
 type ParsedMessage struct {
+	Timestamp   time.Time
 	Header      syscall.NlMsghdr
 	InetDiagMsg *InetDiagMsg
 	Attributes  [INET_DIAG_MAX]*syscall.NetlinkRouteAttr
@@ -234,6 +236,7 @@ type ParsedMessage struct {
 
 // Parse parsed the NetlinkMessage into a ParsedMessage.  If skipLocal is true, it will return nil for
 // loopback, local unicast, multicast, and unspecified connections.
+// Note that Parse does not populate the Timestamp field, so caller should do so.
 func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) {
 	if msg.Header.Type != 20 {
 		return nil, ErrNotType20

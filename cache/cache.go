@@ -17,23 +17,23 @@ var (
 // Cache is a cache of all connection status.
 type Cache struct {
 	// Map from inode to ParsedMessage
-	current  map[uint32]*inetdiag.ParsedMessage // Cache of most recent messages.
-	previous map[uint32]*inetdiag.ParsedMessage // Cache of previous round of messages.
+	current  map[uint64]*inetdiag.ParsedMessage // Cache of most recent messages.
+	previous map[uint64]*inetdiag.ParsedMessage // Cache of previous round of messages.
 }
 
 // NewCache creates a cache object with capacity of 1000.
 func NewCache() *Cache {
-	return &Cache{current: make(map[uint32]*inetdiag.ParsedMessage, 1000),
-		previous: make(map[uint32]*inetdiag.ParsedMessage, 0)}
+	return &Cache{current: make(map[uint64]*inetdiag.ParsedMessage, 1000),
+		previous: make(map[uint64]*inetdiag.ParsedMessage, 0)}
 }
 
 // Update swaps msg with the cache contents, and returns the evicted value.
 func (c *Cache) Update(msg *inetdiag.ParsedMessage) *inetdiag.ParsedMessage {
-	inode := msg.InetDiagMsg.IDiagInode
-	c.current[inode] = msg
-	evicted, ok := c.previous[inode]
+	cookie := msg.InetDiagMsg.ID.Cookie()
+	c.current[cookie] = msg
+	evicted, ok := c.previous[cookie]
 	if ok {
-		delete(c.previous, inode)
+		delete(c.previous, cookie)
 	}
 	return evicted
 }
@@ -41,10 +41,10 @@ func (c *Cache) Update(msg *inetdiag.ParsedMessage) *inetdiag.ParsedMessage {
 // EndCycle marks the completion of updates from one set of netlink messages.
 // It returns all messages that did not have corresponding inodes in the most recent
 // batch of messages.
-func (c *Cache) EndCycle() map[uint32]*inetdiag.ParsedMessage {
+func (c *Cache) EndCycle() map[uint64]*inetdiag.ParsedMessage {
 	tmp := c.previous
 	c.previous = c.current
 	// Allocate a bit more than last time, to accommodate new connections.
-	c.current = make(map[uint32]*inetdiag.ParsedMessage, len(c.previous)+len(c.previous)/10+10)
+	c.current = make(map[uint64]*inetdiag.ParsedMessage, len(c.previous)+len(c.previous)/10+10)
 	return tmp
 }

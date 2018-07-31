@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"log"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
@@ -38,7 +39,8 @@ func HeaderToProto(hdr *inetdiag.InetDiagMsg) *tcpinfo.InetDiagMsgProto {
 	dst.Port = uint32(hdr.ID.DPort())
 	dst.Ip = append(dst.Ip, hdr.ID.DstIP()...)
 	p.SockId.Interface = hdr.ID.Interface()
-	p.SockId.Cookie = hdr.ID.Cookie()
+	// Convert to int64, for compatibility with bigquery.
+	p.SockId.Cookie = int64(hdr.ID.Cookie())
 	p.Expires = hdr.IDiagExpires
 	p.Rqueue = hdr.IDiagRqueue
 	p.Wqueue = hdr.IDiagWqueue
@@ -79,7 +81,8 @@ func AttrToField(all *tcpinfo.TCPDiagnosticsProto, rta *syscall.NetlinkRouteAttr
 	// TODO case inetdiag.INET_DIAG_BBRINFO:
 	// TODO case inetdiag.INET_DIAG_VEGASINFO:
 	// TODO case inetdiag.INET_DIAG_SKV6ONLY:
-	// TODO case inetdiag.INET_DIAG_MARK:
+	case inetdiag.INET_DIAG_MARK:
+		// TODO Already seeing this when run as root, so we should process it.
 	// TODO case inetdiag.INET_DIAG_PROTOCOL:
 	//   Used only for multicast messages. Not expected for our use cases.
 	default:
@@ -90,7 +93,7 @@ func AttrToField(all *tcpinfo.TCPDiagnosticsProto, rta *syscall.NetlinkRouteAttr
 
 // CreateProto creates a fully populated TCPDiagnosticsProto from the parsed elements of a type 20 netlink message.
 // This assumes the netlink message is type 20, and behavior is undefined if it is not.
-func CreateProto(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*syscall.NetlinkRouteAttr) *tcpinfo.TCPDiagnosticsProto {
+func CreateProto(time time.Time, header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*syscall.NetlinkRouteAttr) *tcpinfo.TCPDiagnosticsProto {
 	all := tcpinfo.TCPDiagnosticsProto{}
 	all.InetDiagMsg = HeaderToProto(idm)
 	for i := range attrs {
@@ -99,6 +102,7 @@ func CreateProto(header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*sy
 		}
 	}
 
+	all.Timestamp = time.UnixNano()
 	return &all
 }
 
@@ -224,8 +228,8 @@ func (tcp *LinuxTCPInfo) ToProto() *tcpinfo.TCPInfoProto {
 
 	p.PacingRate = tcp.pacingRate
 	p.MaxPacingRate = tcp.maxPacingRate
-	p.BytesAcked = tcp.bytesAcked
-	p.BytesReceived = tcp.bytesReceived
+	p.BytesAcked = int64(tcp.bytesAcked)
+	p.BytesReceived = int64(tcp.bytesReceived)
 
 	p.SegsOut = tcp.segsOut
 	p.SegsIn = tcp.segsIn
@@ -235,7 +239,7 @@ func (tcp *LinuxTCPInfo) ToProto() *tcpinfo.TCPInfoProto {
 	p.DataSegsIn = tcp.dataSegsIn
 	p.DataSegsOut = tcp.dataSegsOut
 
-	p.DeliveryRate = tcp.deliveryRate
+	p.DeliveryRate = int64(tcp.deliveryRate)
 
 	return &p
 }
@@ -245,6 +249,18 @@ const (
 	LastDataSentOffset = unsafe.Offsetof(LinuxTCPInfo{}.lastDataSent)
 	PmtuOffset         = unsafe.Offsetof(LinuxTCPInfo{}.pmtu)
 )
+
+// MaybeCopy checks whether the src is the full size of the intended struct size.
+// If so, it just returns the pointer, otherwise it copies the content to an
+// appropriately sized new byte slice, and returns pointer to that.
+func MaybeCopy(src []byte, size int) unsafe.Pointer {
+	if len(src) < size {
+		data := make([]byte, size)
+		copy(data, src)
+		return unsafe.Pointer(&data[0])
+	}
+	return unsafe.Pointer(&src[0])
+}
 
 // ParseLinuxTCPInfo maps the rta Value onto a TCPInfo struct.  It may have to copy the
 // bytes.
@@ -264,22 +280,16 @@ func ParseLinuxTCPInfo(rta *syscall.NetlinkRouteAttr) *LinuxTCPInfo {
 // Since this struct is very simple, it can be mapped directly, instead of using an
 // intermediate struct.
 func ParseSockMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.SocketMemInfoProto {
-	if len(rta.Value) != 36 {
-		log.Println(len(rta.Value))
-		return nil
-	}
-	return (*tcpinfo.SocketMemInfoProto)(unsafe.Pointer(&rta.Value[0]))
+	structSize := (int)(unsafe.Sizeof(tcpinfo.SocketMemInfoProto{}))
+	return (*tcpinfo.SocketMemInfoProto)(MaybeCopy(rta.Value, structSize))
 }
 
 // ParseMemInfo maps the rta Value onto a MemInfoProto.
 // Since this struct is very simple, it can be mapped directly, instead of using an
 // intermediate struct.
 func ParseMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.MemInfoProto {
-	if len(rta.Value) != 16 {
-		log.Println(len(rta.Value))
-		return nil
-	}
-	return (*tcpinfo.MemInfoProto)(unsafe.Pointer(&rta.Value[0]))
+	structSize := (int)(unsafe.Sizeof(tcpinfo.MemInfoProto{}))
+	return (*tcpinfo.MemInfoProto)(MaybeCopy(rta.Value, structSize))
 }
 
 // ChangeType indicates why a new record is worthwhile saving.

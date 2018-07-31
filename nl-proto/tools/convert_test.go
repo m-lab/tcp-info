@@ -8,6 +8,7 @@ import (
 	"log"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/go-test/deep"
 	"github.com/m-lab/tcp-info/inetdiag"
@@ -49,7 +50,7 @@ func convertToProto(msg *syscall.NetlinkMessage, t *testing.T) *tcpinfo.TCPDiagn
 	if err != nil {
 		t.Fatal(err)
 	}
-	return tools.CreateProto(msg.Header, parsedMsg.InetDiagMsg, parsedMsg.Attributes[:])
+	return tools.CreateProto(time.Now(), msg.Header, parsedMsg.InetDiagMsg, parsedMsg.Attributes[:])
 }
 
 func TestReader(t *testing.T) {
