@@ -1,6 +1,6 @@
 FROM ubuntu as zstd-builder
 
-RUN apt-get update && apk --no-cache add make gcc libc-dev git
+RUN apt-get update && apt-get update -y && apt-get install -y make gcc libc-dev git
 
 RUN git clone https://github.com/facebook/zstd src
 
