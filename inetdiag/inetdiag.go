@@ -195,7 +195,7 @@ func NewInetDiagReqV2(family, protocol uint8, states uint32) *InetDiagReqV2 {
 	}
 }
 
-// InetDiagMsg is the linux binary representation of a InetDiag message header, as in linus/inet_diag.h
+// InetDiagMsg is the linux binary representation of a InetDiag message header, as in linux/inet_diag.h
 // Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
 type InetDiagMsg struct {
 	IDiagFamily  uint8
@@ -234,7 +234,7 @@ type ParsedMessage struct {
 	Attributes  [INET_DIAG_MAX]*syscall.NetlinkRouteAttr
 }
 
-// Parse parsed the NetlinkMessage into a ParsedMessage.  If skipLocal is true, it will return nil for
+// Parse parses the NetlinkMessage into a ParsedMessage.  If skipLocal is true, it will return nil for
 // loopback, local unicast, multicast, and unspecified connections.
 // Note that Parse does not populate the Timestamp field, so caller should do so.
 func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) {
