@@ -16,15 +16,18 @@ import (
 	"syscall"
 	"time"
 
+	_ "net/http/pprof"
+
 	"github.com/golang/protobuf/proto"
+	"github.com/mdlayher/netlink"
+	"golang.org/x/sys/unix"
+
 	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/inetdiag"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/nl-proto/tools"
 	"github.com/m-lab/tcp-info/saver"
 	"github.com/m-lab/tcp-info/zstd"
-	"github.com/mdlayher/netlink"
-	"golang.org/x/sys/unix"
 )
 
 /*
@@ -235,12 +238,14 @@ func main() {
 		log.Println(len(m), m)
 	}
 
-	prof, err := os.Create("profile")
-	if err != nil {
-		log.Fatal(err)
+	if false {
+		prof, err := os.Create("profile")
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(prof)
+		defer pprof.StopCPUProfile()
 	}
-	pprof.StartCPUProfile(prof)
-	defer pprof.StopCPUProfile()
 
 	if *enableTrace {
 		traceFile, err := os.Create("trace")
