@@ -87,10 +87,12 @@ done:
 			m := &msgs[i]
 			if m.Header.Seq != req.Seq {
 				log.Printf("Wrong Seq nr %d, expected %d", m.Header.Seq, req.Seq)
+				metrics.ErrorCount.With(prometheus.Labels{"source": "wrong seq num"}).Inc()
 				return nil
 			}
 			if m.Header.Pid != pid {
 				log.Printf("Wrong pid %d, expected %d", m.Header.Pid, pid)
+				metrics.ErrorCount.With(prometheus.Labels{"source": "wrong pid"}).Inc()
 				return nil
 			}
 			if m.Header.Type == unix.NLMSG_DONE {
@@ -103,7 +105,7 @@ done:
 					break done
 				}
 				log.Println(syscall.Errno(-error))
-				return nil
+				metrics.ErrorCount.With(prometheus.Labels{"source": "NLMSG_ERROR"}).Inc()
 			}
 			//	if resType != 0 && m.Header.Type != resType {
 			//		continue
@@ -117,11 +119,14 @@ done:
 
 	switch inetType {
 	case syscall.AF_INET:
-		metrics.FetchTimeSummary.With(prometheus.Labels{"af": "ipv4"}).Observe(float64(time.Since(start).Nanoseconds()))
+		metrics.FetchTimeMsecSummary.With(prometheus.Labels{"af": "ipv4"}).Observe(1000 * time.Since(start).Seconds())
+		metrics.ConnectionCountSummary.With(prometheus.Labels{"af": "ipv4"}).Observe(float64(len(res)))
 	case syscall.AF_INET6:
-		metrics.FetchTimeSummary.With(prometheus.Labels{"af": "ipv6"}).Observe(float64(time.Since(start).Nanoseconds()))
+		metrics.FetchTimeMsecSummary.With(prometheus.Labels{"af": "ipv6"}).Observe(1000 * time.Since(start).Seconds())
+		metrics.ConnectionCountSummary.With(prometheus.Labels{"af": "ipv6"}).Observe(float64(len(res)))
 	default:
-		metrics.FetchTimeSummary.With(prometheus.Labels{"af": "unknown"}).Observe(float64(time.Since(start).Nanoseconds()))
+		metrics.FetchTimeMsecSummary.With(prometheus.Labels{"af": "unknown"}).Observe(1000 * time.Since(start).Seconds())
+		metrics.ConnectionCountSummary.With(prometheus.Labels{"af": "unknown"}).Observe(float64(len(res)))
 	}
 
 	return res

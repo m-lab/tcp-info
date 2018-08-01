@@ -8,8 +8,12 @@
 package metrics
 
 import (
+	"flag"
+	"fmt"
+	"log"
 	"math"
 	"net/http"
+	"net/http/pprof"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -19,10 +23,33 @@ func init() {
 	SetupPrometheus()
 }
 
-func SetupPrometheus() {
-	http.Handle("/metrics", promhttp.Handler())
+var (
+	promPort = flag.Int("prom", 9090, "Prometheus metrics export port")
+)
 
-	prometheus.MustRegister(FetchTimeSummary)
+func SetupPrometheus() {
+	if *promPort <= 0 {
+		log.Println("Not exporting prometheus metrics")
+		return
+	}
+
+	// Define a custom serve mux for prometheus to listen on a separate port.
+	// We listen on a separate port so we can forward this port on the host VM.
+	// We cannot forward port 8080 because it is used by AppEngine.
+	mux := http.NewServeMux()
+	// Assign the default prometheus handler to the standard exporter path.
+	mux.Handle("/metrics", promhttp.Handler())
+	// Assign the pprof handling paths to the external port to access individual
+	// instances.
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	prometheus.MustRegister(FetchTimeMsecSummary)
+	prometheus.MustRegister(ConnectionCountSummary)
+	prometheus.MustRegister(CacheSizeSummary)
 
 	prometheus.MustRegister(EntryFieldCountHistogram)
 	prometheus.MustRegister(FileSizeHistogram)
@@ -32,17 +59,34 @@ func SetupPrometheus() {
 	prometheus.MustRegister(FileCount)
 	prometheus.MustRegister(ErrorCount)
 	prometheus.MustRegister(WarningCount)
+
+	if !flag.Parsed() {
+		flag.Parse() // Ensure that flags are parsed.
+	}
+	port := fmt.Sprintf(":%d", *promPort)
+	log.Println("Exporting prometheus metrics on", port)
+	go http.ListenAndServe(port, mux)
 }
 
 var (
-	// FetchTimeSummary measures the latency to fetch tcp-info records from kernel.
+	// FetchTimeMsecSummary measures the latency (in msec) to fetch tcp-info records from kernel.
 	// Provides metrics:
-	//    tcpinfo_Fetch_Time_Summary
+	//    tcpinfo_Fetch_Time_Msec_Summary
 	// Example usage:
-	//    metrics.FetchTimeSummary.With(prometheus.Labels{"af": "ipv6"}).observe(float64)
-	FetchTimeSummary = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-		Name: "tcpinfo__Fetch_Time_Summary",
-		Help: "The total time to fetch tcp-info records, in nanoseconds.",
+	//    metrics.FetchTimeMsecSummary.With(prometheus.Labels{"af": "ipv6"}).observe(float64)
+	FetchTimeMsecSummary = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "tcpinfo_Fetch_Time_Msec_Summary",
+		Help: "The total time to fetch tcp-info records, in milliseconds.",
+	}, []string{"af"})
+
+	// ConnectionCountSummary the (total) number of TCP connections collected, by type.
+	// Provides metrics:
+	//    tcpinfo_Connection_Count_Summary
+	// Example usage:
+	//    metrics.ConnectionCountSummary.With(prometheus.Labels{"af": "ipv6"}).observe(float64)
+	ConnectionCountSummary = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "tcpinfo_Connection_Count_Summary",
+		Help: "The (total) number of TCP connections collected, by type.",
 	}, []string{"af"})
 
 	// CacheSizeSummary measures the size of the connection cache.

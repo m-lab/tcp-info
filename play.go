@@ -211,7 +211,10 @@ var (
 var rawOut io.WriteCloser
 
 func main() {
-	flag.Parse()
+	if !flag.Parsed() {
+		flag.Parse()
+	}
+
 	// TODO ? tcp.LOG = *verbose || *reps == 1
 
 	if *rawFile != "" {
