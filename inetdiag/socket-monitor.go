@@ -11,10 +11,13 @@ import "C"
 import (
 	"log"
 	"syscall"
+	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink/nl"
 	"golang.org/x/sys/unix"
 
+	"github.com/m-lab/tcp-info/metrics"
 	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 )
 
@@ -46,6 +49,7 @@ func makeReq(inetType uint8) *nl.NetlinkRequest {
 // OneType handles the request and response for a single type, e.g. INET or INET6
 // TODO maybe move this to top level?
 func OneType(inetType uint8) []*syscall.NetlinkMessage {
+	start := time.Now()
 	req := makeReq(inetType)
 
 	// Copied this from req.Execute in nl_linux.go
@@ -79,7 +83,7 @@ done:
 			return nil
 		}
 		// TODO avoid the copy.
-		for i, _ := range msgs {
+		for i := range msgs {
 			m := &msgs[i]
 			if m.Header.Seq != req.Seq {
 				log.Printf("Wrong Seq nr %d, expected %d", m.Header.Seq, req.Seq)
@@ -109,6 +113,15 @@ done:
 				break done
 			}
 		}
+	}
+
+	switch inetType {
+	case syscall.AF_INET:
+		metrics.FetchTimeSummary.With(prometheus.Labels{"af": "ipv4"}).Observe(float64(time.Since(start).Nanoseconds()))
+	case syscall.AF_INET6:
+		metrics.FetchTimeSummary.With(prometheus.Labels{"af": "ipv6"}).Observe(float64(time.Since(start).Nanoseconds()))
+	default:
+		metrics.FetchTimeSummary.With(prometheus.Labels{"af": "unknown"}).Observe(float64(time.Since(start).Nanoseconds()))
 	}
 
 	return res
