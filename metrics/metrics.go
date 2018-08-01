@@ -8,7 +8,6 @@
 package metrics
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"math"
@@ -19,16 +18,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func init() {
-	SetupPrometheus()
-}
-
-var (
-	promPort = flag.Int("prom", 9090, "Prometheus metrics export port")
-)
-
-func SetupPrometheus() {
-	if *promPort <= 0 {
+func SetupPrometheus(promPort int) {
+	if promPort <= 0 {
 		log.Println("Not exporting prometheus metrics")
 		return
 	}
@@ -60,10 +51,7 @@ func SetupPrometheus() {
 	prometheus.MustRegister(ErrorCount)
 	prometheus.MustRegister(WarningCount)
 
-	if !flag.Parsed() {
-		flag.Parse() // Ensure that flags are parsed.
-	}
-	port := fmt.Sprintf(":%d", *promPort)
+	port := fmt.Sprintf(":%d", promPort)
 	log.Println("Exporting prometheus metrics on", port)
 	go http.ListenAndServe(port, mux)
 }

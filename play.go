@@ -24,6 +24,7 @@ import (
 
 	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/inetdiag"
+	"github.com/m-lab/tcp-info/metrics"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/nl-proto/tools"
 	"github.com/m-lab/tcp-info/saver"
@@ -206,6 +207,7 @@ var (
 	enableTrace = flag.Bool("trace", false, "Enable trace")
 	rawFile     = flag.String("raw", "", "File to write raw records to")
 	source      = flag.String("source", "", "Source to read (uncompressed) NetlinkMessage records")
+	promPort    = flag.Int("prom", 9090, "Prometheus metrics export port")
 )
 
 var rawOut io.WriteCloser
@@ -214,6 +216,8 @@ func main() {
 	if !flag.Parsed() {
 		flag.Parse()
 	}
+
+	metrics.SetupPrometheus(*promPort)
 
 	// TODO ? tcp.LOG = *verbose || *reps == 1
 
