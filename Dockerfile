@@ -36,5 +36,8 @@ COPY --from=go-builder /go/bin /usr/local/bin
 
 EXPOSE 9090 8080
 
+# TODO - Make the destination directory flag controlled.
+# Probably should default to /data
 WORKDIR /home
-CMD tcp-info
+
+ENTRYPOINT ["/usr/local/bin/tcp-info"]
