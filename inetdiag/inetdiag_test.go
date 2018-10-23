@@ -38,6 +38,9 @@ func TestParseInetDiagMsg(t *testing.T) {
 		data[i] = byte(i + 2)
 	}
 	hdr, value := inetdiag.ParseInetDiagMsg(data[:])
+	if hdr.ID.Interface() == 0 || hdr.ID.Cookie() == 0 || hdr.ID.DPort() == 0 || hdr.ID.String() == "" {
+		t.Errorf("None of the accessed values should be zero")
+	}
 	if hdr.IDiagFamily != syscall.AF_INET {
 		t.Errorf("Failed %+v\n", hdr)
 	}
@@ -47,6 +50,11 @@ func TestParseInetDiagMsg(t *testing.T) {
 
 	if len(value) != 28 {
 		t.Error("Len", len(value))
+	}
+
+	hdr, value = inetdiag.ParseInetDiagMsg(data[:1])
+	if hdr != nil || value != nil {
+		t.Error("This should fail, the data is too small.")
 	}
 }
 
@@ -79,7 +87,10 @@ func TestID4(t *testing.T) {
 
 	hdr, _ := inetdiag.ParseInetDiagMsg(data[:])
 	if !hdr.ID.SrcIP().IsLoopback() {
-		log.Println(hdr.ID.SrcIP().IsLoopback())
+		t.Errorf("Should be loopback but isn't")
+	}
+	if hdr.ID.DstIP().IsLoopback() {
+		t.Errorf("Shouldn't be loopback but is")
 	}
 	if hdr.ID.SPort() != 0x3412 {
 		t.Errorf("SPort should be 0x3412 %+v\n", hdr.ID)
@@ -135,6 +146,9 @@ func TestParse(t *testing.T) {
 	if len(mp.Attributes) != inetdiag.INET_DIAG_MAX {
 		t.Error("Should be", inetdiag.INET_DIAG_MAX, "attribute entries")
 	}
+	if mp.InetDiagMsg.String() == "" {
+		t.Error("Empty string made from InetDiagMsg")
+	}
 
 	nonNil := 0
 	for i := range mp.Attributes {
@@ -149,6 +163,8 @@ func TestParse(t *testing.T) {
 	if mp.Attributes[inetdiag.INET_DIAG_INFO] == nil {
 		t.Error("Should not be nil")
 	}
+
+	// TODO: verify that skiplocal actually skips a message when src or dst is 127.0.0.1
 }
 
 func TestParseGarbage(t *testing.T) {
@@ -159,6 +175,15 @@ func TestParseGarbage(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Truncate the data down to something that makes no sense.
+	badNm := nm
+	badNm.Data = badNm.Data[:1]
+	_, err = inetdiag.Parse(&badNm, true)
+	if err == nil {
+		t.Error("The parse should have failed")
+	}
+
 	// Replace the header type with one that we don't support.
 	nm.Header.Type = 10
 	_, err = inetdiag.Parse(&nm, false)
@@ -186,3 +211,23 @@ func TestParseGarbage(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestOneType(t *testing.T) {
+	res4, err := inetdiag.OneType(syscall.AF_INET)
+	if err != nil {
+		t.Error(err)
+	}
+	res6, err := inetdiag.OneType(syscall.AF_INET6)
+	if err != nil {
+		t.Error(err)
+	}
+	resUnix, err := inetdiag.OneType(syscall.AF_UNIX)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(res4) == 0 && len(res6) == 0 && len(resUnix) == 0 {
+		t.Error("There are never no active streams.")
+	}
+}
+
+// TODO: add whitebox testing of socket-monitor to exercise error handling.

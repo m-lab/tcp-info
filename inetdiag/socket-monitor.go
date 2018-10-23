@@ -9,6 +9,7 @@ import "C"
 */
 
 import (
+	"errors"
 	"log"
 	"syscall"
 	"time"
@@ -22,6 +23,11 @@ import (
 )
 
 const TCPF_ALL = 0xFFF
+
+var (
+	errBadPid      = errors.New("Bad PID. Can't listen to NL socket.")
+	errBadSequence = errors.New("Bad sequence number. Can't interpret NetLink response.")
+)
 
 func makeReq(inetType uint8) *nl.NetlinkRequest {
 	req := nl.NewNetlinkRequest(SOCK_DIAG_BY_FAMILY, syscall.NLM_F_DUMP|syscall.NLM_F_REQUEST)
@@ -46,10 +52,53 @@ func makeReq(inetType uint8) *nl.NetlinkRequest {
 	return req
 }
 
+func processSingleMessage(m *syscall.NetlinkMessage, seq uint32, pid uint32) (*syscall.NetlinkMessage, bool, error) {
+	if m.Header.Seq != seq {
+		log.Printf("Wrong Seq nr %d, expected %d", m.Header.Seq, seq)
+		metrics.ErrorCount.With(prometheus.Labels{"source": "wrong seq num"}).Inc()
+		return nil, false, errBadSequence
+	}
+	if m.Header.Pid != pid {
+		log.Printf("Wrong pid %d, expected %d", m.Header.Pid, pid)
+		metrics.ErrorCount.With(prometheus.Labels{"source": "wrong pid"}).Inc()
+		return nil, false, errBadPid
+	}
+	if m.Header.Type == unix.NLMSG_DONE {
+		return nil, false, nil
+	}
+	if m.Header.Type == unix.NLMSG_ERROR {
+		native := nl.NativeEndian()
+		error := int32(native.Uint32(m.Data[0:4]))
+		if error == 0 {
+			return nil, false, nil
+		}
+		log.Println(syscall.Errno(-error))
+		metrics.ErrorCount.With(prometheus.Labels{"source": "NLMSG_ERROR"}).Inc()
+	}
+	if m.Header.Flags&unix.NLM_F_MULTI == 0 {
+		return m, false, nil
+	}
+	return m, true, nil
+}
+
 // OneType handles the request and response for a single type, e.g. INET or INET6
 // TODO maybe move this to top level?
-func OneType(inetType uint8) []*syscall.NetlinkMessage {
+func OneType(inetType uint8) ([]*syscall.NetlinkMessage, error) {
+	var res []*syscall.NetlinkMessage
+
 	start := time.Now()
+	defer func() {
+		af := "unknown"
+		switch inetType {
+		case syscall.AF_INET:
+			af = "ipv4"
+		case syscall.AF_INET6:
+			af = "ipv6"
+		}
+		metrics.FetchTimeMsecSummary.With(prometheus.Labels{"af": af}).Observe(1000 * time.Since(start).Seconds())
+		metrics.ConnectionCountSummary.With(prometheus.Labels{"af": af}).Observe(float64(len(res)))
+	}()
+
 	req := makeReq(inetType)
 
 	// Copied this from req.Execute in nl_linux.go
@@ -57,77 +106,43 @@ func OneType(inetType uint8) []*syscall.NetlinkMessage {
 	s, err := nl.Subscribe(sockType)
 	if err != nil {
 		log.Println(err)
-		return nil
+		return nil, err
 	}
 	defer s.Close()
 
 	if err := s.Send(req); err != nil {
 		log.Println(err)
-		return nil
+		return nil, err
 	}
 
 	pid, err := s.GetPid()
 	if err != nil {
 		log.Println(err)
-		return nil
+		return nil, err
 	}
 
-	var res []*syscall.NetlinkMessage
-
-done:
 	// Adapted this from req.Execute in nl_linux.go
 	for {
 		msgs, err := s.Receive()
 		if err != nil {
 			log.Println(err)
-			return nil
+			return nil, err
 		}
 		// TODO avoid the copy.
 		for i := range msgs {
-			m := &msgs[i]
-			if m.Header.Seq != req.Seq {
-				log.Printf("Wrong Seq nr %d, expected %d", m.Header.Seq, req.Seq)
-				metrics.ErrorCount.With(prometheus.Labels{"source": "wrong seq num"}).Inc()
-				return nil
+			m, shouldContinue, err := processSingleMessage(&msgs[i], req.Seq, pid)
+			if m != nil {
+				res = append(res, m)
 			}
-			if m.Header.Pid != pid {
-				log.Printf("Wrong pid %d, expected %d", m.Header.Pid, pid)
-				metrics.ErrorCount.With(prometheus.Labels{"source": "wrong pid"}).Inc()
-				return nil
+			if err != nil {
+				return res, err
 			}
-			if m.Header.Type == unix.NLMSG_DONE {
-				break done
-			}
-			if m.Header.Type == unix.NLMSG_ERROR {
-				native := nl.NativeEndian()
-				error := int32(native.Uint32(m.Data[0:4]))
-				if error == 0 {
-					break done
-				}
-				log.Println(syscall.Errno(-error))
-				metrics.ErrorCount.With(prometheus.Labels{"source": "NLMSG_ERROR"}).Inc()
+			if !shouldContinue {
+				return res, nil
 			}
 			//	if resType != 0 && m.Header.Type != resType {
 			//		continue
 			//	}
-			res = append(res, m)
-			if m.Header.Flags&unix.NLM_F_MULTI == 0 {
-				break done
-			}
 		}
 	}
-
-	switch inetType {
-	case syscall.AF_INET:
-		metrics.FetchTimeMsecSummary.With(prometheus.Labels{"af": "ipv4"}).Observe(1000 * time.Since(start).Seconds())
-		metrics.ConnectionCountSummary.With(prometheus.Labels{"af": "ipv4"}).Observe(float64(len(res)))
-	case syscall.AF_INET6:
-		metrics.FetchTimeMsecSummary.With(prometheus.Labels{"af": "ipv6"}).Observe(1000 * time.Since(start).Seconds())
-		metrics.ConnectionCountSummary.With(prometheus.Labels{"af": "ipv6"}).Observe(float64(len(res)))
-	default:
-		metrics.FetchTimeMsecSummary.With(prometheus.Labels{"af": "unknown"}).Observe(1000 * time.Since(start).Seconds())
-		metrics.ConnectionCountSummary.With(prometheus.Labels{"af": "unknown"}).Observe(float64(len(res)))
-	}
-
-	return res
 }
