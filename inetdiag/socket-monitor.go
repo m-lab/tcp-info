@@ -25,8 +25,11 @@ import (
 const TCPF_ALL = 0xFFF
 
 var (
-	errBadPid      = errors.New("Bad PID. Can't listen to NL socket.")
-	errBadSequence = errors.New("Bad sequence number. Can't interpret NetLink response.")
+	// ErrBadPid is used when the PID is mismatched between the netlink socket and the calling process.
+	ErrBadPid = errors.New("bad PID, can't listen to NL socket")
+
+	// ErrBadSequence is used when the Netlink response has a bad sequence number.
+	ErrBadSequence = errors.New("bad sequence number, can't interpret NetLink response")
 )
 
 func makeReq(inetType uint8) *nl.NetlinkRequest {
@@ -56,12 +59,12 @@ func processSingleMessage(m *syscall.NetlinkMessage, seq uint32, pid uint32) (*s
 	if m.Header.Seq != seq {
 		log.Printf("Wrong Seq nr %d, expected %d", m.Header.Seq, seq)
 		metrics.ErrorCount.With(prometheus.Labels{"source": "wrong seq num"}).Inc()
-		return nil, false, errBadSequence
+		return nil, false, ErrBadSequence
 	}
 	if m.Header.Pid != pid {
 		log.Printf("Wrong pid %d, expected %d", m.Header.Pid, pid)
 		metrics.ErrorCount.With(prometheus.Labels{"source": "wrong pid"}).Inc()
-		return nil, false, errBadPid
+		return nil, false, ErrBadPid
 	}
 	if m.Header.Type == unix.NLMSG_DONE {
 		return nil, false, nil
@@ -131,11 +134,11 @@ func OneType(inetType uint8) ([]*syscall.NetlinkMessage, error) {
 		// TODO avoid the copy.
 		for i := range msgs {
 			m, shouldContinue, err := processSingleMessage(&msgs[i], req.Seq, pid)
-			if m != nil {
-				res = append(res, m)
-			}
 			if err != nil {
 				return res, err
+			}
+			if m != nil {
+				res = append(res, m)
 			}
 			if !shouldContinue {
 				return res, nil

@@ -2,7 +2,11 @@ package inetdiag_test
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"log"
+	"net"
+	"os"
+	"sync"
 	"syscall"
 	"testing"
 	"unsafe"
@@ -213,20 +217,52 @@ func TestParseGarbage(t *testing.T) {
 }
 
 func TestOneType(t *testing.T) {
-	res4, err := inetdiag.OneType(syscall.AF_INET)
+	// Open an AF_LOCAL socket connection.
+	// Get a safe name for the AF_LOCAL socket
+	f, err := ioutil.TempFile("", "TestOneType")
 	if err != nil {
 		t.Error(err)
 	}
-	res6, err := inetdiag.OneType(syscall.AF_INET6)
+	name := f.Name()
+	os.Remove(name)
+
+	// Open a listening UNIX socket at that mostly-safe name.
+	l, err := net.Listen("unix", name)
 	if err != nil {
 		t.Error(err)
 	}
-	resUnix, err := inetdiag.OneType(syscall.AF_UNIX)
+	defer l.Close()
+
+	// Unblock all goroutines when the function exits.
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	defer wg.Done()
+
+	// Start a client connection in a goroutine.
+	go func() {
+		c, err := net.Dial("unix", name)
+		if err != nil {
+			t.Error(err)
+		}
+		c.Write([]byte("hi"))
+		wg.Wait()
+		c.Close()
+	}()
+
+	// Accept the client connection.
+	fd, err := l.Accept()
 	if err != nil {
 		t.Error(err)
 	}
-	if len(res4) == 0 && len(res6) == 0 && len(resUnix) == 0 {
-		t.Error("There are never no active streams.")
+	defer fd.Close()
+
+	// Verify that OneType(AF_LOCAL) finds at least one connection.
+	res, err := inetdiag.OneType(syscall.AF_LOCAL)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(res) == 0 {
+		t.Error("We have at least one active stream open right now.")
 	}
 }
 
