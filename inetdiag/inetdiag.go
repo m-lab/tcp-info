@@ -234,6 +234,10 @@ type ParsedMessage struct {
 	Attributes  [INET_DIAG_MAX]*syscall.NetlinkRouteAttr
 }
 
+func isLocal(addr net.IP) bool {
+	return addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsMulticast() || addr.IsUnspecified()
+}
+
 // Parse parses the NetlinkMessage into a ParsedMessage.  If skipLocal is true, it will return nil for
 // loopback, local unicast, multicast, and unspecified connections.
 // Note that Parse does not populate the Timestamp field, so caller should do so.
@@ -246,12 +250,7 @@ func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) 
 		return nil, ErrParseFailed
 	}
 	if skipLocal {
-		srcIP := idm.ID.SrcIP()
-		if srcIP.IsLoopback() || srcIP.IsLinkLocalUnicast() || srcIP.IsMulticast() || srcIP.IsUnspecified() {
-			return nil, nil
-		}
-		dstIP := idm.ID.DstIP()
-		if dstIP.IsLoopback() || dstIP.IsLinkLocalUnicast() || dstIP.IsMulticast() || dstIP.IsUnspecified() {
+		if isLocal(idm.ID.SrcIP()) || isLocal(idm.ID.DstIP()) {
 			return nil, nil
 		}
 	}

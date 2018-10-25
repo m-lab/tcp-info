@@ -157,7 +157,7 @@ func ParseAndQueue(cache *cache.Cache, msg *syscall.NetlinkMessage, queue bool) 
 func Demo(cache *cache.Cache, svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 	all := make([]*inetdiag.ParsedMessage, 0, 500)
 	remoteCount := 0
-	res6 := inetdiag.OneType(syscall.AF_INET6)
+	res6, _ := inetdiag.OneType(syscall.AF_INET6) // Ignoring errors in Demo code
 	ts := time.Now()
 	for i := range res6 {
 		pm := ParseAndQueue(cache, res6[i], false)
@@ -167,7 +167,7 @@ func Demo(cache *cache.Cache, svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 		}
 	}
 
-	res4 := inetdiag.OneType(syscall.AF_INET)
+	res4, _ := inetdiag.OneType(syscall.AF_INET) // Ignoring errors in Demo code
 	ts = time.Now()
 	for i := range res4 {
 		pm := ParseAndQueue(cache, res4[i], false)
