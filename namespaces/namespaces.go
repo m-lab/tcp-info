@@ -10,8 +10,15 @@ import (
 	"time"
 )
 
+// ErrCantReadProc is the error returned when the /proc filesystem is, for
+// whatever reason, currently unreadable.
 var ErrCantReadProc = errors.New("Can't read /proc")
 
+// WatchForNetworkNamespaces repeatedly polls the /proc filesystem to discover
+// all known network namespaces. We would prefer that this polling loop actually
+// be a thing with a notifier, but it appears that polling truly is the state of
+// the art here. Any system which uses this will need to filter the incoming
+// firehose, as many namespaces will be reported multiple times.
 func WatchForNetworkNamespaces(ctx context.Context, procfs string, nsChan chan<- string) error {
 	keepGoing := true
 	go func() {
@@ -25,6 +32,7 @@ func WatchForNetworkNamespaces(ctx context.Context, procfs string, nsChan chan<-
 		if err != nil {
 			return err
 		}
+		// Listen for new network namespaces 100 times per second.
 		time.Sleep(10 * time.Millisecond)
 	}
 	return nil
