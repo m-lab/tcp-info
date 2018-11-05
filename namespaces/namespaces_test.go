@@ -39,7 +39,7 @@ func makeFakeProc(prefix string) string {
 func TestListForeverCancelWorks(t *testing.T) {
 	fakeProc := makeFakeProc("TestListForeverCancelWorks")
 	log.Println(fakeProc)
-	//defer os.RemoveAll(fakeProc)
+	defer os.RemoveAll(fakeProc)
 
 	nsChan := make(chan string)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
