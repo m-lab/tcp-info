@@ -10,7 +10,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"runtime/pprof"
 	"runtime/trace"
 	"sync"
 	"syscall"
@@ -19,8 +18,6 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/mdlayher/netlink"
-	"golang.org/x/sys/unix"
 
 	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/inetdiag"
@@ -79,13 +76,6 @@ func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.W
 			break
 		}
 		p := tools.CreateProto(msg.Timestamp, msg.Header, msg.InetDiagMsg, msg.Attributes[:])
-		if false {
-			log.Printf("%+v\n", p.InetDiagMsg)
-			log.Printf("%+v\n", p.TcpInfo)
-			log.Printf("%+v\n", p.SocketMem)
-			log.Printf("%+v\n", p.MemInfo)
-			log.Printf("%+v\n", p.CongestionAlgorithm)
-		}
 		m, err := proto.Marshal(p)
 		if err != nil {
 			log.Println(err)
@@ -117,6 +107,8 @@ var localCount = 0
 var newCount = 0
 var diffCount = 0
 
+// Stats prints out some basic cache stats.
+// TODO - should also export all of these as Prometheus metrics.  (Issue #32)
 func Stats() {
 	log.Printf("Cache info total %d  local %d same %d diff %d new %d err %d\n",
 		totalCount, localCount,
@@ -213,13 +205,9 @@ var (
 var rawOut io.WriteCloser
 
 func main() {
-	if !flag.Parsed() {
-		flag.Parse()
-	}
+	// TODO - use flagx.ArgsFromEnv
 
 	metrics.SetupPrometheus(*promPort)
-
-	// TODO ? tcp.LOG = *verbose || *reps == 1
 
 	if *rawFile != "" {
 		log.Println("Raw output to", *rawFile)
@@ -243,15 +231,6 @@ func main() {
 		log.Println(err)
 	} else {
 		log.Println(len(m), m)
-	}
-
-	if false {
-		prof, err := os.Create("profile")
-		if err != nil {
-			log.Fatal(err)
-		}
-		pprof.StartCPUProfile(prof)
-		defer pprof.StopCPUProfile()
 	}
 
 	if *enableTrace {
@@ -287,15 +266,19 @@ func main() {
 		Stats()
 	} else {
 		totalCount := 0
-		remote := 0
+		remoteCount := 0
 		loops := 0
 		svr := saver.NewSaver("host", "pod", 3)
-		svrChan := svr.RunSaverLoop()
-		for *reps == 0 || loops < *reps {
-			loops++
-			a, b := Demo(msgCache, svrChan)
-			totalCount += a
-			remote += b
+
+		// Construct message channel, buffering up to 2 batches of messages without stalling producer.
+		// We may want to increase this if we observe main() stalling.
+		svrChan := make(chan []*inetdiag.ParsedMessage, 2)
+		go svr.MessageSaverLoop(svrChan)
+
+		for loops = 0; *reps == 0 || loops < *reps; loops++ {
+			total, remote := Demo(msgCache, svrChan)
+			totalCount += total
+			remoteCount += remote
 			if loops%10000 == 0 {
 				Stats()
 				svr.Stats()
@@ -305,7 +288,7 @@ func main() {
 		svr.Done.Wait()
 		Stats()
 		if loops > 0 {
-			log.Println(totalCount, "sockets", remote, "remotes", totalCount/loops, "per iteration")
+			log.Println(totalCount, "sockets", remoteCount, "remotes", totalCount/loops, "per iteration")
 		}
 	}
 
@@ -313,113 +296,4 @@ func main() {
 	CloseAll()
 	wg.Wait()
 
-}
-
-func otherStuff() {
-	// OTHER STUFF
-	fd, err := unix.Socket(
-		// Always used when opening netlink sockets.
-		unix.AF_NETLINK,
-		// Seemingly used interchangeably with SOCK_DGRAM,
-		// but it appears not to matter which is used.
-		unix.SOCK_RAW,
-		// The netlink family that the socket will communicate
-		// with, such as NETLINK_ROUTE or NETLINK_GENERIC.
-		unix.NETLINK_ROUTE)
-
-	if err != nil {
-		log.Println(err)
-	}
-
-	err = unix.Bind(fd, &unix.SockaddrNetlink{
-		// Always used when binding netlink sockets.
-		Family: unix.AF_NETLINK,
-		// A bitmask of multicast groups to join on bind.
-		// Typically set to zero.
-		Groups: 0,
-		// If you'd like, you can assign a PID for this socket
-		// here, but in my experience, it's easier to leave
-		// this set to zero and let netlink assign and manage
-		// PIDs on its own.
-		Pid: 0,
-	})
-	if err != nil {
-		log.Println(err)
-	}
-
-	msg := netlink.Message{
-		Header: netlink.Header{
-			// Length of header, plus payload.
-			Length: 0,
-			// Set to zero on requests.
-			Type: 0,
-			// Indicate that message is a request to the kernel.
-			Flags: netlink.HeaderFlagsRequest,
-			// Sequence number selected at random.
-			Sequence: 1,
-			// PID set to process's ID.
-			PID: uint32(os.Getpid()),
-		},
-		// An arbitrary byte payload. May be in a variety of formats.
-		Data: []byte{0x01, 0x02, 0x03, 0x04},
-	}
-
-	log.Printf("%+v\n", msg)
-	/*
-		err = unix.Sendto(fd, msg, 0, &unix.SockaddrNetlink{
-			// Always used when sending on netlink sockets.
-			Family: unix.AF_NETLINK,
-		})
-
-		b := make([]byte, os.Getpagesize())
-		for {
-			// Peek at the buffer to see how many bytes are available.
-			n, _, _ := unix.Recvfrom(fd, b, unix.MSG_PEEK)
-			// Break when we can read all messages.
-			if n < len(b) {
-				break
-			}
-			// Double in size if not enough bytes.
-			b = make([]byte, len(b)*2)
-		}
-		// Read out all available messages.
-		n, _, _ := unix.Recvfrom(fd, b, 0) */
-
-	// Speak to generic netlink using netlink
-	const familyGeneric = 16
-
-	c, err := netlink.Dial(familyGeneric, nil)
-	if err != nil {
-		log.Fatalf("failed to dial netlink: %v", err)
-	}
-	defer c.Close()
-
-	// Ask netlink to send us an acknowledgement, which will contain
-	// a copy of the header we sent to it
-	req := netlink.Message{
-		Header: netlink.Header{
-			// Package netlink will automatically set header fields
-			// which are set to zero
-			Flags: netlink.HeaderFlagsRequest | netlink.HeaderFlagsAcknowledge,
-		},
-	}
-
-	// Perform a request, receive replies, and validate the replies
-	msgs, err := c.Execute(req)
-	if err != nil {
-		log.Fatalf("failed to execute request: %v", err)
-	}
-
-	if c := len(msgs); c != 1 {
-		log.Fatalf("expected 1 message, but got: %d", c)
-	}
-
-	// Decode the copied request header, starting after 4 bytes
-	// indicating "success"
-	var res netlink.Message
-	if err := (&res).UnmarshalBinary(msgs[0].Data[4:]); err != nil {
-		log.Fatalf("failed to unmarshal response: %v", err)
-	}
-
-	log.Printf("res: %+v", res)
 }

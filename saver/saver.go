@@ -203,47 +203,42 @@ func (svr *Saver) EndConn(cookie uint64) {
 	}
 }
 
-// RunSaverLoop runs a loop to receive batches of ParsedMessages.  Local connections
-// should be already stripped out.
-func (svr *Saver) RunSaverLoop() chan<- []*inetdiag.ParsedMessage {
-	groupChan := make(chan []*inetdiag.ParsedMessage, 2)
-	go func() {
-		log.Println("Starting Saver")
-		for {
-			group, ok := <-groupChan
-			if !ok {
-				break
-			}
-
-			for i := range group {
-				if group[i] == nil {
-					log.Println("Error")
-					continue
-				}
-				svr.SwapAndQueue(group[i])
-			}
-			residual := svr.cache.EndCycle()
-
-			for i := range residual {
-				svr.EndConn(residual[i].InetDiagMsg.ID.Cookie())
-				svr.expiredCount++
-			}
-
-			cachePrimed = true
+// MessageSaverLoop runs a loop to receive batches of ParsedMessages.  Local connections
+func (svr *Saver) MessageSaverLoop(groupChan chan []*inetdiag.ParsedMessage) {
+	log.Println("Starting Saver")
+	for {
+		msgs, ok := <-groupChan
+		if !ok {
+			break
 		}
-		log.Println("Terminating Saver")
-		log.Println("Total of", len(svr.Connections), "connections active.")
-		for i := range svr.Connections {
-			svr.EndConn(i)
+
+		for i := range msgs {
+			if msgs[i] == nil {
+				log.Println("Error")
+				continue
+			}
+			svr.SwapAndQueue(msgs[i])
 		}
-		log.Println("Closing Marshallers")
-		for i := range svr.MarshalChans {
-			close(svr.MarshalChans[i])
+		residual := svr.cache.EndCycle()
+
+		for i := range residual {
+			svr.EndConn(residual[i].InetDiagMsg.ID.Cookie())
+			svr.expiredCount++
 		}
-		svr.Stats()
-		svr.Done.Wait()
-	}()
-	return groupChan
+
+		cachePrimed = true
+	}
+	log.Println("Terminating Saver")
+	log.Println("Total of", len(svr.Connections), "connections active.")
+	for i := range svr.Connections {
+		svr.EndConn(i)
+	}
+	log.Println("Closing Marshallers")
+	for i := range svr.MarshalChans {
+		close(svr.MarshalChans[i])
+	}
+	svr.Stats()
+	svr.Done.Wait()
 }
 
 func (svr *Saver) Stats() {
