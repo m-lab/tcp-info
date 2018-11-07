@@ -1,4 +1,5 @@
 // Package cache keeps a cache of connection info records.
+// Cache is NOT threadsafe.
 package cache
 
 import (
@@ -20,6 +21,7 @@ type Cache struct {
 	// Map from inode to ParsedMessage
 	current  map[uint64]*inetdiag.ParsedMessage // Cache of most recent messages.
 	previous map[uint64]*inetdiag.ParsedMessage // Cache of previous round of messages.
+	cycles   int64
 }
 
 // NewCache creates a cache object with capacity of 1000.
@@ -48,5 +50,11 @@ func (c *Cache) EndCycle() map[uint64]*inetdiag.ParsedMessage {
 	c.previous = c.current
 	// Allocate a bit more than last time, to accommodate new connections.
 	c.current = make(map[uint64]*inetdiag.ParsedMessage, len(c.previous)+len(c.previous)/10+10)
+	c.cycles++
 	return tmp
+}
+
+// CycleCount returns the number of times EndCycle() has been called.
+func (c *Cache) CycleCount() int64 {
+	return c.cycles
 }

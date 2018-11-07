@@ -28,6 +28,9 @@ func TestUpdate(t *testing.T) {
 		t.Error("old should be nil")
 	}
 
+	if c.CycleCount() != 0 {
+		t.Error("CycleCount should be 0, is", c.CycleCount())
+	}
 	leftover := c.EndCycle()
 	if len(leftover) > 0 {
 		t.Error("Should be empty")
@@ -47,5 +50,8 @@ func TestUpdate(t *testing.T) {
 		if *leftover[k] != pm1 {
 			t.Error("Should have found pm1")
 		}
+	}
+	if c.CycleCount() != 2 {
+		t.Error("CycleCount should be 2, is", c.CycleCount())
 	}
 }
