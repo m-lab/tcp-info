@@ -1,4 +1,4 @@
-package tools_test
+package pbtools_test
 
 import (
 	"encoding/binary"
@@ -13,7 +13,7 @@ import (
 	"github.com/go-test/deep"
 	"github.com/m-lab/tcp-info/inetdiag"
 	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
-	"github.com/m-lab/tcp-info/nl-proto/tools"
+	"github.com/m-lab/tcp-info/nl-proto/pbtools"
 	"github.com/m-lab/tcp-info/zstd"
 )
 
@@ -50,7 +50,7 @@ func convertToProto(msg *syscall.NetlinkMessage, t *testing.T) *tcpinfo.TCPDiagn
 	if err != nil {
 		t.Fatal(err)
 	}
-	return tools.CreateProto(time.Now(), msg.Header, parsedMsg.InetDiagMsg, parsedMsg.Attributes[:])
+	return pbtools.CreateProto(time.Now(), msg.Header, parsedMsg.InetDiagMsg, parsedMsg.Attributes[:])
 }
 
 func TestReader(t *testing.T) {
@@ -133,27 +133,27 @@ func TestCompare(t *testing.T) {
 	}
 
 	// INET_DIAG_INFO Last... fields should be ignored
-	for i := int(tools.LastDataSentOffset); i < int(tools.PmtuOffset); i++ {
+	for i := int(pbtools.LastDataSentOffset); i < int(pbtools.PmtuOffset); i++ {
 		mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[i] += 1
 	}
-	diff := tools.Compare(mp1, mp2)
-	if diff != tools.NoMajorChange {
+	diff := pbtools.Compare(mp1, mp2)
+	if diff != pbtools.NoMajorChange {
 		t.Error("Last field changes should not be detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
 			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
 	}
 
 	// Early parts of INET_DIAG_INFO Should be ignored
 	mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[10] = 7
-	diff = tools.Compare(mp1, mp2)
-	if diff != tools.StateOrCounterChange {
+	diff = pbtools.Compare(mp1, mp2)
+	if diff != pbtools.StateOrCounterChange {
 		t.Error("Early field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
 			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
 	}
 
 	// packet, segment, and byte counts should NOT be ignored
-	mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[tools.PmtuOffset] = 123
-	diff = tools.Compare(mp1, mp2)
-	if diff != tools.PacketCountChange {
+	mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[pbtools.PmtuOffset] = 123
+	diff = pbtools.Compare(mp1, mp2)
+	if diff != pbtools.PacketCountChange {
 		t.Error("Late field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
 			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
 	}

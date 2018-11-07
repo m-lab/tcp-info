@@ -1,7 +1,7 @@
-// Package tools contains tools to convert netlink messages to protobuf message types.
+// Package pbtools contains tools to convert netlink messages to protobuf message types.
 // It contains structs for raw linux route attribute messages related to tcp-info,
 // and code for copying them into protobufs defined in tcpinfo.proto.
-package tools
+package pbtools
 
 import (
 	"bytes"

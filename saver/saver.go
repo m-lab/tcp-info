@@ -22,7 +22,7 @@ import (
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/metrics"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
-	"github.com/m-lab/tcp-info/nl-proto/tools"
+	"github.com/m-lab/tcp-info/nl-proto/pbtools"
 	"github.com/m-lab/tcp-info/zstd"
 )
 
@@ -62,7 +62,7 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 			log.Fatal("Nil writer")
 		}
 		msg := task.Message
-		pb := tools.CreateProto(msg.Timestamp, msg.Header, msg.InetDiagMsg, msg.Attributes[:])
+		pb := pbtools.CreateProto(msg.Timestamp, msg.Header, msg.InetDiagMsg, msg.Attributes[:])
 		wire, err := proto.Marshal(pb)
 		if err != nil {
 			log.Println(err)
@@ -261,7 +261,7 @@ func (svr *Saver) SwapAndQueue(pm *inetdiag.ParsedMessage) {
 		if old.InetDiagMsg.ID != pm.InetDiagMsg.ID {
 			log.Println("Mismatched SockIDs", old.InetDiagMsg.ID, pm.InetDiagMsg.ID)
 		}
-		if tools.Compare(pm, old) > tools.NoMajorChange {
+		if pbtools.Compare(pm, old) > pbtools.NoMajorChange {
 			svr.diffCount++
 			err := svr.Queue(pm)
 			if err != nil {

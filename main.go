@@ -23,7 +23,7 @@ import (
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/metrics"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
-	"github.com/m-lab/tcp-info/nl-proto/tools"
+	"github.com/m-lab/tcp-info/nl-proto/pbtools"
 	"github.com/m-lab/tcp-info/saver"
 	"github.com/m-lab/tcp-info/zstd"
 )
@@ -75,7 +75,7 @@ func Marshal(filename string, marshaler chan *inetdiag.ParsedMessage, wg *sync.W
 		if !ok {
 			break
 		}
-		p := tools.CreateProto(msg.Timestamp, msg.Header, msg.InetDiagMsg, msg.Attributes[:])
+		p := pbtools.CreateProto(msg.Timestamp, msg.Header, msg.InetDiagMsg, msg.Attributes[:])
 		m, err := proto.Marshal(p)
 		if err != nil {
 			log.Println(err)
@@ -133,7 +133,7 @@ func ParseAndQueue(cache *cache.Cache, msg *syscall.NetlinkMessage, queue bool) 
 			newCount++
 			Queue(pm)
 		} else {
-			if tools.Compare(pm, old) > 0 {
+			if pbtools.Compare(pm, old) > 0 {
 				if rawOut != nil {
 					binary.Write(rawOut, binary.BigEndian, msg.Header)
 					binary.Write(rawOut, binary.BigEndian, msg.Data)
@@ -193,7 +193,7 @@ func NextMsg(rdr io.Reader) (*syscall.NetlinkMessage, error) {
 
 var (
 	filter      = flag.Bool("filter", true, "Record only records that change")
-	reps        = flag.Int("reps", 0, "How manymove the  cycles should be recorded, 0 means continuous")
+	reps        = flag.Int("reps", 0, "How many cycles should be recorded, 0 means continuous")
 	verbose     = flag.Bool("v", false, "Enable verbose logging")
 	numFiles    = flag.Int("files", 1, "Number of output files")
 	enableTrace = flag.Bool("trace", false, "Enable trace")
