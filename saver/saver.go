@@ -241,6 +241,8 @@ func (svr *Saver) MessageSaverLoop(groupChan chan []*inetdiag.ParsedMessage) {
 	svr.Done.Wait()
 }
 
+// Stats prints out some basic stats about saver use.
+// TODO - should also export all of these as Prometheus metrics.  (Issue #32)
 func (svr *Saver) Stats() {
 	log.Printf("Cache info total %d same %d diff %d new %d closed %d\n",
 		svr.totalCount, svr.totalCount-(svr.newCount+svr.diffCount),
