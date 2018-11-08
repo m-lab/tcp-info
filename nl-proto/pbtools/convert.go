@@ -343,7 +343,7 @@ func Compare(previous *inetdiag.ParsedMessage, current *inetdiag.ParsedMessage) 
 	// If any of the byte/segment/package counters have changed, that is what we are most
 	// interested in.
 	if 0 != bytes.Compare(a.Value[PmtuOffset:], b.Value[PmtuOffset:]) {
-		return PacketCountChange
+		return StateOrCounterChange
 	}
 
 	// Check all the earlier fields, too.  Usually these won't change unless the counters above
