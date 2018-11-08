@@ -158,9 +158,9 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 	return &Saver{Host: host, Pod: pod, FileAgeLimit: ageLim, MarshalChans: m, Done: wg, Connections: conn, cache: c}
 }
 
-// Queue queues a single ParsedMessage to the appropriate marshalling queue, based on the
+// queue queues a single ParsedMessage to the appropriate marshalling queue, based on the
 // connection Cookie.
-func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) error {
+func (svr *Saver) queue(msg *inetdiag.ParsedMessage) error {
 	cookie := msg.InetDiagMsg.ID.Cookie()
 	if cookie == 0 {
 		return errors.New("Cookie = 0")
@@ -199,7 +199,7 @@ func (svr *Saver) Queue(msg *inetdiag.ParsedMessage) error {
 	return nil
 }
 
-func (svr *Saver) EndConn(cookie uint64) {
+func (svr *Saver) endConn(cookie uint64) {
 	//log.Println("Closing:", cookie)
 	q := svr.MarshalChans[cookie%uint64(len(svr.MarshalChans))]
 	conn, ok := svr.Connections[cookie]
@@ -223,12 +223,12 @@ func (svr *Saver) MessageSaverLoop(groupChan chan []*inetdiag.ParsedMessage) {
 				log.Println("Error")
 				continue
 			}
-			svr.SwapAndQueue(msgs[i])
+			svr.swapAndQueue(msgs[i])
 		}
 		residual := svr.cache.EndCycle()
 
 		for i := range residual {
-			svr.EndConn(residual[i].InetDiagMsg.ID.Cookie())
+			svr.endConn(residual[i].InetDiagMsg.ID.Cookie())
 			svr.expiredCount++
 		}
 	}
@@ -244,12 +244,12 @@ func (svr *Saver) Stats() {
 		svr.diffCount, svr.newCount, svr.expiredCount)
 }
 
-func (svr *Saver) SwapAndQueue(pm *inetdiag.ParsedMessage) {
+func (svr *Saver) swapAndQueue(pm *inetdiag.ParsedMessage) {
 	svr.totalCount++
 	old := svr.cache.Update(pm)
 	if old == nil {
 		svr.newCount++
-		err := svr.Queue(pm)
+		err := svr.queue(pm)
 		if err != nil {
 			log.Println(err)
 			log.Println("Connections", len(svr.Connections))
@@ -260,7 +260,7 @@ func (svr *Saver) SwapAndQueue(pm *inetdiag.ParsedMessage) {
 		}
 		if pbtools.Compare(pm, old) > pbtools.NoMajorChange {
 			svr.diffCount++
-			err := svr.Queue(pm)
+			err := svr.queue(pm)
 			if err != nil {
 				log.Println(err)
 			}
@@ -268,11 +268,12 @@ func (svr *Saver) SwapAndQueue(pm *inetdiag.ParsedMessage) {
 	}
 }
 
+// Close shuts down all the marshallers, and waits for all files to be closed.
 func (svr *Saver) Close() {
 	log.Println("Terminating Saver")
 	log.Println("Total of", len(svr.Connections), "connections active.")
 	for i := range svr.Connections {
-		svr.EndConn(i)
+		svr.endConn(i)
 	}
 	log.Println("Closing Marshallers")
 	for i := range svr.MarshalChans {
