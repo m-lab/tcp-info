@@ -32,6 +32,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"syscall"
@@ -263,6 +264,24 @@ func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) 
 		parsedMsg.Attributes[attrs[i].Attr.Type] = &attrs[i]
 	}
 	return &parsedMsg, nil
+}
+
+// LoadNext is a simple utility to read the next NetlinkMessage from a source reader,
+// e.g. from a file of saved netlink messages.
+func LoadNext(rdr io.Reader) (*syscall.NetlinkMessage, error) {
+	var header syscall.NlMsghdr
+	err := binary.Read(rdr, binary.LittleEndian, &header)
+	if err != nil {
+		return nil, err
+	}
+	//log.Printf("%+v\n", header)
+	data := make([]byte, header.Len-uint32(binary.Size(header)))
+	err = binary.Read(rdr, binary.LittleEndian, data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &syscall.NetlinkMessage{Header: header, Data: data}, nil
 }
 
 /*********************************************************************************************/

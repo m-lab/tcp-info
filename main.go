@@ -4,9 +4,7 @@ package main
 // sudo ss -timep | grep -A1 -v -e 127.0.0.1 -e skmem | tail
 
 import (
-	"encoding/binary"
 	"flag"
-	"io"
 	"log"
 	"os"
 	"runtime/trace"
@@ -58,78 +56,61 @@ func init() {
 //  2. the go zstd wrapper doesn't seem to work well - poor compression and slow.
 //  3. zstd seems to result in similar file size using proto or raw output.
 
-var totalCount = 0
 var errCount = 0
 var localCount = 0
-var newCount = 0
-var diffCount = 0
 
 // Stats prints out some basic cache stats.
 // TODO - should also export all of these as Prometheus metrics.  (Issue #32)
-func Stats() {
+func Stats(svr *saver.Saver) {
+	stats := svr.Stats()
 	log.Printf("Cache info total %d  local %d same %d diff %d new %d err %d\n",
-		totalCount, localCount,
-		totalCount-(errCount+newCount+diffCount+localCount),
-		diffCount, newCount, errCount)
+		stats.TotalCount+localCount, localCount,
+		stats.TotalCount-(errCount+stats.NewCount+stats.DiffCount+localCount),
+		stats.DiffCount, stats.NewCount, errCount)
 }
 
-func Parse(msg *syscall.NetlinkMessage) *inetdiag.ParsedMessage {
-	totalCount++
-	pm, err := inetdiag.Parse(msg, true)
-	if err != nil {
-		log.Println(err)
-		errCount++
-		return nil
+func appendAll(all []*inetdiag.ParsedMessage, msgs []*syscall.NetlinkMessage) {
+	ts := time.Now()
+	for i := range msgs {
+		pm, err := inetdiag.Parse(msgs[i], true)
+		if err != nil {
+			log.Println(err)
+			errCount++
+		} else if pm == nil {
+			localCount++
+		} else {
+			pm.Timestamp = ts
+			all = append(all, pm)
+		}
 	}
-	if pm == nil {
-		localCount++
-	}
-	return pm
 }
 
-func Demo(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
+// CollectDefaultNamespace collects all AF_INET6 and AF_INET connection stats, and sends them
+// to svr.
+func CollectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
+	// Preallocate space for up to 500 connections.  We may want to adjust this upwards if profiling
+	// indicates a lot of reallocation.
 	all := make([]*inetdiag.ParsedMessage, 0, 500)
 	remoteCount := 0
-	res6, _ := inetdiag.OneType(syscall.AF_INET6) // Ignoring errors in Demo code
-	ts := time.Now()
-	for i := range res6 {
-		pm := Parse(res6[i])
-		if pm != nil {
-			pm.Timestamp = ts
-			all = append(all, pm)
-		}
+	res6, err := inetdiag.OneType(syscall.AF_INET6) // Ignoring errors in Demo code
+	if err != nil {
+		// TODO add metric
+		log.Println(err)
+	} else {
+		appendAll(all, res6)
+	}
+	res4, err := inetdiag.OneType(syscall.AF_INET) // Ignoring errors in Demo code
+	if err != nil {
+		// TODO add metric
+		log.Println(err)
+	} else {
+		appendAll(all, res4)
 	}
 
-	res4, _ := inetdiag.OneType(syscall.AF_INET) // Ignoring errors in Demo code
-	ts = time.Now()
-	for i := range res4 {
-		pm := Parse(res4[i])
-		if pm != nil {
-			pm.Timestamp = ts
-			all = append(all, pm)
-		}
-	}
-
+	// Submit full set of message to the marshalling service.
 	svr <- all
 
 	return len(res4) + len(res6), remoteCount
-}
-
-// NextMsg reads the next NetlinkMessage from a source readers.
-func NextMsg(rdr io.Reader) (*syscall.NetlinkMessage, error) {
-	var header syscall.NlMsghdr
-	err := binary.Read(rdr, binary.LittleEndian, &header)
-	if err != nil {
-		return nil, err
-	}
-	//log.Printf("%+v\n", header)
-	data := make([]byte, header.Len-uint32(binary.Size(header)))
-	err = binary.Read(rdr, binary.LittleEndian, data)
-	if err != nil {
-		return nil, err
-	}
-
-	return &syscall.NetlinkMessage{Header: header, Data: data}, nil
 }
 
 var (
@@ -177,18 +158,17 @@ func main() {
 	go svr.MessageSaverLoop(svrChan)
 
 	for loops = 0; *reps == 0 || loops < *reps; loops++ {
-		total, remote := Demo(svrChan)
+		total, remote := CollectDefaultNamespace(svrChan)
 		totalCount += total
 		remoteCount += remote
 		if loops%10000 == 0 {
-			Stats()
-			svr.Stats()
+			Stats(svr)
 		}
 	}
 
 	close(svrChan)
 	svr.Done.Wait()
-	Stats()
+	Stats(svr)
 	if loops > 0 {
 		log.Println(totalCount, "sockets", remoteCount, "remotes", totalCount/loops, "per iteration")
 	}
