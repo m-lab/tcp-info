@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/m-lab/tcp-info/inetdiag"
+	"github.com/m-lab/tcp-info/metrics"
 )
 
 // Package error messages
@@ -42,6 +43,7 @@ func (c *Cache) Update(msg *inetdiag.ParsedMessage) *inetdiag.ParsedMessage {
 // It returns all messages that did not have corresponding inodes in the most recent
 // batch of messages.
 func (c *Cache) EndCycle() map[uint64]*inetdiag.ParsedMessage {
+	metrics.CacheSizeSummary.Observe(float64(len(c.current)))
 	tmp := c.previous
 	c.previous = c.current
 	// Allocate a bit more than last time, to accommodate new connections.
