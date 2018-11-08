@@ -125,6 +125,21 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 	return nil
 }
 
+type Stats struct {
+	TotalCount   int
+	NewCount     int
+	DiffCount    int
+	ExpiredCount int
+}
+
+// Print prints out some basic stats about saver use.
+// TODO - should also export all of these as Prometheus metrics.  (Issue #32)
+func (stats *Stats) Print() {
+	log.Printf("Cache info total %d same %d diff %d new %d closed %d\n",
+		stats.TotalCount, stats.TotalCount-(stats.NewCount+stats.DiffCount),
+		stats.DiffCount, stats.NewCount, stats.ExpiredCount)
+}
+
 // Saver provides functionality for saving tcpinfo diffs to connection files.
 // It handles arbitrary connections, and only writes to file when the significant fields
 // change.  (TODO - what does "significant fields" mean).
@@ -137,11 +152,8 @@ type Saver struct {
 	Done         *sync.WaitGroup // All marshallers will call Done on this.
 	Connections  map[uint64]*Connection
 
-	cache        *cache.Cache
-	totalCount   int
-	newCount     int
-	diffCount    int
-	expiredCount int
+	cache *cache.Cache
+	stats Stats
 }
 
 // NewSaver creates a new Saver for the given host and pod.  numMarshaller controls
@@ -232,26 +244,18 @@ func (svr *Saver) MessageSaverLoop(groupChan chan []*inetdiag.ParsedMessage) {
 
 		for i := range residual {
 			svr.endConn(residual[i].InetDiagMsg.ID.Cookie())
-			svr.expiredCount++
+			svr.stats.ExpiredCount++
 		}
 	}
 	svr.Close()
 	svr.Stats()
 }
 
-// Stats prints out some basic stats about saver use.
-// TODO - should also export all of these as Prometheus metrics.  (Issue #32)
-func (svr *Saver) Stats() {
-	log.Printf("Cache info total %d same %d diff %d new %d closed %d\n",
-		svr.totalCount, svr.totalCount-(svr.newCount+svr.diffCount),
-		svr.diffCount, svr.newCount, svr.expiredCount)
-}
-
 func (svr *Saver) swapAndQueue(pm *inetdiag.ParsedMessage) {
-	svr.totalCount++
+	svr.stats.TotalCount++
 	old := svr.cache.Update(pm)
 	if old == nil {
-		svr.newCount++
+		svr.stats.NewCount++
 		err := svr.queue(pm)
 		if err != nil {
 			log.Println(err)
@@ -262,7 +266,7 @@ func (svr *Saver) swapAndQueue(pm *inetdiag.ParsedMessage) {
 			log.Println("Mismatched SockIDs", old.InetDiagMsg.ID, pm.InetDiagMsg.ID)
 		}
 		if pbtools.Compare(pm, old) > pbtools.NoMajorChange {
-			svr.diffCount++
+			svr.stats.DiffCount++
 			err := svr.queue(pm)
 			if err != nil {
 				log.Println(err)
@@ -283,4 +287,9 @@ func (svr *Saver) Close() {
 		close(svr.MarshalChans[i])
 	}
 	svr.Done.Wait()
+}
+
+// Stats returns the saver Stats.
+func (svr *Saver) Stats() Stats {
+	return svr.stats
 }
