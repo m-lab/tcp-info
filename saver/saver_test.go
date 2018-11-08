@@ -11,9 +11,7 @@ import (
 	"github.com/m-lab/tcp-info/saver"
 )
 
-// TODO test something!
-// Tests:
-//   Basic marshaller test.  Simulated data.  Checks filename and size, cleans up.
+// TODO Tests:
 //   File closing.
 //   Marshaller selection.
 //   Rotation  (use 1 second rotation time)

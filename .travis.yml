@@ -61,7 +61,7 @@ script:
 - cd $TRAVIS_BUILD_DIR
 
 # To start, run all the non-integration tests.
-- MODULES="inetdiag zstd nl-proto/pbtools cache"
+- MODULES="inetdiag zstd nl-proto/pbtools cache saver"
 - for module in $MODULES; do
     COVER_PKGS=${COVER_PKGS}./$module/..., ;
   done
