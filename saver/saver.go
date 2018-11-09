@@ -128,6 +128,7 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 // Saver provides functionality for saving tcpinfo diffs to connection files.
 // It handles arbitrary connections, and only writes to file when the significant fields
 // change.  (TODO - what does "significant fields" mean).
+// TODO - just export an interface, instead of the implementation.
 type Saver struct {
 	Host         string // mlabN
 	Pod          string // 3 alpha + 2 decimal

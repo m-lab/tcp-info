@@ -59,5 +59,6 @@ func (c *Cache) EndCycle() map[uint64]*inetdiag.ParsedMessage {
 
 // CycleCount returns the number of times EndCycle() has been called.
 func (c *Cache) CycleCount() int64 {
+	// TODO also add a prometheus counter for this.
 	return c.cycles
 }

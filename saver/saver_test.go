@@ -84,7 +84,7 @@ func TestBasic(t *testing.T) {
 	m2 := []*inetdiag.ParsedMessage{msg(1234, 1234), msg(234, 234)}
 	svrChan <- m2
 
-	// This changes the first connection, and ends the secon connection.
+	// This changes the first connection, and ends the second connection.
 	m3 := []*inetdiag.ParsedMessage{msg(1234, 1234)}
 	m3[0].Attributes[inetdiag.INET_DIAG_INFO].Value[20] = 127
 	svrChan <- m3
