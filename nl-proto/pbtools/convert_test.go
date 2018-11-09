@@ -153,7 +153,7 @@ func TestCompare(t *testing.T) {
 	// packet, segment, and byte counts should NOT be ignored
 	mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[pbtools.PmtuOffset] = 123
 	diff = pbtools.Compare(mp1, mp2)
-	if diff != pbtools.PacketCountChange {
+	if diff != pbtools.StateOrCounterChange {
 		t.Error("Late field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
 			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
 	}
