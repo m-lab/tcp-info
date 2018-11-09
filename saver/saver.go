@@ -148,6 +148,8 @@ type Saver struct {
 func NewSaver(host string, pod string, numMarshaller int) *Saver {
 	m := make([]MarshalChan, 0, numMarshaller)
 	c := cache.NewCache()
+	// We start with capacity of 500.  This will be reallocated as needed, but this
+	// is not a performance concern.
 	conn := make(map[uint64]*Connection, 500)
 	wg := &sync.WaitGroup{}
 	ageLim := 10 * time.Minute

@@ -25,6 +25,7 @@ type Cache struct {
 }
 
 // NewCache creates a cache object with capacity of 1000.
+// The map size is adjusted on every sampling round, but we have to start somewhere.
 func NewCache() *Cache {
 	return &Cache{current: make(map[uint64]*inetdiag.ParsedMessage, 1000),
 		previous: make(map[uint64]*inetdiag.ParsedMessage, 0)}
@@ -48,7 +49,9 @@ func (c *Cache) EndCycle() map[uint64]*inetdiag.ParsedMessage {
 	metrics.CacheSizeSummary.Observe(float64(len(c.current)))
 	tmp := c.previous
 	c.previous = c.current
-	// Allocate a bit more than last time, to accommodate new connections.
+	// Allocate a bit more than previous size, to accommodate new connections.
+	// This this will grow and shrink with the number of active connections, but
+	// minimize reallocation.
 	c.current = make(map[uint64]*inetdiag.ParsedMessage, len(c.previous)+len(c.previous)/10+10)
 	c.cycles++
 	return tmp
