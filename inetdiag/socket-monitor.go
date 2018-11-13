@@ -108,6 +108,7 @@ func OneType(inetType uint8) ([]*syscall.NetlinkMessage, error) {
 	sockType := syscall.NETLINK_INET_DIAG
 	s, err := nl.Subscribe(sockType)
 	if err != nil {
+		// TODO - all these logs should be metrics instead.
 		log.Println(err)
 		return nil, err
 	}

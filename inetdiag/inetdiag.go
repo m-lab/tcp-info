@@ -272,6 +272,7 @@ func LoadNext(rdr io.Reader) (*syscall.NetlinkMessage, error) {
 	var header syscall.NlMsghdr
 	err := binary.Read(rdr, binary.LittleEndian, &header)
 	if err != nil {
+		// Note that this may be EOF
 		return nil, err
 	}
 	//log.Printf("%+v\n", header)

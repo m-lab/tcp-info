@@ -2,6 +2,7 @@ package inetdiag_test
 
 import (
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
+	"github.com/m-lab/tcp-info/zstd"
 	"golang.org/x/sys/unix"
 
 	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
@@ -263,6 +265,28 @@ func TestOneType(t *testing.T) {
 	}
 	if len(res) == 0 {
 		t.Error("We have at least one active stream open right now.")
+	}
+}
+
+func TestReader(t *testing.T) {
+	// Cache info new 140  err 0 same 277 local 789 diff 3 total 1209
+	// 1209 sockets 143 remotes 403 per iteration
+	source := "testdata/testdata.zst"
+	log.Println("Reading messages from", source)
+	rdr := zstd.NewReader(source)
+	parsed := 0
+	for {
+		_, err := inetdiag.LoadNext(rdr)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatal(err)
+		}
+		parsed++
+	}
+	if parsed != 420 {
+		t.Error("Wrong count:", parsed)
 	}
 }
 
