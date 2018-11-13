@@ -1,7 +1,6 @@
 package pbtools_test
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"io"
@@ -22,22 +21,6 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-// NextMsg reads the next NetlinkMessage from a source readers.
-func nextMsg(rdr io.Reader) (*syscall.NetlinkMessage, error) {
-	var header syscall.NlMsghdr
-	err := binary.Read(rdr, binary.LittleEndian, &header)
-	if err != nil {
-		return nil, err
-	}
-	data := make([]byte, header.Len-uint32(binary.Size(header)))
-	err = binary.Read(rdr, binary.LittleEndian, data)
-	if err != nil {
-		return nil, err
-	}
-
-	return &syscall.NetlinkMessage{Header: header, Data: data}, nil
-}
-
 // Package error messages
 var (
 	ErrInetDiagParseFailed = errors.New("Error parsing inetdiag message")
@@ -54,8 +37,6 @@ func convertToProto(msg *syscall.NetlinkMessage, t *testing.T) *tcpinfo.TCPDiagn
 }
 
 func TestReader(t *testing.T) {
-	// Cache info new 140  err 0 same 277 local 789 diff 3 total 1209
-	// 1209 sockets 143 remotes 403 per iteration
 	source := "testdata/testdata.zst"
 	log.Println("Reading messages from", source)
 	rdr := zstd.NewReader(source)
@@ -63,7 +44,7 @@ func TestReader(t *testing.T) {
 	src4 := 0
 	dst4 := 0
 	for {
-		msg, err := nextMsg(rdr)
+		msg, err := inetdiag.LoadNext(rdr)
 		if err != nil {
 			if err == io.EOF {
 				break
