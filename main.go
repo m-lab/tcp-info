@@ -92,15 +92,17 @@ func CollectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 	// indicates a lot of reallocation.
 	all := make([]*inetdiag.ParsedMessage, 0, 500)
 	remoteCount := 0
-	res6, err := inetdiag.OneType(syscall.AF_INET6) // Ignoring errors in Demo code
+	res6, err := inetdiag.OneType(syscall.AF_INET6)
 	if err != nil {
+		// Properly handle errors
 		// TODO add metric
 		log.Println(err)
 	} else {
 		appendAll(all, res6)
 	}
-	res4, err := inetdiag.OneType(syscall.AF_INET) // Ignoring errors in Demo code
+	res4, err := inetdiag.OneType(syscall.AF_INET)
 	if err != nil {
+		// Properly handle errors
 		// TODO add metric
 		log.Println(err)
 	} else {

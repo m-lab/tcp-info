@@ -32,7 +32,7 @@ var (
 	ErrBadSequence = errors.New("bad sequence number, can't interpret NetLink response")
 )
 
-// TODO - Figure out why we aren't seeing INET_DIAG_DCTCPINFO or INET_DIAG_BBRINFO messaged.
+// TODO - Figure out why we aren't seeing INET_DIAG_DCTCPINFO or INET_DIAG_BBRINFO messages.
 func makeReq(inetType uint8) *nl.NetlinkRequest {
 	req := nl.NewNetlinkRequest(SOCK_DIAG_BY_FAMILY, syscall.NLM_F_DUMP|syscall.NLM_F_REQUEST)
 	msg := NewInetDiagReqV2(inetType, syscall.IPPROTO_TCP,

@@ -37,8 +37,6 @@ func convertToProto(msg *syscall.NetlinkMessage, t *testing.T) *tcpinfo.TCPDiagn
 }
 
 func TestReader(t *testing.T) {
-	// Cache info new 140  err 0 same 277 local 789 diff 3 total 1209
-	// 1209 sockets 143 remotes 403 per iteration
 	source := "testdata/testdata.zst"
 	log.Println("Reading messages from", source)
 	rdr := zstd.NewReader(source)
