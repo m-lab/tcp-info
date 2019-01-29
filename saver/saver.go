@@ -123,8 +123,7 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 	if err != nil {
 		return err
 	}
-	fname := fmt.Sprintf("%s/%s.%05d.zst", date, id, conn.Sequence)
-	conn.Writer, err = zstd.NewWriter(fname)
+	conn.Writer, err = zstd.NewWriter(fmt.Sprintf("%s/%s.%05d.zst", date, id, conn.Sequence))
 	if err != nil {
 		return err
 	}
