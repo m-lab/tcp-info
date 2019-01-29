@@ -83,7 +83,7 @@ func TestBasic(t *testing.T) {
 	rtx.Must(err, "Could not get working directory")
 	rtx.Must(os.Chdir(dir), "Could not switch to temp dir %s", dir)
 	defer func() {
-		//os.RemoveAll(dir)
+		os.RemoveAll(dir)
 		rtx.Must(os.Chdir(oldDir), "Could not switch back to %s", oldDir)
 	}()
 	svr := saver.NewSaver("foo", "bar", 1)
@@ -117,5 +117,5 @@ func TestBasic(t *testing.T) {
 	close(svrChan)
 	svr.Done.Wait()
 	verifySize(t, 271, "0001/01/01/*_D2.00000.zst")
-	verifySize(t, 271, "0001/01/01/*_EA.00000.zst")
+	verifySize(t, 248, "0001/01/01/*_EA.00000.zst")
 }
