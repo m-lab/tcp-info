@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/m-lab/tcp-info/metrics"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/nl-proto/pbtools"
+	"github.com/m-lab/tcp-info/uuid"
 	"github.com/m-lab/tcp-info/zstd"
 )
 
@@ -112,10 +114,17 @@ func NewConnection(info *inetdiag.InetDiagMsg, timestamp time.Time) *Connection 
 
 // Rotate opens the next writer for a connection.
 func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Duration) error {
-	date := conn.StartTime.Format("20060102Z150405.000")
-	id := fmt.Sprintf("L%s:%dR%s:%d", conn.ID.SrcIP(), conn.ID.SPort(), conn.ID.DstIP(), conn.ID.DPort())
-	var err error
-	conn.Writer, err = zstd.NewWriter(fmt.Sprintf("%sU%08d%s_%05d.zst", date, conn.UID, id, conn.Sequence))
+	date := conn.StartTime.Format("2006/01/02")
+	err := os.MkdirAll(date, 0777)
+	if err != nil {
+		return err
+	}
+	id, err := uuid.FromCookie(conn.ID.Cookie())
+	if err != nil {
+		return err
+	}
+	fname := fmt.Sprintf("%s/%s.%05d.zst", date, id, conn.Sequence)
+	conn.Writer, err = zstd.NewWriter(fname)
 	if err != nil {
 		return err
 	}

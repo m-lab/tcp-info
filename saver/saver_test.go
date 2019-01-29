@@ -2,11 +2,15 @@ package saver_test
 
 import (
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"syscall"
 	"testing"
 
+	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/saver"
 )
@@ -55,22 +59,33 @@ func msg(cookie uint64, dport uint16) *inetdiag.ParsedMessage {
 	return mp
 }
 
-func cleanup(t *testing.T, size int64, filename string) {
+func verifySize(t *testing.T, size int64, pattern string) {
+	names, err := filepath.Glob(pattern)
+	rtx.Must(err, "Could not Glob pattern %s", pattern)
+	if len(names) != 1 {
+		t.Fatal("The glob", pattern, "should return exactly one file, not", len(names))
+	}
+	filename := names[0]
 	info, err := os.Stat(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if info.Size() != size {
-		t.Error("Size:", info.Size())
-	}
-	log.Printf("%+v\n", info)
-	err = os.Remove(filename)
-	info, err = os.Stat(filename)
-	if err == nil {
-		t.Fatal("Failed to remove file")
+		t.Error("Size of", filename, "is", info.Size(), "but we expect it to be", size)
 	}
 }
+
 func TestBasic(t *testing.T) {
+	dir, err := ioutil.TempDir("", "tcp-info_saver_TestBasic")
+	rtx.Must(err, "Could not create tempdir")
+	fmt.Println("Directory is:", dir)
+	oldDir, err := os.Getwd()
+	rtx.Must(err, "Could not get working directory")
+	rtx.Must(os.Chdir(dir), "Could not switch to temp dir %s", dir)
+	defer func() {
+		//os.RemoveAll(dir)
+		rtx.Must(os.Chdir(oldDir), "Could not switch back to %s", oldDir)
+	}()
 	svr := saver.NewSaver("foo", "bar", 1)
 	svrChan := make(chan []*inetdiag.ParsedMessage, 0) // no buffering
 	go svr.MessageSaverLoop(svrChan)
@@ -101,6 +116,6 @@ func TestBasic(t *testing.T) {
 	// Force close all the files.
 	close(svrChan)
 	svr.Done.Wait()
-	cleanup(t, 271, "00010101Z000000.000U00000000L2620:0:1003:415:b33e:9d6a:81bf:87a1:59990R2607:f8b0:400d:c0a::81:53760_00000.zst")
-	cleanup(t, 248, "00010101Z000000.000U00000000L2620:0:1003:415:b33e:9d6a:81bf:87a1:59990R2607:f8b0:400d:c0a::81:59904_00000.zst")
+	verifySize(t, 271, "0001/01/01/*_D2.00000.zst")
+	verifySize(t, 271, "0001/01/01/*_EA.00000.zst")
 }

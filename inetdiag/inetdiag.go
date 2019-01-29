@@ -127,8 +127,8 @@ func (id *InetDiagSockID) DPort() uint16 {
 
 // Cookie returns the SockID's 64 bit unsigned cookie.
 func (id *InetDiagSockID) Cookie() uint64 {
-	// This is pretty arbitrary, and may not match across operating systems.
-	return binary.BigEndian.Uint64(id.IDiagCookie[:])
+	// This is a socket UUID generated within the kernel, and is therefore in host byte order.
+	return binary.LittleEndian.Uint64(id.IDiagCookie[:])
 }
 
 // TODO should use more net.IP code instead of custom code.
