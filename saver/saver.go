@@ -19,12 +19,12 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/m-lab/go/uuid"
 	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/metrics"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/nl-proto/pbtools"
-	"github.com/m-lab/tcp-info/uuid"
 	"github.com/m-lab/tcp-info/zstd"
 )
 
