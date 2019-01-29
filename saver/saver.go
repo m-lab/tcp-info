@@ -114,8 +114,8 @@ func NewConnection(info *inetdiag.InetDiagMsg, timestamp time.Time) *Connection 
 
 // Rotate opens the next writer for a connection.
 func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Duration) error {
-	date := conn.StartTime.Format("2006/01/02")
-	err := os.MkdirAll(date, 0777)
+	datePath := conn.StartTime.Format("2006/01/02")
+	err := os.MkdirAll(datePath, 0777)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 	if err != nil {
 		return err
 	}
-	conn.Writer, err = zstd.NewWriter(fmt.Sprintf("%s/%s.%05d.zst", date, id, conn.Sequence))
+	conn.Writer, err = zstd.NewWriter(fmt.Sprintf("%s/%s.%05d.zst", datePath, id, conn.Sequence))
 	if err != nil {
 		return err
 	}
