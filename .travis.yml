@@ -127,7 +127,9 @@ script:
 #################################################################################
 
 
-deploy:
+# uncomment this once we get a deployment we want to use.  An empty deploy:
+# makes the linter angry.
+# deploy:
 #########################################
 ## Sandbox
 
