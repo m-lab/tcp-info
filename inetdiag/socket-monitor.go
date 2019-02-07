@@ -96,8 +96,8 @@ func OneType(inetType uint8) ([]*syscall.NetlinkMessage, error) {
 		case syscall.AF_INET6:
 			af = "ipv6"
 		}
-		metrics.FetchTimeMsecSummary.With(prometheus.Labels{"af": af}).Observe(1000 * time.Since(start).Seconds())
-		metrics.ConnectionCountSummary.With(prometheus.Labels{"af": af}).Observe(float64(len(res)))
+		metrics.SyscallTimeMsec.With(prometheus.Labels{"af": af}).Observe(1000 * time.Since(start).Seconds())
+		metrics.ConnectionCountHistogram.With(prometheus.Labels{"af": af}).Observe(float64(len(res)))
 	}()
 
 	req := makeReq(inetType)
