@@ -13,14 +13,16 @@ import (
 	"net/http"
 	"net/http/pprof"
 
+	"github.com/m-lab/go/httpx"
+	"github.com/m-lab/go/rtx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func SetupPrometheus(promPort int) {
-	if promPort <= 0 {
+func SetupPrometheus(promPort int) *http.Server {
+	if promPort < 0 {
 		log.Println("Not exporting prometheus metrics")
-		return
+		return nil
 	}
 
 	// Define a custom serve mux for prometheus to listen on a separate port.
@@ -37,7 +39,7 @@ func SetupPrometheus(promPort int) {
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
-	prometheus.MustRegister(SyscallTimeMsec)
+	prometheus.MustRegister(SyscallTimeHistogram)
 
 	prometheus.MustRegister(ConnectionCountHistogram)
 	prometheus.MustRegister(CacheSizeHistogram)
@@ -45,22 +47,27 @@ func SetupPrometheus(promPort int) {
 	prometheus.MustRegister(NewFileCount)
 	prometheus.MustRegister(ErrorCount)
 
-	port := fmt.Sprintf(":%d", promPort)
-	log.Println("Exporting prometheus metrics on", port)
-	go http.ListenAndServe(port, mux)
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", promPort),
+		Handler: mux,
+	}
+	rtx.Must(httpx.ListenAndServeAsync(server), "Could not start metrics server")
+
+	log.Println("Exporting prometheus metrics on", server.Addr)
+	return server
 }
 
 var (
-	// SyscallTimeMsec tracks the latency in the syscall.  It does NOT include
+	// SyscallTime tracks the latency in the syscall.  It does NOT include
 	// the time to process the netlink messages.
-	SyscallTimeMsec = prometheus.NewHistogramVec(
+	SyscallTimeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name: "tcpinfo_syscall_time_msec",
+			Name: "tcpinfo_syscall_time_histogram",
 			Help: "netlink syscall latency distribution",
 			Buckets: []float64{
-				1.0, 1.25, 1.6, 2.0, 2.5, 3.2, 4.0, 5.0, 6.3, 7.9,
-				10, 12.5, 16, 20, 25, 32, 40, 50, 63, 79,
-				100,
+				0.001, 0.00125, 0.0016, 0.002, 0.0025, 0.0032, 0.004, 0.005, 0.0063, 0.0079,
+				0.01, 0.0125, 0.016, 0.02, 0.025, 0.032, 0.04, 0.05, 0.063, 0.079,
+				0.1, 0.125, 0.16, 0.2,
 			},
 		},
 		[]string{"af"})
@@ -68,6 +75,7 @@ var (
 	// ConnectionCountHistogram tracks the number of connections returned by
 	// each syscall.  This ??? includes local connections that are NOT recorded
 	// in the cache or output.
+	// TODO - convert this to integer bins.
 	ConnectionCountHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "tcpinfo_connection_count_histogram",
@@ -84,6 +92,7 @@ var (
 		[]string{"af"})
 
 	// CacheSizeHistogram tracks the number of entries in connection cache.
+	// TODO - convert this to integer bins.
 	CacheSizeHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Name: "tcpinfo_cache_count_histogram",
@@ -105,7 +114,7 @@ var (
 	//    metrics.ErrorCount.With(prometheus.Labels{"type", "foobar"}).Inc()
 	ErrorCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "tcpinfo_error_count",
+			Name: "tcpinfo_error_total",
 			Help: "The total number of errors encountered.",
 		}, []string{"type"})
 
@@ -117,7 +126,7 @@ var (
 	//   metrics.FileCount.Inc()
 	NewFileCount = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "tcpinfo_new_file_count",
+			Name: "tcpinfo_new_file_total",
 			Help: "Number of files created.",
 		},
 	)
