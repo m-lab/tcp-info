@@ -7,11 +7,12 @@ import (
 	"flag"
 	"log"
 	"os"
+	"runtime"
 	"runtime/trace"
 	"syscall"
 	"time"
 
-	_ "net/http/pprof"
+	_ "net/http/pprof" // Support profiling
 
 	"github.com/golang/protobuf/proto"
 
@@ -124,6 +125,10 @@ var (
 func main() {
 	// TODO - use flagx.ArgsFromEnv
 
+	// Performance instrumentation.
+	runtime.SetBlockProfileRate(1000000) // 1 sample/msec
+	runtime.SetMutexProfileFraction(1000)
+
 	metrics.SetupPrometheus(*promPort)
 
 	p := tcp.TCPDiagnosticsProto{}
@@ -159,14 +164,21 @@ func main() {
 	svrChan := make(chan []*inetdiag.ParsedMessage, 2)
 	go svr.MessageSaverLoop(svrChan)
 
+	ticker := time.NewTicker(10 * time.Millisecond)
+
 	for loops = 0; *reps == 0 || loops < *reps; loops++ {
 		total, remote := CollectDefaultNamespace(svrChan)
 		totalCount += total
 		remoteCount += remote
-		if loops%10000 == 0 {
+		// print stats roughly once per minute.
+		if loops%6000 == 0 {
 			Stats(svr)
 		}
+
+		// Wait for next tick.
+		<-ticker.C
 	}
+	ticker.Stop()
 
 	close(svrChan)
 	svr.Done.Wait()

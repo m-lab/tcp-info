@@ -46,11 +46,11 @@ func (c *Cache) Update(msg *inetdiag.ParsedMessage) *inetdiag.ParsedMessage {
 // It returns all messages that did not have corresponding inodes in the most recent
 // batch of messages.
 func (c *Cache) EndCycle() map[uint64]*inetdiag.ParsedMessage {
-	metrics.CacheSizeSummary.Observe(float64(len(c.current)))
+	metrics.CacheSizeHistogram.Observe(float64(len(c.current)))
 	tmp := c.previous
 	c.previous = c.current
 	// Allocate a bit more than previous size, to accommodate new connections.
-	// This this will grow and shrink with the number of active connections, but
+	// This will grow and shrink with the number of active connections, but
 	// minimize reallocation.
 	c.current = make(map[uint64]*inetdiag.ParsedMessage, len(c.previous)+len(c.previous)/10+10)
 	c.cycles++
@@ -59,6 +59,6 @@ func (c *Cache) EndCycle() map[uint64]*inetdiag.ParsedMessage {
 
 // CycleCount returns the number of times EndCycle() has been called.
 func (c *Cache) CycleCount() int64 {
-	// TODO also add a prometheus counter for this.
+	// Don't need a prometheus counter, because we already have the count of CacheSizeHistogram observations.
 	return c.cycles
 }
