@@ -176,7 +176,7 @@ func main() {
 		}
 
 		// Wait for next tick.
-		<-ticker
+		<-ticker.C
 	}
 	ticker.Stop()
 
