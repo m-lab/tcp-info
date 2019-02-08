@@ -127,7 +127,7 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 	if err != nil {
 		return err
 	}
-	metrics.FileCount.Inc()
+	metrics.NewFileCount.Inc()
 	conn.Expiration = conn.Expiration.Add(10 * time.Minute)
 	conn.Sequence++
 	return nil

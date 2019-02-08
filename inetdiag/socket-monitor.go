@@ -56,12 +56,12 @@ func makeReq(inetType uint8) *nl.NetlinkRequest {
 func processSingleMessage(m *syscall.NetlinkMessage, seq uint32, pid uint32) (*syscall.NetlinkMessage, bool, error) {
 	if m.Header.Seq != seq {
 		log.Printf("Wrong Seq nr %d, expected %d", m.Header.Seq, seq)
-		metrics.ErrorCount.With(prometheus.Labels{"source": "wrong seq num"}).Inc()
+		metrics.ErrorCount.With(prometheus.Labels{"type": "wrong seq num"}).Inc()
 		return nil, false, ErrBadSequence
 	}
 	if m.Header.Pid != pid {
 		log.Printf("Wrong pid %d, expected %d", m.Header.Pid, pid)
-		metrics.ErrorCount.With(prometheus.Labels{"source": "wrong pid"}).Inc()
+		metrics.ErrorCount.With(prometheus.Labels{"type": "wrong pid"}).Inc()
 		return nil, false, ErrBadPid
 	}
 	if m.Header.Type == unix.NLMSG_DONE {
@@ -74,7 +74,7 @@ func processSingleMessage(m *syscall.NetlinkMessage, seq uint32, pid uint32) (*s
 			return nil, false, nil
 		}
 		log.Println(syscall.Errno(-error))
-		metrics.ErrorCount.With(prometheus.Labels{"source": "NLMSG_ERROR"}).Inc()
+		metrics.ErrorCount.With(prometheus.Labels{"type": "NLMSG_ERROR"}).Inc()
 	}
 	if m.Header.Flags&unix.NLM_F_MULTI == 0 {
 		return m, false, nil
