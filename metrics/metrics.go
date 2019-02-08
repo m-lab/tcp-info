@@ -19,6 +19,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+// SetupPrometheus configures prometheus metrics on the specified port.
+// If promPort is zero, it will ask the system to choose a port (e.g. for testing).
+// Also registers pprof handlers on the same port.
 func SetupPrometheus(promPort int) *http.Server {
 	if promPort < 0 {
 		log.Println("Not exporting prometheus metrics")

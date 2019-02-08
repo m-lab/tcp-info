@@ -164,7 +164,7 @@ func main() {
 	svrChan := make(chan []*inetdiag.ParsedMessage, 2)
 	go svr.MessageSaverLoop(svrChan)
 
-	nextTime := time.Now()
+	ticker := time.NewTicker(10 * time.Millisecond)
 
 	for loops = 0; *reps == 0 || loops < *reps; loops++ {
 		total, remote := CollectDefaultNamespace(svrChan)
@@ -175,17 +175,10 @@ func main() {
 			Stats(svr)
 		}
 
-		// For now, cap rate at 100 Hz.
-		nextTime = nextTime.Add(10 * time.Millisecond)
-		// If we get more than 5 msec behind, clamp there, to avoid bursts.
-		if nextTime.Before(time.Now().Add(5 * time.Millisecond)) {
-			nextTime = time.Now().Add(5 * time.Millisecond)
-		}
-		delay := nextTime.Sub(time.Now())
-		if delay > 0 {
-			time.Sleep(delay)
-		}
+		// Wait for next tick.
+		<-ticker
 	}
+	ticker.Stop()
 
 	close(svrChan)
 	svr.Done.Wait()
