@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/m-lab/go/flagx"
+
 	_ "net/http/pprof" // Support profiling
 
 	"github.com/golang/protobuf/proto"
@@ -123,7 +125,8 @@ var (
 )
 
 func main() {
-	// TODO - use flagx.ArgsFromEnv
+	flag.Parse()
+	flagx.ArgsFromEnv(flag.CommandLine)
 
 	// Performance instrumentation.
 	runtime.SetBlockProfileRate(1000000) // 1 sample/msec
