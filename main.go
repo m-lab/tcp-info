@@ -133,6 +133,7 @@ func main() {
 	runtime.SetBlockProfileRate(1000000) // 1 sample/msec
 	runtime.SetMutexProfileFraction(1000)
 
+	// Expose prometheus and pprof metrics on a separate port.
 	prometheusx.MustStartPrometheus(*promPort)
 
 	p := tcp.TCPDiagnosticsProto{}
