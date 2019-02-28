@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/m-lab/go/prometheusx"
+
 	"github.com/m-lab/go/flagx"
 
 	_ "net/http/pprof" // Support profiling
@@ -19,7 +21,6 @@ import (
 	"github.com/golang/protobuf/proto"
 
 	"github.com/m-lab/tcp-info/inetdiag"
-	"github.com/m-lab/tcp-info/metrics"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/saver"
 )
@@ -121,7 +122,7 @@ func CollectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 var (
 	reps        = flag.Int("reps", 0, "How many cycles should be recorded, 0 means continuous")
 	enableTrace = flag.Bool("trace", false, "Enable trace")
-	promPort    = flag.Int("prom", 9090, "Prometheus metrics export port")
+	promPort    = flag.String("prom", ":9090", "Prometheus metrics export address and port. Default is ':9090'")
 )
 
 func main() {
@@ -132,7 +133,8 @@ func main() {
 	runtime.SetBlockProfileRate(1000000) // 1 sample/msec
 	runtime.SetMutexProfileFraction(1000)
 
-	metrics.SetupPrometheus(*promPort)
+	// Expose prometheus and pprof metrics on a separate port.
+	prometheusx.MustStartPrometheus(*promPort)
 
 	p := tcp.TCPDiagnosticsProto{}
 	p.TcpInfo = &tcp.TCPInfoProto{}
