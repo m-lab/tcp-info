@@ -173,6 +173,14 @@ type LinuxTCPInfo struct {
 	busyTime      uint64 /* Time (usec) busy sending data */
 	rwndLimited   uint64 /* Time (usec) limited by receive window */
 	sndbufLimited uint64 /* Time (usec) limited by send buffer */
+
+	delivered   uint32
+	deliveredCe uint32
+
+	bytesSent    uint64 /* RFC4898 tcpEStatsPerfHCDataOctetsOut */
+	bytesRetrans uint64 /* RFC4898 tcpEStatsPerfOctetsRetrans */
+	dsackDups    uint32 /* RFC4898 tcpEStatsStackDSACKDups */
+	reordSeen    uint32 /* reordering events seen */
 }
 
 // ToProto converts a LinuxTCPInfo struct to a TCPInfoProto
@@ -242,6 +250,18 @@ func (tcp *LinuxTCPInfo) ToProto() *tcpinfo.TCPInfoProto {
 	p.DataSegsOut = tcp.dataSegsOut
 
 	p.DeliveryRate = int64(tcp.deliveryRate)
+
+	p.BusyTime = tcp.busyTime
+	p.RwndLimited = tcp.rwndLimited
+	p.SndbufLimited = tcp.sndbufLimited
+
+	p.Delivered = tcp.delivered
+	p.DeliveredCe = tcp.deliveredCe
+
+	p.BytesSent = tcp.bytesSent
+	p.BytesRetrans = tcp.bytesRetrans
+	p.DsackDups = tcp.dsackDups
+	p.ReordSeen = tcp.reordSeen
 
 	return &p
 }
