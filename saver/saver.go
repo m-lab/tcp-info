@@ -19,13 +19,13 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/m-lab/go/uuid"
 	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/metrics"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/nl-proto/pbtools"
 	"github.com/m-lab/tcp-info/zstd"
+	"github.com/m-lab/uuid"
 )
 
 // We will send an entire batch of prefiltered ParsedMessages through a channel from
@@ -119,10 +119,7 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 	if err != nil {
 		return err
 	}
-	id, err := uuid.FromCookie(conn.ID.Cookie())
-	if err != nil {
-		return err
-	}
+	id := uuid.FromCookie(conn.ID.Cookie())
 	conn.Writer, err = zstd.NewWriter(fmt.Sprintf("%s/%s.%05d.zst", datePath, id, conn.Sequence))
 	if err != nil {
 		return err
