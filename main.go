@@ -9,8 +9,6 @@ import (
 	"os"
 	"runtime"
 	"runtime/trace"
-	"syscall"
-	"time"
 
 	"github.com/m-lab/go/prometheusx"
 
@@ -20,6 +18,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
+	"github.com/m-lab/tcp-info/collector"
 	"github.com/m-lab/tcp-info/inetdiag"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/saver"
@@ -59,65 +58,6 @@ func init() {
 //  1. zstd is much better than gzip
 //  2. the go zstd wrapper doesn't seem to work well - poor compression and slow.
 //  3. zstd seems to result in similar file size using proto or raw output.
-
-var errCount = 0
-var localCount = 0
-
-// Stats prints out some basic cache stats.
-// TODO - should also export all of these as Prometheus metrics.  (Issue #32)
-func Stats(svr *saver.Saver) {
-	stats := svr.Stats()
-	log.Printf("Cache info total %d  local %d same %d diff %d new %d err %d\n",
-		stats.TotalCount+localCount, localCount,
-		stats.TotalCount-(errCount+stats.NewCount+stats.DiffCount+localCount),
-		stats.DiffCount, stats.NewCount, errCount)
-}
-
-func appendAll(all []*inetdiag.ParsedMessage, msgs []*syscall.NetlinkMessage) {
-	ts := time.Now()
-	for i := range msgs {
-		pm, err := inetdiag.Parse(msgs[i], true)
-		if err != nil {
-			log.Println(err)
-			errCount++
-		} else if pm == nil {
-			localCount++
-		} else {
-			pm.Timestamp = ts
-			all = append(all, pm)
-		}
-	}
-}
-
-// CollectDefaultNamespace collects all AF_INET6 and AF_INET connection stats, and sends them
-// to svr.
-func CollectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
-	// Preallocate space for up to 500 connections.  We may want to adjust this upwards if profiling
-	// indicates a lot of reallocation.
-	all := make([]*inetdiag.ParsedMessage, 0, 500)
-	remoteCount := 0
-	res6, err := inetdiag.OneType(syscall.AF_INET6)
-	if err != nil {
-		// Properly handle errors
-		// TODO add metric
-		log.Println(err)
-	} else {
-		appendAll(all, res6)
-	}
-	res4, err := inetdiag.OneType(syscall.AF_INET)
-	if err != nil {
-		// Properly handle errors
-		// TODO add metric
-		log.Println(err)
-	} else {
-		appendAll(all, res4)
-	}
-
-	// Submit full set of message to the marshalling service.
-	svr <- all
-
-	return len(res4) + len(res6), remoteCount
-}
 
 var (
 	reps        = flag.Int("reps", 0, "How many cycles should be recorded, 0 means continuous")
@@ -159,36 +99,18 @@ func main() {
 		defer trace.Stop()
 	}
 
-	totalCount := 0
-	remoteCount := 0
-	loops := 0
-	svr := saver.NewSaver("host", "pod", 3)
-
-	// Construct message channel, buffering up to 2 batches of messages without stalling producer.
-	// We may want to increase this if we observe main() stalling.
+	// Make the saver and construct the message channel, buffering up to 2 batches
+	// of messages without stalling producer. We may want to increase the buffer if
+	// we observe main() stalling.
 	svrChan := make(chan []*inetdiag.ParsedMessage, 2)
+	svr := saver.NewSaver("host", "pod", 3)
 	go svr.MessageSaverLoop(svrChan)
 
-	ticker := time.NewTicker(10 * time.Millisecond)
+	// Run the collector, possibly forever.
+	totalSeen, totalErr := collector.Run(svrChan, *reps, svr)
 
-	for loops = 0; *reps == 0 || loops < *reps; loops++ {
-		total, remote := CollectDefaultNamespace(svrChan)
-		totalCount += total
-		remoteCount += remote
-		// print stats roughly once per minute.
-		if loops%6000 == 0 {
-			Stats(svr)
-		}
-
-		// Wait for next tick.
-		<-ticker.C
-	}
-	ticker.Stop()
-
+	// Shut down and clean up after the collector terminates.
 	close(svrChan)
 	svr.Done.Wait()
-	Stats(svr)
-	if loops > 0 {
-		log.Println(totalCount, "sockets", remoteCount, "remotes", totalCount/loops, "per iteration")
-	}
+	svr.LogCacheStats(totalSeen, totalErr)
 }

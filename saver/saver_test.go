@@ -119,3 +119,9 @@ func TestBasic(t *testing.T) {
 	verifySize(t, 271, "0001/01/01/*_00000000000000D2.00000.zst")
 	verifySize(t, 248, "0001/01/01/*_00000000000000EA.00000.zst")
 }
+
+// If this compiles, the "test" passes
+func assertSaverIsACacheLogger(s *saver.Saver) {
+	f := func(csl saver.CacheLogger) {}
+	f(s)
+}
