@@ -87,7 +87,7 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func NewMarshaller(wg *sync.WaitGroup) MarshalChan {
+func newMarshaller(wg *sync.WaitGroup) MarshalChan {
 	marshChan := make(chan Task, 100)
 	wg.Add(1)
 	go runMarshaller(marshChan, wg)
@@ -106,7 +106,7 @@ type Connection struct {
 	Writer     io.WriteCloser
 }
 
-func NewConnection(info *inetdiag.InetDiagMsg, timestamp time.Time) *Connection {
+func newConnection(info *inetdiag.InetDiagMsg, timestamp time.Time) *Connection {
 	conn := Connection{Inode: info.IDiagInode, ID: info.ID, UID: info.IDiagUID, Slice: "", StartTime: timestamp, Sequence: 0,
 		Expiration: time.Now()}
 	return &conn
@@ -130,7 +130,7 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 	return nil
 }
 
-type Stats struct {
+type stats struct {
 	TotalCount   int
 	NewCount     int
 	DiffCount    int
@@ -139,7 +139,7 @@ type Stats struct {
 
 // Print prints out some basic stats about saver use.
 // TODO - should also export all of these as Prometheus metrics.  (Issue #32)
-func (stats *Stats) Print() {
+func (stats *stats) Print() {
 	log.Printf("Cache info total %d same %d diff %d new %d closed %d\n",
 		stats.TotalCount, stats.TotalCount-(stats.NewCount+stats.DiffCount),
 		stats.DiffCount, stats.NewCount, stats.ExpiredCount)
@@ -157,8 +157,10 @@ type Saver struct {
 	Done         *sync.WaitGroup // All marshallers will call Done on this.
 	Connections  map[uint64]*Connection
 
-	cache *cache.Cache
-	stats Stats
+	InputChannel  chan<- []*inetdiag.ParsedMessage
+	readerChannel <-chan []*inetdiag.ParsedMessage // These should be opposite ends of the same channel
+	cache         *cache.Cache
+	stats         stats
 }
 
 // NewSaver creates a new Saver for the given host and pod.  numMarshaller controls
@@ -173,9 +175,24 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 	ageLim := 10 * time.Minute
 
 	for i := 0; i < numMarshaller; i++ {
-		m = append(m, NewMarshaller(wg))
+		m = append(m, newMarshaller(wg))
 	}
-	return &Saver{Host: host, Pod: pod, FileAgeLimit: ageLim, MarshalChans: m, Done: wg, Connections: conn, cache: c}
+
+	// Make the saver and construct the message channel, buffering up to 2 batches
+	// of messages without stalling producer. We may want to increase the buffer if
+	// we observe the producer stalling.
+	svrChan := make(chan []*inetdiag.ParsedMessage, 2)
+	return &Saver{
+		Host:          host,
+		Pod:           pod,
+		FileAgeLimit:  ageLim,
+		MarshalChans:  m,
+		Done:          wg,
+		Connections:   conn,
+		InputChannel:  svrChan,
+		readerChannel: svrChan,
+		cache:         c,
+	}
 }
 
 // queue queues a single ParsedMessage to the appropriate marshalling queue, based on the
@@ -200,7 +217,7 @@ func (svr *Saver) queue(msg *inetdiag.ParsedMessage) error {
 		if svr.cache.CycleCount() > 0 || msg.InetDiagMsg.IDiagState != uint8(tcp.TCPState_ESTABLISHED) {
 			log.Println("New conn:", msg.InetDiagMsg, msg.Timestamp)
 		}
-		conn = NewConnection(msg.InetDiagMsg, msg.Timestamp)
+		conn = newConnection(msg.InetDiagMsg, msg.Timestamp)
 		svr.Connections[cookie] = conn
 	} else {
 		//log.Println("Diff inode:", inode)
@@ -230,10 +247,10 @@ func (svr *Saver) endConn(cookie uint64) {
 }
 
 // MessageSaverLoop runs a loop to receive batches of ParsedMessages.  Local connections
-func (svr *Saver) MessageSaverLoop(groupChan chan []*inetdiag.ParsedMessage) {
+func (svr *Saver) MessageSaverLoop() {
 	log.Println("Starting Saver")
 	for {
-		msgs, ok := <-groupChan
+		msgs, ok := <-svr.readerChannel
 		if !ok {
 			break
 		}
@@ -253,7 +270,6 @@ func (svr *Saver) MessageSaverLoop(groupChan chan []*inetdiag.ParsedMessage) {
 		}
 	}
 	svr.Close()
-	svr.Stats()
 }
 
 func (svr *Saver) swapAndQueue(pm *inetdiag.ParsedMessage) {
@@ -294,7 +310,12 @@ func (svr *Saver) Close() {
 	svr.Done.Wait()
 }
 
-// Stats returns the saver Stats.
-func (svr *Saver) Stats() Stats {
-	return svr.stats
+// LogCacheStats prints out some basic cache stats.
+// TODO - should also export all of these as Prometheus metrics.  (Issue #32)
+func (svr *Saver) LogCacheStats(localCount, errCount int) {
+	stats := svr.stats // Get a copy
+	log.Printf("Cache info total %d  local %d same %d diff %d new %d err %d\n",
+		stats.TotalCount+localCount, localCount,
+		stats.TotalCount-(errCount+stats.NewCount+stats.DiffCount+localCount),
+		stats.DiffCount, stats.NewCount, errCount)
 }

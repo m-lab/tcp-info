@@ -87,34 +87,33 @@ func TestBasic(t *testing.T) {
 		rtx.Must(os.Chdir(oldDir), "Could not switch back to %s", oldDir)
 	}()
 	svr := saver.NewSaver("foo", "bar", 1)
-	svrChan := make(chan []*inetdiag.ParsedMessage, 0) // no buffering
-	go svr.MessageSaverLoop(svrChan)
+	go svr.MessageSaverLoop()
 
 	// This round just initializes the cache.
 	m1 := []*inetdiag.ParsedMessage{msg(1234, 1234), msg(234, 234)}
 	dump(m1[0])
-	svrChan <- m1
+	svr.InputChannel <- m1
 
 	// This should NOT write to file, because nothing changed
 	m2 := []*inetdiag.ParsedMessage{msg(1234, 1234), msg(234, 234)}
-	svrChan <- m2
+	svr.InputChannel <- m2
 
 	// This changes the first connection, and ends the second connection.
 	m3 := []*inetdiag.ParsedMessage{msg(1234, 1234)}
 	m3[0].Attributes[inetdiag.INET_DIAG_INFO].Value[20] = 127
-	svrChan <- m3
+	svr.InputChannel <- m3
 
 	// This changes the first connection again.
 	m4 := []*inetdiag.ParsedMessage{msg(1234, 1234)}
 	m3[0].Attributes[inetdiag.INET_DIAG_INFO].Value[20] = 127
 	m4[0].Attributes[inetdiag.INET_DIAG_INFO].Value[105] = 127
-	svrChan <- m4
+	svr.InputChannel <- m4
 
 	m5 := []*inetdiag.ParsedMessage{msg(1234, 1234)}
-	svrChan <- m5
+	svr.InputChannel <- m5
 
 	// Force close all the files.
-	close(svrChan)
+	close(svr.InputChannel)
 	svr.Done.Wait()
 	verifySize(t, 271, "0001/01/01/*_00000000000000D2.00000.zst")
 	verifySize(t, 248, "0001/01/01/*_00000000000000EA.00000.zst")
