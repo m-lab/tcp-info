@@ -19,6 +19,7 @@ import (
 	"github.com/golang/protobuf/proto"
 
 	"github.com/m-lab/tcp-info/collector"
+	"github.com/m-lab/tcp-info/inetdiag"
 	tcp "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/saver"
 )
@@ -101,13 +102,15 @@ func main() {
 	// Make the saver and construct the message channel, buffering up to 2 batches
 	// of messages without stalling producer. We may want to increase the buffer if
 	// we observe main() stalling.
+	svrChan := make(chan []*inetdiag.ParsedMessage, 2)
 	svr := saver.NewSaver("host", "pod", 3)
-	go svr.MessageSaverLoop()
+	go svr.MessageSaverLoop(svrChan)
 
 	// Run the collector, possibly forever.
-	totalSeen, totalErr := collector.Run(*reps, svr)
+	totalSeen, totalErr := collector.Run(svrChan, *reps, svr)
 
-	close(svr.InputChannel)
+	// Shut down and clean up after the collector terminates.
+	close(svrChan)
 	svr.Done.Wait()
 	svr.LogCacheStats(totalSeen, totalErr)
 }

@@ -48,6 +48,11 @@ type Task struct {
 	Writer  io.WriteCloser
 }
 
+// CacheLogger is any object with a LogCacheStats method.
+type CacheLogger interface {
+	LogCacheStats(localCount, errCount int)
+}
+
 // MarshalChan is a channel of marshalling tasks.
 type MarshalChan chan<- Task
 
@@ -157,10 +162,8 @@ type Saver struct {
 	Done         *sync.WaitGroup // All marshallers will call Done on this.
 	Connections  map[uint64]*Connection
 
-	InputChannel  chan<- []*inetdiag.ParsedMessage
-	readerChannel <-chan []*inetdiag.ParsedMessage // These should be opposite ends of the same channel
-	cache         *cache.Cache
-	stats         stats
+	cache *cache.Cache
+	stats stats
 }
 
 // NewSaver creates a new Saver for the given host and pod.  numMarshaller controls
@@ -178,20 +181,14 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 		m = append(m, newMarshaller(wg))
 	}
 
-	// Make the saver and construct the message channel, buffering up to 2 batches
-	// of messages without stalling producer. We may want to increase the buffer if
-	// we observe the producer stalling.
-	svrChan := make(chan []*inetdiag.ParsedMessage, 2)
 	return &Saver{
-		Host:          host,
-		Pod:           pod,
-		FileAgeLimit:  ageLim,
-		MarshalChans:  m,
-		Done:          wg,
-		Connections:   conn,
-		InputChannel:  svrChan,
-		readerChannel: svrChan,
-		cache:         c,
+		Host:         host,
+		Pod:          pod,
+		FileAgeLimit: ageLim,
+		MarshalChans: m,
+		Done:         wg,
+		Connections:  conn,
+		cache:        c,
 	}
 }
 
@@ -247,10 +244,10 @@ func (svr *Saver) endConn(cookie uint64) {
 }
 
 // MessageSaverLoop runs a loop to receive batches of ParsedMessages.  Local connections
-func (svr *Saver) MessageSaverLoop() {
+func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*inetdiag.ParsedMessage) {
 	log.Println("Starting Saver")
 	for {
-		msgs, ok := <-svr.readerChannel
+		msgs, ok := <-readerChannel
 		if !ok {
 			break
 		}

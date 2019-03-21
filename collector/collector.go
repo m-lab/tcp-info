@@ -62,7 +62,7 @@ func collectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 
 // Run the collector, either for the specified number of loops, or, if the
 // number specified is infinite, run forever.
-func Run(reps int, svr *saver.Saver) (localCount, errCount int) {
+func Run(svrChan chan<- []*inetdiag.ParsedMessage, reps int, cl saver.CacheLogger) (localCount, errCount int) {
 	totalCount := 0
 	remoteCount := 0
 	loops := 0
@@ -71,12 +71,12 @@ func Run(reps int, svr *saver.Saver) (localCount, errCount int) {
 	defer ticker.Stop()
 
 	for loops = 0; reps == 0 || loops < reps; loops++ {
-		total, remote := collectDefaultNamespace(svr.InputChannel)
+		total, remote := collectDefaultNamespace(svrChan)
 		totalCount += total
 		remoteCount += remote
 		// print stats roughly once per minute.
 		if loops%6000 == 0 {
-			svr.LogCacheStats(localCount, errCount)
+			cl.LogCacheStats(localCount, errCount)
 		}
 
 		// Wait for next tick.
