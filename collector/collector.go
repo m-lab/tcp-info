@@ -14,7 +14,7 @@ var (
 	localCount = 0
 )
 
-func appendAll(all []*inetdiag.ParsedMessage, msgs []*syscall.NetlinkMessage) {
+func appendAll(all []*inetdiag.ParsedMessage, msgs []*syscall.NetlinkMessage) []*inetdiag.ParsedMessage {
 	ts := time.Now()
 	for i := range msgs {
 		pm, err := inetdiag.Parse(msgs[i], true)
@@ -28,6 +28,7 @@ func appendAll(all []*inetdiag.ParsedMessage, msgs []*syscall.NetlinkMessage) {
 			all = append(all, pm)
 		}
 	}
+	return all
 }
 
 // collectDefaultNamespace collects all AF_INET6 and AF_INET connection stats, and sends them
@@ -43,7 +44,7 @@ func collectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 		// TODO add metric
 		log.Println(err)
 	} else {
-		appendAll(all, res6)
+		all = appendAll(all, res6)
 	}
 	res4, err := inetdiag.OneType(syscall.AF_INET)
 	if err != nil {
@@ -51,7 +52,7 @@ func collectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 		// TODO add metric
 		log.Println(err)
 	} else {
-		appendAll(all, res4)
+		all = appendAll(all, res4)
 	}
 
 	// Submit full set of message to the marshalling service.
