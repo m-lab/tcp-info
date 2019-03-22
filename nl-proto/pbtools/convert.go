@@ -83,7 +83,7 @@ func AttrToField(all *tcpinfo.TCPDiagnosticsProto, rta *syscall.NetlinkRouteAttr
 	case inetdiag.INET_DIAG_VEGASINFO:
 		fallthrough
 	case inetdiag.INET_DIAG_SKV6ONLY:
-		log.Printf("Not processing %+v\n", rta)
+		log.Printf("WARNING: Not processing %+v\n", rta)
 
 	case inetdiag.INET_DIAG_MARK:
 		// TODO Already seeing this when run as root, so we should process it.
