@@ -29,12 +29,14 @@ expressed in host-byte order"
 */
 
 import (
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -89,11 +91,12 @@ var diagFamilyMap = map[uint8]string{
 // InetDiagSockID is the binary linux representation of a socket, as in linux/inet_diag.h
 // Linux code comments indicate this struct uses the network byte order!!!
 type InetDiagSockID struct {
-	IDiagSPort  [2]byte
-	IDiagDPort  [2]byte
-	IDiagSrc    [16]byte
-	IDiagDst    [16]byte
-	IDiagIf     [4]byte
+	IDiagSPort [2]byte
+	IDiagDPort [2]byte
+	IDiagSrc   [16]byte
+	IDiagDst   [16]byte
+	IDiagIf    [4]byte
+	// TODO - change this to [2]uint32 ?
 	IDiagCookie [8]byte
 }
 
@@ -231,9 +234,44 @@ func ParseInetDiagMsg(data []byte) (*InetDiagMsg, []byte) {
 // ParsedMessage is a container for parsed InetDiag messages and attributes.
 type ParsedMessage struct {
 	Timestamp   time.Time
-	NLMsg       *syscall.NetlinkMessage
-	InetDiagMsg *InetDiagMsg                             // Pointer to actual InetDiagMsg within NLMsg
-	Attributes  [INET_DIAG_MAX]*syscall.NetlinkRouteAttr // Pointers to RouteAttr, with Value fields backed by NLMsg
+	NLMsg       *syscall.NetlinkMessage // The entire raw netlink message.
+	InetDiagMsg *InetDiagMsg            // Pointer to actual InetDiagMsg within NLMsg
+	// TODO should this be a slice instead of array, in case we get attributes > INET_DIAG_MAX?
+	Attributes [INET_DIAG_MAX]*syscall.NetlinkRouteAttr // Pointers to RouteAttr, with Value fields backed by NLMsg
+}
+
+/*
+First json object will be a metadata object, including the UUID, the host endianess, and possibly connection data.
+All subsequent rows will initially look like:
+{ Time: Timestamp, header: {...}, data: base64(data) }
+ASAP, we will likely break down the netlink message content into an array of base64 encoded RouteAttr messages.
+
+
+Metadata fields: (preliminary)
+UUID:  A universal connection identifier, from code in github/m-lab/uuid.
+Block sequence number, 0 for first file per connection, incrementing for each subsequent file.
+ConnectionStartTime: The time at which the connection was initiated.
+ExperimentConfigID: ???
+PlatformConfigID: ???
+*/
+// Serialize converts a ParsedMessage to a single line JSONL string.
+
+// WriteRouteAttr writes a NetlinkRouteAttr to a json representation
+func (msg ParsedMessage) WriteRouteAttr(i int, b strings.Builder) {
+	b.WriteByte('"')
+	enc := base64.NewEncoder(base64.StdEncoding, &b)
+	enc.Write(msg.Attributes[i].Value)
+	enc.Close()
+	b.WriteByte('"')
+}
+
+func (msg ParsedMessage) Serialize() string {
+
+	var builder strings.Builder
+	for i := range msg.Attributes {
+		msg.WriteRouteAttr(i, builder)
+	}
+	return "{}"
 }
 
 func isLocal(addr net.IP) bool {
