@@ -145,7 +145,7 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if mp.NLMsg.Header.Len != 356 {
+	if mp.NLMsgHdr.Len != 356 {
 		t.Error("wrong length")
 	}
 	if mp.InetDiagMsg.IDiagFamily != unix.AF_INET6 {
@@ -307,23 +307,17 @@ func TestNLMsgSerialize(t *testing.T) {
 		}
 		pm, err := inetdiag.Parse(msg, false)
 		rtx.Must(err, "Could not parse test data")
-		s := pm.Serialize()
-		type OneLine struct {
-			Timestamp   int64
-			NLMsgHdr    syscall.NlMsghdr
-			Attributes  []string
-			InetDiagMsg inetdiag.InetDiagMsg
-		}
-		var o OneLine
-		log.Println("JSON:", s)
-		if strings.Contains(s, "\n") {
+		s, err := json.Marshal(pm)
+		rtx.Must(err, "Could not serialize %v", pm)
+		if strings.Contains(string(s), "\n") {
 			t.Errorf("String %q should not have a newline in it", s)
 		}
-		rtx.Must(json.Unmarshal([]byte(s), &o), "Could not parse one line of output")
-		log.Printf("%v\n", o)
-
-		if o.Timestamp < 0 {
-			// t.Errorf("Bad timestamp in %v (derived from %q)", o, s)  // FIXME: bad data in testdata
+		var um inetdiag.ParsedMessage
+		rtx.Must(json.Unmarshal([]byte(s), &um), "Could not parse one line of output")
+		rs, err := json.Marshal(um)
+		rtx.Must(err, "Could not remarshall %v", um)
+		if string(rs) != string(s) {
+			t.Fatalf("%v and %v were not equal after serialization and deserialization", pm, um)
 		}
 		parsed++
 	}

@@ -9,7 +9,7 @@
 package saver
 
 import (
-	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/metrics"
@@ -40,6 +39,12 @@ import (
 var (
 	ErrNoMarshallers = errors.New("Saver has zero Marshallers")
 )
+
+type Metadata struct {
+	UUID      string
+	Sequence  int
+	StartTime time.Time
+}
 
 // Task represents a single marshalling task, specifying the message and the writer.
 type Task struct {
@@ -69,24 +74,8 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 		if task.Writer == nil {
 			log.Fatal("Nil writer")
 		}
-		msg := task.Message
-		pb := pbtools.CreateProto(msg.Timestamp, msg.NLMsg.Header, msg.InetDiagMsg, msg.Attributes[:])
-		wire, err := proto.Marshal(pb)
-		if err != nil {
-			log.Println(err)
-		} else {
-			// For each record, write the size of the record, followed by the record itself.
-			size := make([]byte, 9)
-			lsize := binary.PutUvarint(size, uint64(len(wire))) // task.Writer
-			_, err = task.Writer.Write(size[:lsize])
-			if err != nil {
-				log.Println(err)
-			}
-			_, err = task.Writer.Write(wire)
-			if err != nil {
-				log.Println(err)
-			}
-		}
+		b, _ := json.Marshal(task.Message) // FIXME: don't ignore error
+		task.Writer.Write(b)
 	}
 	log.Println("Marshaller Done")
 	wg.Done()
@@ -125,14 +114,32 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 		return err
 	}
 	id := uuid.FromCookie(conn.ID.Cookie())
-	conn.Writer, err = zstd.NewWriter(fmt.Sprintf("%s/%s.%05d.zst", datePath, id, conn.Sequence))
+	conn.Writer, err = zstd.NewWriter(fmt.Sprintf("%s/%s.%05d.jsonl.zst", datePath, id, conn.Sequence))
 	if err != nil {
 		return err
 	}
+	conn.writeHeader()
 	metrics.NewFileCount.Inc()
 	conn.Expiration = conn.Expiration.Add(10 * time.Minute)
 	conn.Sequence++
 	return nil
+}
+
+func (conn *Connection) writeHeader() {
+	type OnlyMetadata struct {
+		Metadata *Metadata
+	}
+	om := OnlyMetadata{
+		Metadata: &Metadata{
+			UUID:      uuid.FromCookie(conn.ID.Cookie()),
+			Sequence:  conn.Sequence,
+			StartTime: conn.StartTime,
+		},
+	}
+	// FIXME: Error handling
+	bytes, _ := json.Marshal(om)
+	conn.Writer.Write(bytes)
+	conn.Writer.Write([]byte("\n"))
 }
 
 type stats struct {
