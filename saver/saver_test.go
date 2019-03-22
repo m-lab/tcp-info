@@ -116,8 +116,8 @@ func TestBasic(t *testing.T) {
 	// Force close all the files.
 	close(svrChan)
 	svr.Done.Wait()
-	verifySize(t, 271, "0001/01/01/*_00000000000000D2.00000.zst")
-	verifySize(t, 248, "0001/01/01/*_00000000000000EA.00000.zst")
+	verifySize(t, 604, "0001/01/01/*_00000000000000D2.00000.jsonl.zst")
+	verifySize(t, 580, "0001/01/01/*_00000000000000EA.00000.jsonl.zst")
 }
 
 // If this compiles, the "test" passes

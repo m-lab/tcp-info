@@ -32,13 +32,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
-	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -236,10 +234,41 @@ func ParseInetDiagMsg(data []byte) (*InetDiagMsg, []byte) {
 // ParsedMessage is a container for parsed InetDiag messages and attributes.
 type ParsedMessage struct {
 	Timestamp   time.Time
-	NLMsg       *syscall.NetlinkMessage // The entire raw netlink message.
-	InetDiagMsg *InetDiagMsg            // Pointer to actual InetDiagMsg within NLMsg
+	NLMsgHdr    *syscall.NlMsghdr // The header of the raw netlink message.
+	InetDiagMsg *InetDiagMsg      // Pointer to actual InetDiagMsg within NLMsg
 	// TODO should this be a slice instead of array, in case we get attributes > INET_DIAG_MAX?
-	Attributes [INET_DIAG_MAX]*syscall.NetlinkRouteAttr // Pointers to RouteAttr, with Value fields backed by NLMsg
+	Attributes [INET_DIAG_MAX]*NetlinkRouteAttr // Pointers to RouteAttr, with Value fields backed by NLMsg
+}
+
+type NetlinkRouteAttr syscall.NetlinkRouteAttr
+
+func (n *NetlinkRouteAttr) MarshalJSON() ([]byte, error) {
+	if n == nil {
+		return []byte("null"), nil
+	}
+	var b bytes.Buffer
+	b.WriteByte('"')
+	enc := base64.NewEncoder(base64.StdEncoding, &b)
+	// Not serializing RtAttr - is this okay?
+	enc.Write(n.Value)
+	enc.Close()
+	b.WriteByte('"')
+	return b.Bytes(), nil
+}
+
+func (n *NetlinkRouteAttr) UnmarshalJSON(input []byte) error {
+	if string(input) == "null" {
+		return nil
+	}
+	if len(input) < 2 {
+		return errors.New("Could not Unmarshall too-short NetlinkRouteAttr")
+	}
+	if input[0] != '"' || input[len(input)-1] != '"' {
+		return errors.New("No quotes provide for NetlinkRouteAttr")
+	}
+	var err error
+	n.Value, err = base64.StdEncoding.DecodeString(string(input[1 : len(input)-1]))
+	return err
 }
 
 /*
@@ -257,56 +286,6 @@ ExperimentConfigID: ???
 PlatformConfigID: ???
 */
 // Serialize converts a ParsedMessage to a single line JSONL string.
-
-// WriteRouteAttr writes a NetlinkRouteAttr to a json representation
-func (msg ParsedMessage) writeRouteAttr(i int, b *strings.Builder) {
-	b.WriteByte('"')
-	if msg.Attributes[i] != nil {
-		enc := base64.NewEncoder(base64.StdEncoding, b)
-		enc.Write(msg.Attributes[i].Value)
-		enc.Close()
-	}
-	b.WriteByte('"')
-}
-
-func (msg ParsedMessage) writeNLHeader(b *strings.Builder) {
-	b.WriteString("\"NLMsgHdr\": ")
-	if msg.NLMsg == nil {
-		b.WriteString("null")
-		return
-	}
-	jsonBytes, _ := json.Marshal(msg.NLMsg.Header)
-	// FIXME: stop ignoring the error
-	var jsonBuffer bytes.Buffer
-	json.Compact(&jsonBuffer, jsonBytes)
-	b.Write(jsonBuffer.Bytes()) // FIXME check the error
-}
-
-func (msg ParsedMessage) writeInetDiagMsg(b *strings.Builder) {
-	b.WriteString("\"InetDiagMsg\": ")
-	jsonBytes, _ := json.Marshal(msg.InetDiagMsg)
-	// FIXME: stop ignoring the error
-	var jsonBuffer bytes.Buffer
-	json.Compact(&jsonBuffer, jsonBytes)
-	b.Write(jsonBuffer.Bytes()) // FIXME check the error
-}
-
-func (msg ParsedMessage) Serialize() string {
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("{\"Timestamp\": %d, ", msg.Timestamp.UnixNano()))
-	msg.writeNLHeader(&builder)
-	builder.WriteString(", ")
-	msg.writeInetDiagMsg(&builder)
-	builder.WriteString(", \"Attributes\": [")
-	for i := range msg.Attributes {
-		if i > 0 {
-			builder.WriteByte(',')
-		}
-		msg.writeRouteAttr(i, &builder)
-	}
-	builder.WriteString("]}")
-	return builder.String()
-}
 
 func isLocal(addr net.IP) bool {
 	return addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsMulticast() || addr.IsUnspecified()
@@ -328,14 +307,15 @@ func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) 
 			return nil, nil
 		}
 	}
-	parsedMsg := ParsedMessage{NLMsg: msg, InetDiagMsg: idm}
+	parsedMsg := ParsedMessage{NLMsgHdr: &msg.Header, InetDiagMsg: idm}
 	attrs, err := ParseRouteAttr(attrBytes)
 	if err != nil {
 		return nil, err
 	}
-	for i := range attrs {
+	for i, a := range attrs {
+		nla := NetlinkRouteAttr(a)
 		// We copy the RouteAttr here, but the Value is backed by msg.Data
-		parsedMsg.Attributes[attrs[i].Attr.Type] = &attrs[i]
+		parsedMsg.Attributes[attrs[i].Attr.Type] = &nla
 	}
 	return &parsedMsg, nil
 }
