@@ -7,11 +7,13 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
 	"unsafe"
 
+	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/zstd"
 	"golang.org/x/sys/unix"
@@ -282,6 +284,46 @@ func TestReader(t *testing.T) {
 				break
 			}
 			t.Fatal(err)
+		}
+		parsed++
+	}
+	if parsed != 420 {
+		t.Error("Wrong count:", parsed)
+	}
+}
+
+func TestNLMsgSerialize(t *testing.T) {
+	source := "testdata/testdata.zst"
+	log.Println("Reading messages from", source)
+	rdr := zstd.NewReader(source)
+	parsed := 0
+	for {
+		msg, err := inetdiag.LoadNext(rdr)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatal(err)
+		}
+		pm, err := inetdiag.Parse(msg, false)
+		rtx.Must(err, "Could not parse test data")
+		s := pm.Serialize()
+		type OneLine struct {
+			Timestamp   int64
+			NLMsgHdr    syscall.NlMsghdr
+			Attributes  []string
+			InetDiagMsg inetdiag.InetDiagMsg
+		}
+		var o OneLine
+		log.Println("JSON:", s)
+		if strings.Contains(s, "\n") {
+			t.Errorf("String %q should not have a newline in it", s)
+		}
+		rtx.Must(json.Unmarshal([]byte(s), &o), "Could not parse one line of output")
+		log.Printf("%v\n", o)
+
+		if o.Timestamp < 0 {
+			// t.Errorf("Bad timestamp in %v (derived from %q)", o, s)  // FIXME: bad data in testdata
 		}
 		parsed++
 	}

@@ -29,8 +29,10 @@ expressed in host-byte order"
 */
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -257,21 +259,53 @@ PlatformConfigID: ???
 // Serialize converts a ParsedMessage to a single line JSONL string.
 
 // WriteRouteAttr writes a NetlinkRouteAttr to a json representation
-func (msg ParsedMessage) WriteRouteAttr(i int, b strings.Builder) {
+func (msg ParsedMessage) writeRouteAttr(i int, b *strings.Builder) {
 	b.WriteByte('"')
-	enc := base64.NewEncoder(base64.StdEncoding, &b)
-	enc.Write(msg.Attributes[i].Value)
-	enc.Close()
+	if msg.Attributes[i] != nil {
+		enc := base64.NewEncoder(base64.StdEncoding, b)
+		enc.Write(msg.Attributes[i].Value)
+		enc.Close()
+	}
 	b.WriteByte('"')
 }
 
-func (msg ParsedMessage) Serialize() string {
-
-	var builder strings.Builder
-	for i := range msg.Attributes {
-		msg.WriteRouteAttr(i, builder)
+func (msg ParsedMessage) writeNLHeader(b *strings.Builder) {
+	b.WriteString("\"NLMsgHdr\": ")
+	if msg.NLMsg == nil {
+		b.WriteString("null")
+		return
 	}
-	return "{}"
+	jsonBytes, _ := json.Marshal(msg.NLMsg.Header)
+	// FIXME: stop ignoring the error
+	var jsonBuffer bytes.Buffer
+	json.Compact(&jsonBuffer, jsonBytes)
+	b.Write(jsonBuffer.Bytes()) // FIXME check the error
+}
+
+func (msg ParsedMessage) writeInetDiagMsg(b *strings.Builder) {
+	b.WriteString("\"InetDiagMsg\": ")
+	jsonBytes, _ := json.Marshal(msg.InetDiagMsg)
+	// FIXME: stop ignoring the error
+	var jsonBuffer bytes.Buffer
+	json.Compact(&jsonBuffer, jsonBytes)
+	b.Write(jsonBuffer.Bytes()) // FIXME check the error
+}
+
+func (msg ParsedMessage) Serialize() string {
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("{\"Timestamp\": %d, ", msg.Timestamp.UnixNano()))
+	msg.writeNLHeader(&builder)
+	builder.WriteString(", ")
+	msg.writeInetDiagMsg(&builder)
+	builder.WriteString(", \"Attributes\": [")
+	for i := range msg.Attributes {
+		if i > 0 {
+			builder.WriteByte(',')
+		}
+		msg.writeRouteAttr(i, &builder)
+	}
+	builder.WriteString("]}")
+	return builder.String()
 }
 
 func isLocal(addr net.IP) bool {
