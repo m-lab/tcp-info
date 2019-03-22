@@ -44,7 +44,7 @@ install:
 # Install protobuf compiler
 # NOTE: This should be updated periodically to use latest version.
 - wget https://github.com/protocolbuffers/protobuf/releases/download/v3.7.0/protoc-3.7.0-linux-x86_64.zip
-- unzip protoc-3.6.0-linux-x86_64.zip  # Should provide bin/protoc
+- unzip protoc-3.7.0-linux-x86_64.zip  # Should provide bin/protoc
 - bin/protoc --version
 
 # Install zstd tool.
@@ -57,7 +57,7 @@ script:
 - cp nl-proto/*.pb.go backup
 - $TRAVIS_BUILD_DIR/bin/protoc --go_out=. nl-proto/*.proto
 - for x in `ls nl-proto/*.pb.go`; do
-    diff $x backup/$x;
+    diff $x backup/$(basename $x);
   done
 - cd $TRAVIS_BUILD_DIR
 
