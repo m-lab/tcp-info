@@ -170,9 +170,9 @@ type LinuxTCPInfo struct {
 
 	deliveryRate uint64
 
-	busyTime      uint64 /* Time (usec) busy sending data */
-	rwndLimited   uint64 /* Time (usec) limited by receive window */
-	sndbufLimited uint64 /* Time (usec) limited by send buffer */
+	busyTime      int64 /* Time (usec) busy sending data */
+	rwndLimited   int64 /* Time (usec) limited by receive window */
+	sndbufLimited int64 /* Time (usec) limited by send buffer */
 
 	delivered   uint32
 	deliveredCe uint32
