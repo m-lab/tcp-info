@@ -42,7 +42,8 @@ install:
 - go get github.com/golang/protobuf/protoc-gen-go/ github.com/golang/protobuf/proto
 
 # Install protobuf compiler
-- wget https://github.com/google/protobuf/releases/download/v3.6.0/protoc-3.6.0-linux-x86_64.zip
+# NOTE: This should be updated periodically to use latest version.
+- wget https://github.com/google/protobuf/releases/download/v3.7.0/protoc-3.6.0-linux-x86_64.zip
 - unzip protoc-3.6.0-linux-x86_64.zip  # Should provide bin/protoc
 - bin/protoc --version
 
@@ -51,11 +52,11 @@ install:
 
 script:
 # Compile and compare protobufs
-- cd $TRAVIS_BUILD_DIR/nl-proto
+- cd $TRAVIS_BUILD_DIR
 - mkdir backup
-- cp *.pb.go backup
-- $TRAVIS_BUILD_DIR/bin/protoc --go_out=. *.proto
-- for x in `ls *.pb.go`; do
+- cp nl-proto/*.pb.go backup
+- $TRAVIS_BUILD_DIR/bin/protoc --go_out=. nl-proto/*.proto
+- for x in `ls nl-proto/*.pb.go`; do
     diff $x backup/$x;
   done
 - cd $TRAVIS_BUILD_DIR
