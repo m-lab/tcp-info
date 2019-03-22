@@ -77,6 +77,7 @@ const (
 	INET_DIAG_BBRINFO
 	INET_DIAG_CLASS_ID
 	INET_DIAG_MD5SIG
+	// TODO - Should check whether this matches the current linux header.
 	INET_DIAG_MAX
 )
 
