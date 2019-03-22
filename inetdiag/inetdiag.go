@@ -231,9 +231,9 @@ func ParseInetDiagMsg(data []byte) (*InetDiagMsg, []byte) {
 // ParsedMessage is a container for parsed InetDiag messages and attributes.
 type ParsedMessage struct {
 	Timestamp   time.Time
-	Header      syscall.NlMsghdr
-	InetDiagMsg *InetDiagMsg
-	Attributes  [INET_DIAG_MAX]*syscall.NetlinkRouteAttr
+	NLMsg       *syscall.NetlinkMessage
+	InetDiagMsg *InetDiagMsg                             // Pointer to actual InetDiagMsg within NLMsg
+	Attributes  [INET_DIAG_MAX]*syscall.NetlinkRouteAttr // Pointers to RouteAttr, with Value fields backed by NLMsg
 }
 
 func isLocal(addr net.IP) bool {
@@ -256,12 +256,13 @@ func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) 
 			return nil, nil
 		}
 	}
-	parsedMsg := ParsedMessage{Header: msg.Header, InetDiagMsg: idm}
+	parsedMsg := ParsedMessage{NLMsg: msg, InetDiagMsg: idm}
 	attrs, err := ParseRouteAttr(attrBytes)
 	if err != nil {
 		return nil, err
 	}
 	for i := range attrs {
+		// We copy the RouteAttr here, but the Value is backed by msg.Data
 		parsedMsg.Attributes[attrs[i].Attr.Type] = &attrs[i]
 	}
 	return &parsedMsg, nil

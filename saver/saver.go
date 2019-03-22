@@ -70,7 +70,7 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 			log.Fatal("Nil writer")
 		}
 		msg := task.Message
-		pb := pbtools.CreateProto(msg.Timestamp, msg.Header, msg.InetDiagMsg, msg.Attributes[:])
+		pb := pbtools.CreateProto(msg.Timestamp, msg.NLMsg.Header, msg.InetDiagMsg, msg.Attributes[:])
 		wire, err := proto.Marshal(pb)
 		if err != nil {
 			log.Println(err)

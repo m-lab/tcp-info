@@ -143,7 +143,7 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if mp.Header.Len != 356 {
+	if mp.NLMsg.Header.Len != 356 {
 		t.Error("wrong length")
 	}
 	if mp.InetDiagMsg.IDiagFamily != unix.AF_INET6 {
