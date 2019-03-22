@@ -78,9 +78,12 @@ func AttrToField(all *tcpinfo.TCPDiagnosticsProto, rta *syscall.NetlinkRouteAttr
 		// TODO - already seeing these.  Issue #10
 
 	// We are not seeing these so far.  Should implement BBRINFO soon though.
-	// TODO case inetdiag.INET_DIAG_BBRINFO:
-	// TODO case inetdiag.INET_DIAG_VEGASINFO:
-	// TODO case inetdiag.INET_DIAG_SKV6ONLY:
+	case inetdiag.INET_DIAG_BBRINFO:
+		fallthrough
+	case inetdiag.INET_DIAG_VEGASINFO:
+		fallthrough
+	case inetdiag.INET_DIAG_SKV6ONLY:
+		log.Printf("Not processing %+v\n", rta)
 
 	case inetdiag.INET_DIAG_MARK:
 		// TODO Already seeing this when run as root, so we should process it.
