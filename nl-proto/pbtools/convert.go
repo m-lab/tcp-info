@@ -81,12 +81,13 @@ func AttrToField(all *tcpinfo.TCPDiagnosticsProto, rta *syscall.NetlinkRouteAttr
 	// TODO case inetdiag.INET_DIAG_BBRINFO:
 	// TODO case inetdiag.INET_DIAG_VEGASINFO:
 	// TODO case inetdiag.INET_DIAG_SKV6ONLY:
+
 	case inetdiag.INET_DIAG_MARK:
 		// TODO Already seeing this when run as root, so we should process it.
 	// TODO case inetdiag.INET_DIAG_PROTOCOL:
 	//   Used only for multicast messages. Not expected for our use cases.
 	default:
-		log.Printf("Not processing %+v\n", rta)
+		log.Printf("WARNING: Not processing %+v\n", rta)
 		// TODO(gfr) - should LOG(WARNING) on missing cases.
 	}
 }
