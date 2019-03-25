@@ -59,7 +59,7 @@ func msg(cookie uint64, dport uint16) *inetdiag.ParsedMessage {
 	return mp
 }
 
-func verifySize(t *testing.T, size int64, pattern string) {
+func verifySizeBetween(t *testing.T, minSize, maxSize int64, pattern string) {
 	names, err := filepath.Glob(pattern)
 	rtx.Must(err, "Could not Glob pattern %s", pattern)
 	if len(names) != 1 {
@@ -70,8 +70,8 @@ func verifySize(t *testing.T, size int64, pattern string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Size() != size {
-		t.Error("Size of", filename, "is", info.Size(), "but we expect it to be", size)
+	if info.Size() < minSize || info.Size() > maxSize {
+		t.Error("Size of", filename, " (", info.Size(), ") is out of bounds.  We expect", minSize, "<=", info.Size(), "<=", maxSize, ".")
 	}
 }
 
@@ -116,8 +116,10 @@ func TestBasic(t *testing.T) {
 	// Force close all the files.
 	close(svrChan)
 	svr.Done.Wait()
-	verifySize(t, 271, "0001/01/01/*_00000000000000D2.00000.zst")
-	verifySize(t, 248, "0001/01/01/*_00000000000000EA.00000.zst")
+	// We have to use a range-based size verification because different versions of
+	// zstd have slightly different compression ratios.
+	verifySizeBetween(t, 500, 700, "0001/01/01/*_00000000000000D2.00000.jsonl.zst")
+	verifySizeBetween(t, 500, 700, "0001/01/01/*_00000000000000EA.00000.jsonl.zst")
 }
 
 // If this compiles, the "test" passes

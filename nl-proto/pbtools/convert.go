@@ -94,12 +94,13 @@ func AttrToField(all *tcpinfo.TCPDiagnosticsProto, rta *syscall.NetlinkRouteAttr
 
 // CreateProto creates a fully populated TCPDiagnosticsProto from the parsed elements of a type 20 netlink message.
 // This assumes the netlink message is type 20, and behavior is undefined if it is not.
-func CreateProto(time time.Time, header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*syscall.NetlinkRouteAttr) *tcpinfo.TCPDiagnosticsProto {
+func CreateProto(time time.Time, header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*inetdiag.NetlinkRouteAttr) *tcpinfo.TCPDiagnosticsProto {
 	all := tcpinfo.TCPDiagnosticsProto{}
 	all.InetDiagMsg = HeaderToProto(idm)
 	for i := range attrs {
 		if attrs[i] != nil {
-			AttrToField(&all, attrs[i])
+			nlr := (*syscall.NetlinkRouteAttr)(unsafe.Pointer(attrs[i]))
+			AttrToField(&all, nlr)
 		}
 	}
 

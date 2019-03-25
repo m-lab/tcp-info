@@ -7,11 +7,15 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 	"unsafe"
 
+	"github.com/go-test/deep"
+	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/zstd"
 	"golang.org/x/sys/unix"
@@ -143,7 +147,7 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if mp.Header.Len != 356 {
+	if mp.NLMsgHdr.Len != 356 {
 		t.Error("wrong length")
 	}
 	if mp.InetDiagMsg.IDiagFamily != unix.AF_INET6 {
@@ -287,6 +291,86 @@ func TestReader(t *testing.T) {
 	}
 	if parsed != 420 {
 		t.Error("Wrong count:", parsed)
+	}
+}
+
+func TestNLMsgSerialize(t *testing.T) {
+	source := "testdata/testdata.zst"
+	log.Println("Reading messages from", source)
+	rdr := zstd.NewReader(source)
+	parsed := 0
+	for {
+		msg, err := inetdiag.LoadNext(rdr)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatal(err)
+		}
+		pm, err := inetdiag.Parse(msg, false)
+		rtx.Must(err, "Could not parse test data")
+		// Parse doesn't fill the Timestamp, so for now, populate it with something...
+		pm.Timestamp = time.Date(2009, time.May, 29, 23, 59, 59, 0, time.UTC)
+
+		s, err := json.Marshal(pm)
+		rtx.Must(err, "Could not serialize %v", pm)
+		if strings.Contains(string(s), "\n") {
+			t.Errorf("JSONL object should not contain newline %q", s)
+		}
+		var um inetdiag.ParsedMessage
+		rtx.Must(json.Unmarshal([]byte(s), &um), "Could not parse one line of output")
+		um.FixupTypes()
+		if diff := deep.Equal(*pm, um); diff != nil {
+			// BUG - for some reason, deep.Equal does not detect differences in RTAttr!!!
+			t.Error(diff)
+		}
+		for i := 0; i < len(pm.Attributes); i++ {
+			if diff := deep.Equal(pm.Attributes[i], um.Attributes[i]); diff != nil {
+				t.Error(diff)
+			}
+		}
+		if parsed < 3 {
+			log.Println(string(s))
+			log.Printf("%+v\n", *pm)
+		}
+
+		parsed++
+	}
+	if parsed != 420 {
+		t.Error("Wrong count:", parsed)
+	}
+}
+
+// About 13.5 usec/message using default json encoding for []byte for NetlinkRouteAttr
+// A lot slower than the protobuf serialization, which is 5.5 usec/message.
+func BenchmarkNLMsgSerialize(b *testing.B) {
+	source := "testdata/testdata.zst"
+	log.Println("Reading messages from", source)
+	rdr := zstd.NewReader(source)
+	msgs := make([]*inetdiag.ParsedMessage, 0, 20)
+
+	for {
+		msg, err := inetdiag.LoadNext(rdr)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			b.Fatal(err)
+		}
+		pm, err := inetdiag.Parse(msg, false)
+		rtx.Must(err, "Could not parse test data")
+		msgs = append(msgs, pm)
+	}
+
+	for i := 0; i < b.N; i++ {
+		for _, m := range msgs {
+			_, err := json.Marshal(m)
+			rtx.Must(err, "Could not serialize %v", m)
+			i++
+			if i >= b.N {
+				break
+			}
+		}
 	}
 }
 
