@@ -10,7 +10,6 @@ go:
 before_install:
 # Coverage tools
 - go get github.com/mattn/goveralls
-- go get github.com/wadey/gocovmerge
 
 - echo Branch is ${TRAVIS_BRANCH} and Tag is $TRAVIS_TAG
 
@@ -39,105 +38,16 @@ install:
 # This filters out all imports from the local project, and all "base" imports that don't contain slash.
 - GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}{{join .XTestImports "\n"}}' ./... | sort | uniq | grep -e / | grep -v m-lab/tcp-info)
 - go get -u -v -d $GO_IMPORTS
-- go get github.com/golang/protobuf/protoc-gen-go/ github.com/golang/protobuf/proto
-
-# Install protobuf compiler
-# NOTE: This should be updated periodically to use latest version.
-- wget https://github.com/protocolbuffers/protobuf/releases/download/v3.7.0/protoc-3.7.0-linux-x86_64.zip
-- unzip protoc-3.7.0-linux-x86_64.zip  # Should provide bin/protoc
-- bin/protoc --version
 
 # Install zstd tool.
 - bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/install)
 
 script:
-# Compile and compare protobufs
-- cd $TRAVIS_BUILD_DIR
-- mkdir backup
-- cp nl-proto/*.pb.go backup
-- $TRAVIS_BUILD_DIR/bin/protoc --go_out=. nl-proto/*.proto
-- for x in `ls nl-proto/*.pb.go`; do
-    diff $x backup/$(basename $x);
-  done
-- cd $TRAVIS_BUILD_DIR
-
 # To start, run all the non-integration tests.
 - go vet ./...
 - go build ./...
-- MODULES="inetdiag zstd nl-proto/pbtools cache saver"
-- for module in $MODULES; do
-    COVER_PKGS=${COVER_PKGS}./$module/..., ;
-  done
-- COVER_PKGS=${COVER_PKGS::-1}  # Trim the trailing comma
-- EC=0
-# Note that for modules in subdirectories, this replaces separating slashes with _.
-- for module in $MODULES; do
-    go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/tcp-info/$module ;
-    EC=$[ $EC || $? ] ;
-  done
-- echo "summary status $EC" ;
-- if [[ $EC != 0 ]]; then false; fi
-
-
-# Rerun modules with integration tests.  This means that some tests are repeated, but otherwise
-# we lose some coverage.  The corresponding cov files are overwritten, but that is OK since
-# the non-integration tests are repeated.  If we change the unit tests to NOT run when integration
-# test tag is set, then we would need to have separate cov files.
-# Note: we do not run integration tests from forked repos b/c the SA is unavailable.
-# Note that for modules in subdirectories, this replaces separating slashes with _.
-- if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  for module in ; do
-    go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/tcp-info/$module -tags=integration ;
-    EC=$[ $EC || $? ] ;
-  done ;
-  echo "summary status $EC" ;
-  if [[ $EC != 0 ]]; then false; fi ;
-  fi
+- go test ./... -v -coverpkg=./... -coverprofile=_coverage.cov
 
 # Coveralls
-# Run "unit tests" with coverage.
-- $HOME/gopath/bin/gocovmerge *.cov > merge.cov
-- $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
-
-# Docker build
-#- docker build --build-arg COMMIT=$TRAVIS_BRANCH -t mlab/tcpinfo .
-
-#################################################################################
-# Deployment Section
-#
-#  Overview:
-#   1.  Test in sandbox during development
-#   2.  Deploy to staging on commit to integration
-#   3.  Deploy to prod when a branch is tagged with prod-* or xxx-prod-*
-#
-#  We want to test individual components in sandbox, and avoid stepping on each
-#  other, so we do NOT automate deployment to sandbox.  Each person should
-#  use a branch name to trigger the single deployment that they are working on.
-#
-#  We want to soak all code in staging before deploying to prod.  To avoid
-#  incompatible components, we deploy ALL elements to staging when we merge
-#  to integration branch.
-#
-#  Deployments to prod are done by deliberately tagging a specific commit,
-#  typically in the integration branch, with a tag starting with prod-*.
-#  DO NOT just tag the latest version in integration, as someone may have
-#  pushed new code that hasn't had a chance to soak in staging.
-#
-#
-# Deploy steps never trigger on a new Pull Request. Deploy steps will trigger
-# on specific branch name patterns, after a merge to integration, or on
-# an explicit tag that matches "on:" conditions.
-#################################################################################
-
-
-# uncomment this once we get a deployment we want to use.  An empty deploy:
-# makes the linter angry.
-# deploy:
-#########################################
-## Sandbox
-
-#########################################
-## Staging
-
-#########################################
-## Production
+# Upload coverage information for unit tests.
+- $HOME/gopath/bin/goveralls -coverprofile=_coverage.cov -service=travis-ci
