@@ -95,7 +95,7 @@ func main() {
 	go svr.MessageSaverLoop(svrChan)
 
 	// Run the collector, possibly forever.
-	totalSeen, totalErr := collector.Run(ctx, *reps, svrChan, svr)
+	totalSeen, totalErr := collector.Run(ctx, *reps, svrChan, svr, true)
 
 	// Shut down and clean up after the collector terminates.
 	close(svrChan)

@@ -1,7 +1,7 @@
 // Package saver contains all logic for writing records to files.
 //  1. Sets up a channel that accepts slices of *inetdiag.ParsedMessage
 //  2. Maintains a map of Connections, one for each connection.
-//  3. Uses several marshallers goroutines to convert to protobufs and write to
+//  3. Uses several marshallers goroutines to serialize data and and write to
 //     zstd files.
 //  4. Rotates Connection output files every 10 minutes for long lasting connections.
 //  5. uses a cache to detect meaningful state changes, and avoid excessive

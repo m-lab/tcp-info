@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -19,14 +18,11 @@ func (t *testCacheLogger) LogCacheStats(_, _ int) {}
 
 func runTest(ctx context.Context) {
 	// Open a server socket, connect to it, send data to it until the context is canceled.
-	localAddr, err := net.ResolveTCPAddr("tcp", ":12345")
+	localAddr, err := net.ResolveTCPAddr("tcp", "localhost:12345")
 	rtx.Must(err, "No localhost")
 	listener, err := net.ListenTCP("tcp", localAddr)
 	rtx.Must(err, "Could not make TCP listener")
-	hostname, err := os.Hostname()
-	rtx.Must(err, "Could not run os.Hostname()")
-	log.Println("Connection to", hostname)
-	local, err := net.Dial("tcp", hostname+":12345")
+	local, err := net.Dial("tcp", "localhost:12345")
 	defer local.Close()
 	rtx.Must(err, "Could not connect to myself")
 	conn, err := listener.AcceptTCP()
@@ -52,7 +48,7 @@ func TestRun(t *testing.T) {
 	wg.Add(2)
 
 	go func() {
-		Run(ctx, 0, msgChan, &testCacheLogger{})
+		Run(ctx, 0, msgChan, &testCacheLogger{}, false)
 		wg.Done()
 	}()
 
@@ -67,6 +63,7 @@ func TestRun(t *testing.T) {
 			return
 		case <-time.NewTimer(10 * time.Second).C:
 			cancel()
+			close(msgChan)
 			t.Error("It should not take 10 seconds to get enough messages. Something is wrong.")
 			return
 		}
