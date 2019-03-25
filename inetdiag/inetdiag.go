@@ -30,7 +30,6 @@ expressed in host-byte order"
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -217,16 +216,27 @@ func (msg *InetDiagMsg) String() string {
 	return fmt.Sprintf("%s, %s, %s", diagFamilyMap[msg.IDiagFamily], tcpinfo.TCPState(msg.IDiagState), msg.ID.String())
 }
 
-// ParseInetDiagMsg returns the InetDiagMsg itself, and the aligned byte array containing the message content.
+// RawInetDiagMsg holds the []byte representation of an InetDiagMsg
+type RawInetDiagMsg []byte
+
+// Parse returns the InetDiagMsg itself
 // Modified from original to also return attribute data array.
-func ParseInetDiagMsg(data []byte) (*InetDiagMsg, []byte) {
+func (raw RawInetDiagMsg) Parse() (*InetDiagMsg, error) {
+	align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
+	if len(raw) < align {
+		return nil, ErrParseFailed
+	}
+	return (*InetDiagMsg)(unsafe.Pointer(&raw[0])), nil
+}
+
+func splitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
 	align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
 	if len(data) < align {
 		log.Println("Wrong length", len(data), "<", align)
 		log.Println(data)
 		return nil, nil
 	}
-	return (*InetDiagMsg)(unsafe.Pointer(&data[0])), data[rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{}))):]
+	return RawInetDiagMsg(data[:align]), data[align:]
 }
 
 // Metadata contains the metadata for a particular TCP stream.
@@ -236,61 +246,19 @@ type Metadata struct {
 	StartTime time.Time
 }
 
+// RouteAttrValue is the type of RouteAttr.Value
+type RouteAttrValue []byte
+
 // ParsedMessage is a container for parsed InetDiag messages and attributes.
 type ParsedMessage struct {
-	Timestamp   time.Time
-	NLMsgHdr    *syscall.NlMsghdr // The header of the raw netlink message.
-	InetDiagMsg *InetDiagMsg      // Pointer to actual InetDiagMsg within NLMsg
+	Timestamp time.Time
+	NLMsgHdr  *syscall.NlMsghdr // The header of the raw netlink message.
+	RawIDM    RawInetDiagMsg    // RawInetDiagMsg within NLMsg
+	// Saving just the .Value fields reduces Marshalling from 8.7 usec to 6.8 usec.
 	// TODO should this be a slice instead of array, in case we get attributes > INET_DIAG_MAX?
-	Attributes [INET_DIAG_MAX]*NetlinkRouteAttr // Pointers to RouteAttr, with Value fields backed by NLMsg
+	Attributes [INET_DIAG_MAX]RouteAttrValue // RouteAttr.Value, backed by NLMsg
 	Metadata   *Metadata
 }
-
-func (pm *ParsedMessage) FixupTypes() {
-	for i := range pm.Attributes {
-		if pm.Attributes[i] != nil {
-			if pm.Attributes[i].Attr.Type == 0 {
-				pm.Attributes[i].Attr.Type = uint16(i)
-			}
-		}
-	}
-}
-
-type NetlinkRouteAttr syscall.NetlinkRouteAttr
-
-func (n *NetlinkRouteAttr) MarshalJSON() ([]byte, error) {
-	if n == nil {
-		return []byte("null"), nil
-	}
-	return json.Marshal(n.Value)
-}
-
-func (n *NetlinkRouteAttr) UnmarshalJSON(input []byte) error {
-	var data []byte
-	err := json.Unmarshal(input, &data)
-	if err != nil {
-		return err
-	}
-	n.Value = data
-	n.Attr.Len = uint16(len(data) + 4)
-	return nil
-}
-
-/*
-First json object will be a metadata object, including the UUID, the host endianess, and possibly connection data.
-All subsequent rows will initially look like:
-{ Time: Timestamp, header: {...}, data: base64(data) }
-ASAP, we will likely break down the netlink message content into an array of base64 encoded RouteAttr messages.
-
-
-Metadata fields: (preliminary)
-UUID:  A universal connection identifier, from code in github/m-lab/uuid.
-Block sequence number, 0 for first file per connection, incrementing for each subsequent file.
-ConnectionStartTime: The time at which the connection was initiated.
-ExperimentConfigID: ???
-PlatformConfigID: ???
-*/
-// Serialize converts a ParsedMessage to a single line JSONL string.
 
 func isLocal(addr net.IP) bool {
 	return addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsMulticast() || addr.IsUnspecified()
@@ -303,24 +271,27 @@ func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) 
 	if msg.Header.Type != 20 {
 		return nil, ErrNotType20
 	}
-	idm, attrBytes := ParseInetDiagMsg(msg.Data)
-	if idm == nil {
+	raw, attrBytes := splitInetDiagMsg(msg.Data)
+	if raw == nil {
 		return nil, ErrParseFailed
 	}
 	if skipLocal {
+		idm, err := raw.Parse()
+		if err != nil {
+			return nil, err
+		}
+
 		if isLocal(idm.ID.SrcIP()) || isLocal(idm.ID.DstIP()) {
 			return nil, nil
 		}
 	}
-	parsedMsg := ParsedMessage{NLMsgHdr: &msg.Header, InetDiagMsg: idm}
+	parsedMsg := ParsedMessage{NLMsgHdr: &msg.Header, RawIDM: raw}
 	attrs, err := ParseRouteAttr(attrBytes)
 	if err != nil {
 		return nil, err
 	}
 	for i, a := range attrs {
-		// We copy the RouteAttr here, but the Value is backed by msg.Data
-		nla := NetlinkRouteAttr(a)
-		parsedMsg.Attributes[attrs[i].Attr.Type] = &nla
+		parsedMsg.Attributes[attrs[i].Attr.Type] = a.Value
 	}
 	return &parsedMsg, nil
 }
