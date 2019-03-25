@@ -239,6 +239,16 @@ type ParsedMessage struct {
 	Attributes [INET_DIAG_MAX]*NetlinkRouteAttr // Pointers to RouteAttr, with Value fields backed by NLMsg
 }
 
+func (pm *ParsedMessage) FixupTypes() {
+	for i := range pm.Attributes {
+		if pm.Attributes[i] != nil {
+			if pm.Attributes[i].Attr.Type == 0 {
+				pm.Attributes[i].Attr.Type = uint16(i)
+			}
+		}
+	}
+}
+
 type NetlinkRouteAttr syscall.NetlinkRouteAttr
 
 func (n *NetlinkRouteAttr) MarshalJSON() ([]byte, error) {
@@ -255,6 +265,7 @@ func (n *NetlinkRouteAttr) UnmarshalJSON(input []byte) error {
 		return err
 	}
 	n.Value = data
+	n.Attr.Len = uint16(len(data) + 4)
 	return nil
 }
 
