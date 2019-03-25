@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"context"
 	"log"
 	"syscall"
 	"time"
@@ -63,7 +64,7 @@ func collectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 
 // Run the collector, either for the specified number of loops, or, if the
 // number specified is infinite, run forever.
-func Run(svrChan chan<- []*inetdiag.ParsedMessage, reps int, cl saver.CacheLogger) (localCount, errCount int) {
+func Run(ctx context.Context, reps int, svrChan chan<- []*inetdiag.ParsedMessage, cl saver.CacheLogger) (localCount, errCount int) {
 	totalCount := 0
 	remoteCount := 0
 	loops := 0
@@ -71,7 +72,7 @@ func Run(svrChan chan<- []*inetdiag.ParsedMessage, reps int, cl saver.CacheLogge
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
-	for loops = 0; reps == 0 || loops < reps; loops++ {
+	for loops = 0; (reps == 0 || loops < reps) && (ctx.Err() == nil); loops++ {
 		total, remote := collectDefaultNamespace(svrChan)
 		totalCount += total
 		remoteCount += remote

@@ -19,7 +19,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/m-lab/tcp-info/metrics"
-	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
+	"github.com/m-lab/tcp-info/tcp"
 )
 
 const TCPF_ALL = 0xFFF
@@ -36,7 +36,7 @@ var (
 func makeReq(inetType uint8) *nl.NetlinkRequest {
 	req := nl.NewNetlinkRequest(SOCK_DIAG_BY_FAMILY, syscall.NLM_F_DUMP|syscall.NLM_F_REQUEST)
 	msg := NewInetDiagReqV2(inetType, syscall.IPPROTO_TCP,
-		TCPF_ALL & ^((1<<uint(tcpinfo.TCPState_SYN_RECV))|(1<<uint(tcpinfo.TCPState_TIME_WAIT))|(1<<uint(tcpinfo.TCPState_CLOSE))))
+		TCPF_ALL & ^((1<<uint(tcp.SYN_RECV))|(1<<uint(tcp.TIME_WAIT))|(1<<uint(tcp.CLOSE))))
 	msg.IDiagExt |= (1 << (INET_DIAG_MEMINFO - 1))
 	msg.IDiagExt |= (1 << (INET_DIAG_INFO - 1))
 	msg.IDiagExt |= (1 << (INET_DIAG_VEGASINFO - 1))

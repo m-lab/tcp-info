@@ -21,8 +21,7 @@ import (
 	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/metrics"
-	tcp "github.com/m-lab/tcp-info/nl-proto"
-	"github.com/m-lab/tcp-info/nl-proto/pbtools"
+	"github.com/m-lab/tcp-info/tcp"
 	"github.com/m-lab/tcp-info/zstd"
 	"github.com/m-lab/uuid"
 )
@@ -205,11 +204,11 @@ func (svr *Saver) queue(msg *inetdiag.ParsedMessage) error {
 	if !ok {
 		// Likely first time we have seen this connection.  Create a new Connection, unless
 		// the connection is already closing.
-		if msg.InetDiagMsg.IDiagState >= uint8(tcp.TCPState_FIN_WAIT1) {
+		if msg.InetDiagMsg.IDiagState >= uint8(tcp.FIN_WAIT1) {
 			log.Println("Skipping", msg.InetDiagMsg, msg.Timestamp)
 			return nil
 		}
-		if svr.cache.CycleCount() > 0 || msg.InetDiagMsg.IDiagState != uint8(tcp.TCPState_ESTABLISHED) {
+		if svr.cache.CycleCount() > 0 || msg.InetDiagMsg.IDiagState != uint8(tcp.ESTABLISHED) {
 			log.Println("New conn:", msg.InetDiagMsg, msg.Timestamp)
 		}
 		conn = newConnection(msg.InetDiagMsg, msg.Timestamp)
@@ -281,7 +280,7 @@ func (svr *Saver) swapAndQueue(pm *inetdiag.ParsedMessage) {
 		if old.InetDiagMsg.ID != pm.InetDiagMsg.ID {
 			log.Println("Mismatched SockIDs", old.InetDiagMsg.ID, pm.InetDiagMsg.ID)
 		}
-		if pbtools.Compare(pm, old) > pbtools.NoMajorChange {
+		if pm.Compare(old) > inetdiag.NoMajorChange {
 			svr.stats.DiffCount++
 			err := svr.queue(pm)
 			if err != nil {

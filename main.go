@@ -4,6 +4,7 @@ package main
 // sudo ss -timep | grep -A1 -v -e 127.0.0.1 -e skmem | tail
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
@@ -16,11 +17,8 @@ import (
 
 	_ "net/http/pprof" // Support profiling
 
-	"github.com/golang/protobuf/proto"
-
 	"github.com/m-lab/tcp-info/collector"
 	"github.com/m-lab/tcp-info/inetdiag"
-	tcp "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/saver"
 )
 
@@ -63,6 +61,8 @@ var (
 	reps        = flag.Int("reps", 0, "How many cycles should be recorded, 0 means continuous")
 	enableTrace = flag.Bool("trace", false, "Enable trace")
 	promPort    = flag.String("prom", ":9090", "Prometheus metrics export address and port. Default is ':9090'")
+
+	ctx, cancel = context.WithCancel(context.Background())
 )
 
 func main() {
@@ -75,18 +75,6 @@ func main() {
 
 	// Expose prometheus and pprof metrics on a separate port.
 	prometheusx.MustStartPrometheus(*promPort)
-
-	p := tcp.TCPDiagnosticsProto{}
-	p.TcpInfo = &tcp.TCPInfoProto{}
-	// This generates quite a large byte array - 144 bytes for JUST TCPInfo,
-	// but perhaps they are highly compressible?
-
-	m, err := proto.Marshal(&p)
-	if err != nil {
-		log.Println(err)
-	} else {
-		log.Println(len(m), m)
-	}
 
 	if *enableTrace {
 		traceFile, err := os.Create("trace")
@@ -107,7 +95,7 @@ func main() {
 	go svr.MessageSaverLoop(svrChan)
 
 	// Run the collector, possibly forever.
-	totalSeen, totalErr := collector.Run(svrChan, *reps, svr)
+	totalSeen, totalErr := collector.Run(ctx, *reps, svrChan, svr)
 
 	// Shut down and clean up after the collector terminates.
 	close(svrChan)

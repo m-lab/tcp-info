@@ -17,10 +17,9 @@ import (
 	"github.com/go-test/deep"
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/inetdiag"
+	"github.com/m-lab/tcp-info/tcp"
 	"github.com/m-lab/tcp-info/zstd"
 	"golang.org/x/sys/unix"
-
-	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 )
 
 // This is not exhaustive, but covers the basics.  Integration tests will expose any more subtle
@@ -54,7 +53,7 @@ func TestParseInetDiagMsg(t *testing.T) {
 	if hdr.IDiagFamily != syscall.AF_INET {
 		t.Errorf("Failed %+v\n", hdr)
 	}
-	if tcpinfo.TCPState(hdr.IDiagState) != tcpinfo.TCPState_SYN_RECV {
+	if tcp.State(hdr.IDiagState) != tcp.SYN_RECV {
 		t.Errorf("Failed %+v\n", hdr)
 	}
 
@@ -291,6 +290,58 @@ func TestReader(t *testing.T) {
 	}
 	if parsed != 420 {
 		t.Error("Wrong count:", parsed)
+	}
+}
+
+func TestCompare(t *testing.T) {
+	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
+	nm := syscall.NetlinkMessage{}
+	err := json.Unmarshal([]byte(json1), &nm)
+	if err != nil {
+		log.Fatal(err)
+	}
+	mp1, err := inetdiag.Parse(&nm, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Another independent copy.
+	nm2 := syscall.NetlinkMessage{}
+	err = json.Unmarshal([]byte(json1), &nm2)
+	if err != nil {
+		log.Fatal(err)
+	}
+	mp2, err := inetdiag.Parse(&nm2, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// INET_DIAG_INFO Last... fields should be ignored
+	lastDataSentOffset := unsafe.Offsetof(syscall.TCPInfo{}.Last_data_sent)
+	pmtuOffset := unsafe.Offsetof(syscall.TCPInfo{}.Pmtu)
+	for i := int(lastDataSentOffset); i < int(pmtuOffset); i++ {
+		mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[i] += 1
+	}
+	diff := mp1.Compare(mp2)
+	if diff != inetdiag.NoMajorChange {
+		t.Error("Last field changes should not be detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
+			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
+	}
+
+	// Early parts of INET_DIAG_INFO Should be ignored
+	mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[10] = 7
+	diff = mp1.Compare(mp2)
+	if diff != inetdiag.StateOrCounterChange {
+		t.Error("Early field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
+			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
+	}
+
+	// packet, segment, and byte counts should NOT be ignored
+	mp2.Attributes[inetdiag.INET_DIAG_INFO].Value[pmtuOffset] = 123
+	diff = mp1.Compare(mp2)
+	if diff != inetdiag.StateOrCounterChange {
+		t.Error("Late field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
+			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
 	}
 }
 
