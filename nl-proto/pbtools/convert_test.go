@@ -94,7 +94,7 @@ func TestReader(t *testing.T) {
 }
 
 // This is about 5.3 microseconds to convert and marshal to protobuf wire format.
-func BenchmarkConvertAndWrite(b *testing.B) {
+func BenchmarkConvertToProto(b *testing.B) {
 	source := "testdata/testdata.zst"
 	log.Println("Reading messages from", source)
 	rdr := zstd.NewReader(source)
