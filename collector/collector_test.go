@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/inetdiag"
@@ -57,6 +58,17 @@ func TestRun(t *testing.T) {
 	go func() {
 		runTest(ctx)
 		wg.Done()
+	}()
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.NewTimer(10 * time.Second).C:
+			cancel()
+			t.Error("It should not take 10 seconds to get enough messages. Something is wrong.")
+			return
+		}
 	}()
 
 	// Make sure we receive multiple different messages regarding port 12345
