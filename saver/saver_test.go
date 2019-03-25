@@ -118,8 +118,8 @@ func TestBasic(t *testing.T) {
 	svr.Done.Wait()
 	// We have to use a range-based size verification because different versions of
 	// zstd have slightly different compression ratios.
-	verifySizeBetween(t, 500, 700, "0001/01/01/*_00000000000000D2.00000.jsonl.zst")
-	verifySizeBetween(t, 500, 700, "0001/01/01/*_00000000000000EA.00000.jsonl.zst")
+	verifySizeBetween(t, 500, 750, "0001/01/01/*_00000000000000D2.00000.jsonl.zst")
+	verifySizeBetween(t, 500, 750, "0001/01/01/*_00000000000000EA.00000.jsonl.zst")
 }
 
 // If this compiles, the "test" passes
