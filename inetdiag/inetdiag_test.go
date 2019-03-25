@@ -14,6 +14,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/go-test/deep"
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/zstd"
@@ -310,21 +311,29 @@ func TestNLMsgSerialize(t *testing.T) {
 		rtx.Must(err, "Could not parse test data")
 		// Parse doesn't fill the Timestamp, so for now, populate it with something...
 		pm.Timestamp = time.Date(2009, time.May, 29, 23, 59, 59, 0, time.UTC)
+
 		s, err := json.Marshal(pm)
 		rtx.Must(err, "Could not serialize %v", pm)
 		if strings.Contains(string(s), "\n") {
-			t.Errorf("String %q should not have a newline in it", s)
-		}
-		if parsed < 3 {
-			log.Println(string(s))
+			t.Errorf("JSONL object should not contain newline %q", s)
 		}
 		var um inetdiag.ParsedMessage
 		rtx.Must(json.Unmarshal([]byte(s), &um), "Could not parse one line of output")
-		rs, err := json.Marshal(um)
-		rtx.Must(err, "Could not remarshall %v", um)
-		if string(rs) != string(s) {
-			t.Fatalf("%v and %v were not equal after serialization and deserialization", pm, um)
+		um.FixupTypes()
+		if diff := deep.Equal(*pm, um); diff != nil {
+			// BUG - for some reason, deep.Equal does not detect differences in RTAttr!!!
+			t.Error(diff)
 		}
+		for i := 0; i < len(pm.Attributes); i++ {
+			if diff := deep.Equal(pm.Attributes[i], um.Attributes[i]); diff != nil {
+				t.Error(diff)
+			}
+		}
+		if parsed < 3 {
+			log.Println(string(s))
+			log.Printf("%+v\n", *pm)
+		}
+
 		parsed++
 	}
 	if parsed != 420 {
