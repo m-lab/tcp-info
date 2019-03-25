@@ -29,9 +29,8 @@ expressed in host-byte order"
 */
 
 import (
-	"bytes"
-	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -245,29 +244,17 @@ func (n *NetlinkRouteAttr) MarshalJSON() ([]byte, error) {
 	if n == nil {
 		return []byte("null"), nil
 	}
-	var b bytes.Buffer
-	b.WriteByte('"')
-	enc := base64.NewEncoder(base64.StdEncoding, &b)
-	// Not serializing RtAttr - is this okay?
-	enc.Write(n.Value)
-	enc.Close()
-	b.WriteByte('"')
-	return b.Bytes(), nil
+	return json.Marshal(n.Value)
 }
 
 func (n *NetlinkRouteAttr) UnmarshalJSON(input []byte) error {
-	if string(input) == "null" {
-		return nil
+	var data []byte
+	err := json.Unmarshal(input, &data)
+	if err != nil {
+		return err
 	}
-	if len(input) < 2 {
-		return errors.New("Could not Unmarshall too-short NetlinkRouteAttr")
-	}
-	if input[0] != '"' || input[len(input)-1] != '"' {
-		return errors.New("No quotes provide for NetlinkRouteAttr")
-	}
-	var err error
-	n.Value, err = base64.StdEncoding.DecodeString(string(input[1 : len(input)-1]))
-	return err
+	n.Value = data
+	return nil
 }
 
 /*
@@ -312,8 +299,8 @@ func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) 
 		return nil, err
 	}
 	for i, a := range attrs {
-		nla := NetlinkRouteAttr(a)
 		// We copy the RouteAttr here, but the Value is backed by msg.Data
+		nla := NetlinkRouteAttr(a)
 		parsedMsg.Attributes[attrs[i].Attr.Type] = &nla
 	}
 	return &parsedMsg, nil
