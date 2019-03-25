@@ -78,9 +78,12 @@ func AttrToField(all *tcpinfo.TCPDiagnosticsProto, rta *syscall.NetlinkRouteAttr
 		// TODO - already seeing these.  Issue #10
 
 	// We are not seeing these so far.  Should implement BBRINFO soon though.
-	// TODO case inetdiag.INET_DIAG_BBRINFO:
-	// TODO case inetdiag.INET_DIAG_VEGASINFO:
-	// TODO case inetdiag.INET_DIAG_SKV6ONLY:
+	case inetdiag.INET_DIAG_BBRINFO:
+		fallthrough
+	case inetdiag.INET_DIAG_VEGASINFO:
+		fallthrough
+	case inetdiag.INET_DIAG_SKV6ONLY:
+		log.Printf("WARNING: Not processing %+v\n", rta)
 
 	case inetdiag.INET_DIAG_MARK:
 		// TODO Already seeing this when run as root, so we should process it.
@@ -170,9 +173,17 @@ type LinuxTCPInfo struct {
 
 	deliveryRate uint64
 
-	busyTime      uint64 /* Time (usec) busy sending data */
-	rwndLimited   uint64 /* Time (usec) limited by receive window */
-	sndbufLimited uint64 /* Time (usec) limited by send buffer */
+	busyTime      int64 /* Time (usec) busy sending data */
+	rwndLimited   int64 /* Time (usec) limited by receive window */
+	sndbufLimited int64 /* Time (usec) limited by send buffer */
+
+	delivered   uint32
+	deliveredCe uint32
+
+	bytesSent    uint64 /* RFC4898 tcpEStatsPerfHCDataOctetsOut */
+	bytesRetrans uint64 /* RFC4898 tcpEStatsPerfOctetsRetrans */
+	dsackDups    uint32 /* RFC4898 tcpEStatsStackDSACKDups */
+	reordSeen    uint32 /* reordering events seen */
 }
 
 // ToProto converts a LinuxTCPInfo struct to a TCPInfoProto
@@ -242,6 +253,18 @@ func (tcp *LinuxTCPInfo) ToProto() *tcpinfo.TCPInfoProto {
 	p.DataSegsOut = tcp.dataSegsOut
 
 	p.DeliveryRate = int64(tcp.deliveryRate)
+
+	p.BusyTime = tcp.busyTime
+	p.RwndLimited = tcp.rwndLimited
+	p.SndbufLimited = tcp.sndbufLimited
+
+	p.Delivered = tcp.delivered
+	p.DeliveredCe = tcp.deliveredCe
+
+	p.BytesSent = tcp.bytesSent
+	p.BytesRetrans = tcp.bytesRetrans
+	p.DsackDups = tcp.dsackDups
+	p.ReordSeen = tcp.reordSeen
 
 	return &p
 }

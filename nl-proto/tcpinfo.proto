@@ -266,6 +266,16 @@ message TCPInfoProto {
   int64 busy_time = 44;
   int64 rwnd_limited = 45;
   int64 sndbuf_limited = 46;
+
+  uint32	delivered = 47;
+  uint32	delivered_ce = 48;
+
+  uint64	bytes_sent = 49;     /* RFC4898 tcpEStatsPerfHCDataOctetsOut */
+  uint64	bytes_retrans = 50;  /* RFC4898 tcpEStatsPerfOctetsRetrans */
+  uint32	dsack_dups = 51;     /* RFC4898 tcpEStatsStackDSACKDups */
+  uint32	reord_seen = 52;     /* reordering events seen */
+
+  // As of linux 5.1
 }
 
 enum Protocol {
