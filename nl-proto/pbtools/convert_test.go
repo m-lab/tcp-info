@@ -36,14 +36,7 @@ func convertToProto(msg *syscall.NetlinkMessage, t *testing.T) *tcpinfo.TCPDiagn
 	if err != nil {
 		t.Fatal(err)
 	}
-	attrs := make([]*syscall.NetlinkRouteAttr, len(parsedMsg.Attributes))
-	for i, a := range parsedMsg.Attributes {
-		if a != nil {
-			unwrapped := syscall.NetlinkRouteAttr(*a)
-			attrs[i] = &unwrapped
-		}
-	}
-	return pbtools.CreateProto(time.Now(), msg.Header, parsedMsg.InetDiagMsg, attrs)
+	return pbtools.CreateProto(time.Now(), msg.Header, parsedMsg.InetDiagMsg, parsedMsg.Attributes[:])
 }
 
 func TestReader(t *testing.T) {
