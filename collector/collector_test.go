@@ -25,6 +25,7 @@ func runTest(ctx context.Context) {
 	rtx.Must(err, "Could not make TCP listener")
 	hostname, err := os.Hostname()
 	rtx.Must(err, "Could not run os.Hostname()")
+	log.Println("Connection to", hostname)
 	local, err := net.Dial("tcp", hostname+":12345")
 	defer local.Close()
 	rtx.Must(err, "Could not connect to myself")
