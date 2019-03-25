@@ -11,6 +11,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/m-lab/go/rtx"
@@ -307,10 +308,15 @@ func TestNLMsgSerialize(t *testing.T) {
 		}
 		pm, err := inetdiag.Parse(msg, false)
 		rtx.Must(err, "Could not parse test data")
+		// Parse doesn't fill the Timestamp, so for now, populate it with something...
+		pm.Timestamp = time.Date(2009, time.May, 29, 23, 59, 59, 0, time.UTC)
 		s, err := json.Marshal(pm)
 		rtx.Must(err, "Could not serialize %v", pm)
 		if strings.Contains(string(s), "\n") {
 			t.Errorf("String %q should not have a newline in it", s)
+		}
+		if parsed < 3 {
+			log.Println(string(s))
 		}
 		var um inetdiag.ParsedMessage
 		rtx.Must(json.Unmarshal([]byte(s), &um), "Could not parse one line of output")
@@ -323,6 +329,38 @@ func TestNLMsgSerialize(t *testing.T) {
 	}
 	if parsed != 420 {
 		t.Error("Wrong count:", parsed)
+	}
+}
+
+func BenchmarkNewTarReader(b *testing.B) {
+	source := "testdata/testdata.zst"
+	log.Println("Reading messages from", source)
+	rdr := zstd.NewReader(source)
+	msgs := make([]*inetdiag.ParsedMessage, 0, 20)
+
+	for {
+		msg, err := inetdiag.LoadNext(rdr)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			b.Fatal(err)
+		}
+		pm, err := inetdiag.Parse(msg, false)
+		rtx.Must(err, "Could not parse test data")
+		msgs = append(msgs, pm)
+	}
+
+	for i := 0; i < b.N; i++ {
+		for _, m := range msgs {
+			// About 13.9 usec/message using default json encoding for []byte for NetlinkRouteAttr
+			_, err := json.Marshal(m)
+			rtx.Must(err, "Could not serialize %v", m)
+			i++
+			if i >= b.N {
+				break
+			}
+		}
 	}
 }
 
