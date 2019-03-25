@@ -40,12 +40,6 @@ var (
 	ErrNoMarshallers = errors.New("Saver has zero Marshallers")
 )
 
-type Metadata struct {
-	UUID      string
-	Sequence  int
-	StartTime time.Time
-}
-
 // Task represents a single marshalling task, specifying the message and the writer.
 type Task struct {
 	// nil message means close the writer.
@@ -126,18 +120,15 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 }
 
 func (conn *Connection) writeHeader() {
-	type OnlyMetadata struct {
-		Metadata *Metadata
-	}
-	om := OnlyMetadata{
-		Metadata: &Metadata{
+	msg := inetdiag.ParsedMessage{
+		Metadata: &inetdiag.Metadata{
 			UUID:      uuid.FromCookie(conn.ID.Cookie()),
 			Sequence:  conn.Sequence,
 			StartTime: conn.StartTime,
 		},
 	}
 	// FIXME: Error handling
-	bytes, _ := json.Marshal(om)
+	bytes, _ := json.Marshal(msg)
 	conn.Writer.Write(bytes)
 	conn.Writer.Write([]byte("\n"))
 }

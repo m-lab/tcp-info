@@ -229,6 +229,13 @@ func ParseInetDiagMsg(data []byte) (*InetDiagMsg, []byte) {
 	return (*InetDiagMsg)(unsafe.Pointer(&data[0])), data[rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{}))):]
 }
 
+// Metadata contains the metadata for a particular TCP stream.
+type Metadata struct {
+	UUID      string
+	Sequence  int
+	StartTime time.Time
+}
+
 // ParsedMessage is a container for parsed InetDiag messages and attributes.
 type ParsedMessage struct {
 	Timestamp   time.Time
@@ -236,6 +243,7 @@ type ParsedMessage struct {
 	InetDiagMsg *InetDiagMsg      // Pointer to actual InetDiagMsg within NLMsg
 	// TODO should this be a slice instead of array, in case we get attributes > INET_DIAG_MAX?
 	Attributes [INET_DIAG_MAX]*NetlinkRouteAttr // Pointers to RouteAttr, with Value fields backed by NLMsg
+	Metadata   *Metadata
 }
 
 func (pm *ParsedMessage) FixupTypes() {
