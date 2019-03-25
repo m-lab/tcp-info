@@ -9,7 +9,10 @@ import (
 	"testing"
 	"time"
 
+	proto "github.com/golang/protobuf/proto"
+
 	"github.com/go-test/deep"
+	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/inetdiag"
 	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 	"github.com/m-lab/tcp-info/nl-proto/pbtools"
@@ -94,6 +97,40 @@ func TestReader(t *testing.T) {
 	// TODO - do some test on the proto	}
 	if parsed != 420 { // 140 new, 277 same, and 3 diff
 		t.Error(parsed)
+	}
+}
+
+// This is about 5.3 microseconds to convert and marshal to protobuf wire format.
+func BenchmarkConvertAndWrite(b *testing.B) {
+	source := "testdata/testdata.zst"
+	log.Println("Reading messages from", source)
+	rdr := zstd.NewReader(source)
+	msgs := make([]*inetdiag.ParsedMessage, 0, 20)
+
+	for {
+		msg, err := inetdiag.LoadNext(rdr)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			b.Fatal(err)
+		}
+		pm, err := inetdiag.Parse(msg, false)
+		rtx.Must(err, "Could not parse test data")
+		msgs = append(msgs, pm)
+	}
+
+	for i := 0; i < b.N; i++ {
+		for _, m := range msgs {
+			pb := pbtools.CreateProto(time.Now(), *m.NLMsgHdr, m.InetDiagMsg, m.Attributes[:])
+			_, err := proto.Marshal(pb)
+			rtx.Must(err, "Could not marshal pb")
+
+			i++
+			if i >= b.N {
+				break
+			}
+		}
 	}
 }
 

@@ -341,7 +341,9 @@ func TestNLMsgSerialize(t *testing.T) {
 	}
 }
 
-func BenchmarkNewTarReader(b *testing.B) {
+// About 13.5 usec/message using default json encoding for []byte for NetlinkRouteAttr
+// A lot slower than the protobuf serialization, which is 5.5 usec/message.
+func BenchmarkNLMsgSerialize(b *testing.B) {
 	source := "testdata/testdata.zst"
 	log.Println("Reading messages from", source)
 	rdr := zstd.NewReader(source)
@@ -362,7 +364,6 @@ func BenchmarkNewTarReader(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		for _, m := range msgs {
-			// About 13.9 usec/message using default json encoding for []byte for NetlinkRouteAttr
 			_, err := json.Marshal(m)
 			rtx.Must(err, "Could not serialize %v", m)
 			i++
