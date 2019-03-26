@@ -3,6 +3,8 @@ language: go
 
 dist: xenial
 sudo: true
+services:
+- docker
 
 ###########################################################################
 before_install:
@@ -17,11 +19,55 @@ install:
 - go get -v -t ./...
 
 script:
-# Run all the tests.
+# Vet the code, build the code, and run all the tests.
 - go vet ./...
 - go build ./...
 - go test ./... -v -coverpkg=./... -coverprofile=_coverage.cov
 
+# Build a Docker image to make sure that we can.
+- docker build --build-arg COMMIT=$TRAVIS_BRANCH -t measurementlab/tcp-info .
+
 # Coveralls
 # Upload coverage information for unit tests.
 - $HOME/gopath/bin/goveralls -coverprofile=_coverage.cov -service=travis-ci
+
+
+#################################################################################
+# Deployment Section
+#
+#  Overview:
+#   1.  Test in sandbox during development
+#   2.  Deploy to staging on commit to integration
+#   3.  Deploy to prod when a branch is tagged with prod-* or xxx-prod-*
+#
+#  We want to test individual components in sandbox, and avoid stepping on each
+#  other, so we do NOT automate deployment to sandbox.  Each person should
+#  use a branch name to trigger the single deployment that they are working on.
+#
+#  We want to soak all code in staging before deploying to prod.  To avoid
+#  incompatible components, we deploy ALL elements to staging when we merge
+#  to integration branch.
+#
+#  Deployments to prod are done by deliberately tagging a specific commit,
+#  typically in the integration branch, with a tag starting with prod-*.
+#  DO NOT just tag the latest version in integration, as someone may have
+#  pushed new code that hasn't had a chance to soak in staging.
+#
+#
+# Deploy steps never trigger on a new Pull Request. Deploy steps will trigger
+# on specific branch name patterns, after a merge to integration, or on
+# an explicit tag that matches "on:" conditions.
+#################################################################################
+
+# uncomment this once we get a deployment.  An empty deploy: makes the linter
+# angry.
+# deploy:
+
+#########################################
+## Sandbox
+
+#########################################
+## Staging
+
+#########################################
+## Production
