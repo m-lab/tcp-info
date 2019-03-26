@@ -149,19 +149,13 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	hdr, err := mp.RawMsgHdr.Parse()
-	if err != nil {
-		log.Fatal(err)
-	}
-	if hdr.Len != 356 {
-		t.Error("wrong length", hdr.Len)
-	}
+	/*
+		if mp.NLMsgHdr.Len != 356 {
+			t.Error("wrong length", mp.NLMsgHdr.Len)
+		}*/
 	idm, _ := mp.RawIDM.Parse()
 	if idm.IDiagFamily != unix.AF_INET6 {
 		t.Error("Should not be IPv6")
-	}
-	if len(mp.Attributes) != inetdiag.INET_DIAG_MAX {
-		t.Error("Should be", inetdiag.INET_DIAG_MAX, "attribute entries")
 	}
 	if idm.String() == "" {
 		t.Error("Empty string made from InetDiagMsg")
