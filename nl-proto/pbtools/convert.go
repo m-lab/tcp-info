@@ -5,108 +5,13 @@ package pbtools
 
 import (
 	"bytes"
-	"log"
-	"syscall"
-	"time"
 	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
-	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
 
 	// Hack to force loading library, which is currently used only in nested test.
 	_ "github.com/vishvananda/netlink/nl"
 )
-
-// ParseCong returns the congestion algorithm string
-func ParseCong(rta *syscall.NetlinkRouteAttr) string {
-	return string(rta.Value[:len(rta.Value)-1])
-}
-
-// HeaderToProto creates an InetDiagMsgProto from the InetDiagMsg message.
-func HeaderToProto(hdr *inetdiag.InetDiagMsg) *tcpinfo.InetDiagMsgProto {
-	p := tcpinfo.InetDiagMsgProto{}
-	p.Family = tcpinfo.InetDiagMsgProto_AddressFamily(hdr.IDiagFamily)
-	p.State = tcpinfo.TCPState(hdr.IDiagState)
-	p.Timer = uint32(hdr.IDiagTimer)
-	p.Retrans = uint32(hdr.IDiagRetrans)
-	p.SockId = &tcpinfo.InetSocketIDProto{}
-	src := tcpinfo.EndPoint{}
-	p.SockId.Source = &src
-	src.Port = uint32(hdr.ID.SPort())
-	src.Ip = append(src.Ip, hdr.ID.SrcIP()...)
-	dst := tcpinfo.EndPoint{}
-	p.SockId.Destination = &dst
-	dst.Port = uint32(hdr.ID.DPort())
-	dst.Ip = append(dst.Ip, hdr.ID.DstIP()...)
-	p.SockId.Interface = hdr.ID.Interface()
-	// Convert to int64, for compatibility with bigquery.
-	p.SockId.Cookie = int64(hdr.ID.Cookie())
-	p.Expires = hdr.IDiagExpires
-	p.Rqueue = hdr.IDiagRqueue
-	p.Wqueue = hdr.IDiagWqueue
-	p.Uid = hdr.IDiagUID
-	p.Inode = hdr.IDiagInode
-
-	return &p
-}
-
-// AttrToField fills the appropriate proto subfield from a route attribute.
-func AttrToField(all *tcpinfo.TCPDiagnosticsProto, rta *syscall.NetlinkRouteAttr) {
-	switch rta.Attr.Type {
-	case inetdiag.INET_DIAG_INFO:
-		ldiwr := ParseLinuxTCPInfo(rta)
-		all.TcpInfo = ldiwr.ToProto()
-	case inetdiag.INET_DIAG_CONG:
-		all.CongestionAlgorithm = ParseCong(rta)
-	case inetdiag.INET_DIAG_SHUTDOWN:
-		all.Shutdown = &tcpinfo.TCPDiagnosticsProto_ShutdownMask{ShutdownMask: uint32(rta.Value[0])}
-	case inetdiag.INET_DIAG_MEMINFO:
-		memInfo := ParseMemInfo(rta)
-		if memInfo != nil {
-			all.MemInfo = &tcpinfo.MemInfoProto{}
-			*all.MemInfo = *memInfo // Copy, to avoid references the attribute
-		}
-	case inetdiag.INET_DIAG_SKMEMINFO:
-		memInfo := ParseSockMemInfo(rta)
-		if memInfo != nil {
-			all.SocketMem = &tcpinfo.SocketMemInfoProto{}
-			*all.SocketMem = *memInfo // Copy, to avoid references the attribute
-		}
-	case inetdiag.INET_DIAG_TOS:
-		// TODO - already seeing these.  Issue #10
-	case inetdiag.INET_DIAG_TCLASS:
-		// TODO - already seeing these.  Issue #10
-
-	// We are not seeing these so far.  Should implement BBRINFO soon though.
-	// TODO case inetdiag.INET_DIAG_BBRINFO:
-	// TODO case inetdiag.INET_DIAG_VEGASINFO:
-	// TODO case inetdiag.INET_DIAG_SKV6ONLY:
-
-	case inetdiag.INET_DIAG_MARK:
-		// TODO Already seeing this when run as root, so we should process it.
-	// TODO case inetdiag.INET_DIAG_PROTOCOL:
-	//   Used only for multicast messages. Not expected for our use cases.
-	default:
-		log.Printf("WARNING: Not processing %+v\n", rta)
-		// TODO(gfr) - should LOG(WARNING) on missing cases.
-	}
-}
-
-// CreateProto creates a fully populated TCPDiagnosticsProto from the parsed elements of a type 20 netlink message.
-// This assumes the netlink message is type 20, and behavior is undefined if it is not.
-func CreateProto(time time.Time, header syscall.NlMsghdr, idm *inetdiag.InetDiagMsg, attrs []*inetdiag.NetlinkRouteAttr) *tcpinfo.TCPDiagnosticsProto {
-	all := tcpinfo.TCPDiagnosticsProto{}
-	all.InetDiagMsg = HeaderToProto(idm)
-	for i := range attrs {
-		if attrs[i] != nil {
-			nlr := (*syscall.NetlinkRouteAttr)(unsafe.Pointer(attrs[i]))
-			AttrToField(&all, nlr)
-		}
-	}
-
-	all.Timestamp = time.UnixNano()
-	return &all
-}
 
 // LinuxTCPInfo is the linux defined structure returned in RouteAttr DIAG_INFO messages.
 // It corresponds to the struct tcp_info in include/uapi/linux/tcp.h
@@ -175,124 +80,11 @@ type LinuxTCPInfo struct {
 	sndbufLimited uint64 /* Time (usec) limited by send buffer */
 }
 
-// ToProto converts a LinuxTCPInfo struct to a TCPInfoProto
-func (tcp *LinuxTCPInfo) ToProto() *tcpinfo.TCPInfoProto {
-	var p tcpinfo.TCPInfoProto
-	p.State = tcpinfo.TCPState(tcp.state)
-
-	p.CaState = uint32(tcp.caState)
-	p.Retransmits = uint32(tcp.retransmits)
-	p.Probes = uint32(tcp.probes)
-	p.Backoff = uint32(tcp.backoff)
-	opts := tcp.options
-	p.Options = uint32(opts)
-	p.TsOpt = opts&0x01 > 0
-	p.SackOpt = opts&0x02 > 0
-	p.WscaleOpt = opts&0x04 > 0
-	p.EcnOpt = opts&0x08 > 0
-	p.EcnseenOpt = opts&0x10 > 0
-	p.FastopenOpt = opts&0x20 > 0
-
-	p.RcvWscale = uint32(tcp.wscale & 0x0F)
-	p.SndWscale = uint32(tcp.wscale >> 4)
-	p.DeliveryRateAppLimited = tcp.appLimited > 0
-
-	p.Rto = tcp.rto
-	p.Ato = tcp.ato
-	p.SndMss = tcp.sndMss
-	p.RcvMss = tcp.rcvMss
-
-	p.Unacked = tcp.unacked
-	p.Sacked = tcp.sacked
-	p.Lost = tcp.lost
-	p.Retrans = tcp.retrans
-	p.Fackets = tcp.fackets
-
-	p.LastDataSent = tcp.lastDataSent
-	p.LastAckSent = tcp.lastAckSent
-	p.LastDataRecv = tcp.lastDataRecv
-	p.LastAckRecv = tcp.lastAckRecv
-
-	p.Pmtu = tcp.pmtu
-	if tcp.rcvSsThresh < 0xFFFF {
-		p.RcvSsthresh = tcp.rcvSsThresh
-	}
-	p.Rtt = tcp.rtt
-	p.Rttvar = tcp.rttvar
-	p.SndSsthresh = tcp.sndSsThresh
-	p.SndCwnd = tcp.sndCwnd
-	p.Advmss = tcp.advmss
-	p.Reordering = tcp.reordering
-
-	p.RcvRtt = tcp.rcvRtt
-	p.RcvSpace = tcp.rcvSpace
-	p.TotalRetrans = tcp.totalRetrans
-
-	p.PacingRate = tcp.pacingRate
-	p.MaxPacingRate = tcp.maxPacingRate
-	p.BytesAcked = int64(tcp.bytesAcked)
-	p.BytesReceived = int64(tcp.bytesReceived)
-
-	p.SegsOut = tcp.segsOut
-	p.SegsIn = tcp.segsIn
-
-	p.NotsentBytes = tcp.notsentBytes
-	p.MinRtt = tcp.minRtt
-	p.DataSegsIn = tcp.dataSegsIn
-	p.DataSegsOut = tcp.dataSegsOut
-
-	p.DeliveryRate = int64(tcp.deliveryRate)
-
-	return &p
-}
-
 // Useful offsets
 const (
 	LastDataSentOffset = unsafe.Offsetof(LinuxTCPInfo{}.lastDataSent)
 	PmtuOffset         = unsafe.Offsetof(LinuxTCPInfo{}.pmtu)
 )
-
-// MaybeCopy checks whether the src is the full size of the intended struct size.
-// If so, it just returns the pointer, otherwise it copies the content to an
-// appropriately sized new byte slice, and returns pointer to that.
-func MaybeCopy(src []byte, size int) unsafe.Pointer {
-	if len(src) < size {
-		data := make([]byte, size)
-		copy(data, src)
-		return unsafe.Pointer(&data[0])
-	}
-	return unsafe.Pointer(&src[0])
-}
-
-// ParseLinuxTCPInfo maps the rta Value onto a TCPInfo struct.  It may have to copy the
-// bytes.
-func ParseLinuxTCPInfo(rta *syscall.NetlinkRouteAttr) *LinuxTCPInfo {
-	structSize := (int)(unsafe.Sizeof(LinuxTCPInfo{}))
-	data := rta.Value
-	//log.Println(len(rta.Value), "vs", structSize)
-	if len(rta.Value) < structSize {
-		// log.Println(len(rta.Value), "vs", structSize)
-		data = make([]byte, structSize)
-		copy(data, rta.Value)
-	}
-	return (*LinuxTCPInfo)(unsafe.Pointer(&data[0]))
-}
-
-// ParseSockMemInfo maps the rta Value onto a SockMemInfoProto.
-// Since this struct is very simple, it can be mapped directly, instead of using an
-// intermediate struct.
-func ParseSockMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.SocketMemInfoProto {
-	structSize := (int)(unsafe.Sizeof(tcpinfo.SocketMemInfoProto{}))
-	return (*tcpinfo.SocketMemInfoProto)(MaybeCopy(rta.Value, structSize))
-}
-
-// ParseMemInfo maps the rta Value onto a MemInfoProto.
-// Since this struct is very simple, it can be mapped directly, instead of using an
-// intermediate struct.
-func ParseMemInfo(rta *syscall.NetlinkRouteAttr) *tcpinfo.MemInfoProto {
-	structSize := (int)(unsafe.Sizeof(tcpinfo.MemInfoProto{}))
-	return (*tcpinfo.MemInfoProto)(MaybeCopy(rta.Value, structSize))
-}
 
 // ChangeType indicates why a new record is worthwhile saving.
 type ChangeType int
@@ -330,7 +122,9 @@ const (
 //  necessary if we keep this here.
 func Compare(previous *inetdiag.ParsedMessage, current *inetdiag.ParsedMessage) ChangeType {
 	// If the TCP state has changed, that is important!
-	if previous.InetDiagMsg.IDiagState != current.InetDiagMsg.IDiagState {
+	pIDM, _ := previous.RawIDM.Parse()
+	cIDM, _ := current.RawIDM.Parse()
+	if pIDM.IDiagState != cIDM.IDiagState {
 		return IDiagStateChange
 	}
 
@@ -344,13 +138,13 @@ func Compare(previous *inetdiag.ParsedMessage, current *inetdiag.ParsedMessage) 
 
 	// If any of the byte/segment/package counters have changed, that is what we are most
 	// interested in.
-	if 0 != bytes.Compare(a.Value[PmtuOffset:], b.Value[PmtuOffset:]) {
+	if 0 != bytes.Compare(a[PmtuOffset:], b[PmtuOffset:]) {
 		return StateOrCounterChange
 	}
 
 	// Check all the earlier fields, too.  Usually these won't change unless the counters above
 	// change, but this way we won't miss something subtle.
-	if 0 != bytes.Compare(a.Value[:LastDataSentOffset], b.Value[:LastDataSentOffset]) {
+	if 0 != bytes.Compare(a[:LastDataSentOffset], b[:LastDataSentOffset]) {
 		return StateOrCounterChange
 	}
 
@@ -372,11 +166,11 @@ func Compare(previous *inetdiag.ParsedMessage, current *inetdiag.ParsedMessage) 
 			if a == nil && b == nil {
 				continue
 			}
-			if len(a.Value) != len(b.Value) {
+			if len(a) != len(b) {
 				return AttributeLength
 			}
 			// All others we want to be identical
-			if 0 != bytes.Compare(a.Value, b.Value) {
+			if 0 != bytes.Compare(a, b) {
 				return Other
 			}
 		}
