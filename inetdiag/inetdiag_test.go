@@ -449,6 +449,7 @@ func TestCompressionSize(t *testing.T) {
 
 }
 
+// With []byte representations for most fields, this takes about 3.5 usec/record.
 func BenchmarkNLMsgSerialize(b *testing.B) {
 	b.StopTimer()
 	source := "testdata/testdata.zst"
@@ -482,11 +483,8 @@ func BenchmarkNLMsgSerialize(b *testing.B) {
 	}
 }
 
-// About 13.5 usec/message using default json encoding for []byte for NetlinkRouteAttr
-// A lot slower than the protobuf serialization, which is 5.5 usec/message.
-// BUT - serializing the entire ParsedMessage, without special treatment of RouteAttr, is
-// faster - 8.5 usec/msg.
-// Adding the Parse function increases it to about 10.5 usec/msg (ParseMessage + Marshal)
+// This takes about 8 usec per record.  zstd process seems to take about 1/3 as much CPU as
+// go process.  Not clear where the bottleneck is.  Wall time may not be same as CPU time.
 func BenchmarkNLMsgParseSerializeCompress(b *testing.B) {
 	b.StopTimer()
 	source := "testdata/testdata.zst"
