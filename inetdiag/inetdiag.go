@@ -272,19 +272,18 @@ type RouteAttrValue []byte
 // ParsedMessage is a container for parsed InetDiag messages and attributes.
 type ParsedMessage struct {
 	// Timestamp should be truncated to 1 millisecond for best compression.
-	// Using int64 milliseconds instead reduces compressed size by 1.5 bytes/record, or about 5%
+	// Using int64 milliseconds instead reduces compressed size by 0.5 bytes/record, or about 1.5%
 	Timestamp time.Time `json:",omitempty"`
 	// Storing this as raw bytes instead of as NlMsgHdr only saves 200 nsec in Marshaling.  Not worth the added complexity.
 	// However, the size of the test zstd file drops to from 14491 to 13978, about 3%, which might be worth considering.
 	RawMsgHdr RawNlMsgHdr `json:",omitempty"` // []byte containing the unparsed NlMsgHdr header.
-	// Storing the RawIDM instead of the parsed InetDiagMsg reduces Marshalling from 6.8 to 4.2 usec, and sample zstd file
+	// Storing the RawIDM instead of the parsed InetDiagMsg reduces Marshalling by 2.6 usec, and sample zstd file
 	// size drops from about 16363 to 14491, about 12%.  Actual size savings may be considerably smaller, though cpu time
 	// savings might be even greater.
 	RawIDM RawInetDiagMsg `json:",omitempty"` // RawInetDiagMsg within NLMsg
-	// Saving just the .Value fields reduces Marshalling from 8.7 usec to 6.8 usec.
-	// TODO should this be a slice instead of array, in case we get attributes > INET_DIAG_MAX?
-	Attributes [INET_DIAG_MAX]RouteAttrValue `json:",omitempty"` // RouteAttr.Value, backed by NLMsg
-	Metadata   *Metadata                     `json:",omitempty"`
+	// Saving just the .Value fields reduces Marshalling by 1.9 usec.
+	Attributes []RouteAttrValue `json:",omitempty"` // RouteAttr.Value, backed by NLMsg
+	Metadata   *Metadata        `json:",omitempty"`
 }
 
 func isLocal(addr net.IP) bool {
@@ -321,12 +320,29 @@ func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) 
 	}
 
 	parsedMsg := ParsedMessage{RawMsgHdr: slice(&msg.Header), RawIDM: raw}
+
 	attrs, err := ParseRouteAttr(attrBytes)
 	if err != nil {
 		return nil, err
 	}
-	for i, a := range attrs {
-		parsedMsg.Attributes[attrs[i].Attr.Type] = a.Value
+	maxAttrType := uint16(0)
+	for _, a := range attrs {
+		t := a.Attr.Type
+		if t > maxAttrType {
+			maxAttrType = t
+		}
+	}
+	if maxAttrType > 2*INET_DIAG_MAX {
+		maxAttrType = 2 * INET_DIAG_MAX
+	}
+	parsedMsg.Attributes = make([]RouteAttrValue, maxAttrType+1, maxAttrType+1)
+	for _, a := range attrs {
+		t := a.Attr.Type
+		if t > maxAttrType {
+			log.Println("Error!! Received RouteAttr with very large Type:", t)
+			continue
+		}
+		parsedMsg.Attributes[t] = a.Value
 	}
 	return &parsedMsg, nil
 }
