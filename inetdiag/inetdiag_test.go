@@ -150,7 +150,7 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	hdr, err := mp.NLMsgHdr.Parse()
+	hdr, err := mp.RawMsgHdr.Parse()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestReader(t *testing.T) {
 	source := "testdata/testdata.zst"
 	log.Println("Reading messages from", source)
 	rdr := zstd.NewReader(source)
-	parsed := 0
+	parsed := int64(0)
 	for {
 		_, err := inetdiag.LoadNext(rdr)
 		if err != nil {
@@ -350,9 +350,15 @@ func TestNLMsgSerialize(t *testing.T) {
 
 func TestCompressionSize(t *testing.T) {
 	source := "testdata/testdata.zst"
+	srcInfo, err := os.Stat(source)
+	if err != nil {
+		t.Fatal(err)
+	}
 	log.Println("Reading messages from", source)
 	rdr := zstd.NewReader(source)
 	msgs := make([]*inetdiag.ParsedMessage, 0, 200)
+
+	ts := time.Now()
 
 	for {
 		msg, err := inetdiag.LoadNext(rdr)
@@ -363,22 +369,39 @@ func TestCompressionSize(t *testing.T) {
 			t.Fatal(err)
 		}
 		pm, err := inetdiag.Parse(msg, false)
+		pm.Timestamp = ts.Truncate(time.Millisecond).UTC()
+		ts = ts.Add(6 * time.Millisecond)
 		rtx.Must(err, "Could not parse test data")
 		msgs = append(msgs, pm)
 	}
 
-	w, _ := zstd.NewWriter("3x")
+	outDir, err := ioutil.TempDir("", "comp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(outDir)
+	fn := outDir + "/comp.zstd"
+	w, _ := zstd.NewWriter(fn)
 	total := 0
-	for i := 0; i < 3; i++ {
-		for _, m := range msgs {
-			jsonBytes, err := json.Marshal(m)
-			rtx.Must(err, "Could not serialize %v", m)
-			w.Write(jsonBytes)
-			total++
+	for _, m := range msgs {
+		jsonBytes, err := json.Marshal(m)
+		if total < 5 {
+			log.Println(string(jsonBytes))
 		}
+		rtx.Must(err, "Could not serialize %v", m)
+		w.Write(jsonBytes)
+		total++
 	}
 	log.Println("Total", total)
 	w.Close()
+	log.Printf("Raw zstd (no timestamp): %s, %d, %6.1f bytes/record\n", srcInfo.Name(), srcInfo.Size(), float32(srcInfo.Size())/float32(total))
+	stats, _ := os.Stat(fn)
+	log.Printf("Json zstd: %s, %d, %6.1f bytes/record\n", stats.Name(), stats.Size(), float32(stats.Size())/float32(total))
+
+	if float32(stats.Size())/float32(total) > 40 {
+		t.Errorf("Bytes/Record too large: %6.1f\n", float32(stats.Size())/float32(total))
+	}
+
 }
 
 func BenchmarkNLMsgSerialize(b *testing.B) {
@@ -441,7 +464,14 @@ func BenchmarkNLMsgParseSerializeCompress(b *testing.B) {
 		msgs = append(msgs, pm)
 	}
 
-	w, _ := zstd.NewWriter("foobar")
+	f, err := ioutil.TempFile("", "TestOneType")
+	if err != nil {
+		b.Fatal(err)
+	}
+	name := f.Name()
+	os.Remove(name)
+	w, _ := zstd.NewWriter(name)
+	defer os.Remove(name)
 
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
