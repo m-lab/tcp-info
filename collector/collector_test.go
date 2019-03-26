@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"sync"
@@ -16,13 +17,15 @@ type testCacheLogger struct{}
 
 func (t *testCacheLogger) LogCacheStats(_, _ int) {}
 
-func runTest(ctx context.Context) {
+func runTest(ctx context.Context, port int) {
 	// Open a server socket, connect to it, send data to it until the context is canceled.
-	localAddr, err := net.ResolveTCPAddr("tcp", "localhost:12345")
+	address := fmt.Sprintf("localhost:%d", port)
+	log.Println("Listening on", address)
+	localAddr, err := net.ResolveTCPAddr("tcp", address)
 	rtx.Must(err, "No localhost")
 	listener, err := net.ListenTCP("tcp", localAddr)
 	rtx.Must(err, "Could not make TCP listener")
-	local, err := net.Dial("tcp", "localhost:12345")
+	local, err := net.Dial("tcp", address)
 	defer local.Close()
 	rtx.Must(err, "Could not connect to myself")
 	conn, err := listener.AcceptTCP()
@@ -38,9 +41,19 @@ func runTest(ctx context.Context) {
 	}
 }
 
+func findPort() int {
+	portFinder, err := net.Listen("tcp", ":0")
+	rtx.Must(err, "Could not open server to discover open ports")
+	port := portFinder.Addr().(*net.TCPAddr).Port
+	portFinder.Close()
+	return port
+}
+
 func TestRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	port := findPort()
 
 	// A nice big buffer on the channel
 	msgChan := make(chan []*inetdiag.ParsedMessage, 10000)
@@ -53,7 +66,7 @@ func TestRun(t *testing.T) {
 	}()
 
 	go func() {
-		runTest(ctx)
+		runTest(ctx, port)
 		wg.Done()
 	}()
 
@@ -69,7 +82,7 @@ func TestRun(t *testing.T) {
 		}
 	}()
 
-	// Make sure we receive multiple different messages regarding port 12345
+	// Make sure we receive multiple different messages regarding the open port
 	count := 0
 	var prev *inetdiag.ParsedMessage
 	for msgs := range msgChan {
@@ -78,7 +91,7 @@ func TestRun(t *testing.T) {
 			if m == nil {
 				continue
 			}
-			if m.InetDiagMsg != nil && m.InetDiagMsg.ID.SPort() == uint16(12345) {
+			if m.InetDiagMsg != nil && m.InetDiagMsg.ID.SPort() == uint16(port) {
 				if prev == nil || prev.Compare(m) > inetdiag.NoMajorChange {
 					prev = m
 					changed = true

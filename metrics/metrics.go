@@ -8,6 +8,8 @@
 package metrics
 
 import (
+	"log"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -86,3 +88,7 @@ var (
 		},
 	)
 )
+
+func init() {
+	log.Println("Prometheus metrics in tcp-info.metrics are registered.")
+}
