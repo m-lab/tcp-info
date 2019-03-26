@@ -270,9 +270,12 @@ type ParsedMessage struct {
 	// Timestamp should be truncated to 1 millisecond for best compression.
 	// Using int64 milliseconds instead reduces compressed size by 0.5 bytes/record, or about 1.5%
 	Timestamp time.Time `json:",omitempty"`
-	// Storing this as raw bytes instead of as NlMsgHdr only saves 200 nsec in Marshaling.  Not worth the added complexity.
-	// However, the size of the test zstd file drops to from 14491 to 13978, about 3%, which might be worth considering.
-	RawMsgHdr RawNlMsgHdr `json:",omitempty"` // []byte containing the unparsed NlMsgHdr header.
+
+	// TODO - should we just drop the NLMsgHdr?  It doesn't seem useful, since the type is already known.
+	// Dropping this field reduces Marshaling by 400 nsec, and reduces size by 2.5 bytes/record - about 8%.
+	// Encoding this as []byte would reduce compressed size by 1 byte/record
+	// NLMsgHdr *syscall.NlMsghdr `json:",omitempty"` // []byte containing the unparsed NlMsgHdr header.
+
 	// Storing the RawIDM instead of the parsed InetDiagMsg reduces Marshalling by 2.6 usec, and sample zstd file
 	// size drops from about 16363 to 14491, about 12%.  Actual size savings may be considerably smaller, though cpu time
 	// savings might be even greater.
@@ -315,7 +318,8 @@ func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) 
 		}
 	}
 
-	parsedMsg := ParsedMessage{RawMsgHdr: slice(&msg.Header), RawIDM: raw}
+	parsedMsg := ParsedMessage{RawIDM: raw}
+	// parsedMsg.NLMsgHdr = &msg.Header
 
 	attrs, err := ParseRouteAttr(attrBytes)
 	if err != nil {
