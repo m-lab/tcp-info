@@ -2,16 +2,13 @@
 language: go
 
 dist: xenial
-addons:
-  apt:
-    packages:
-    - zsdt
 
 ###########################################################################
 before_install:
 # Coverage tools
 - go get github.com/mattn/goveralls
 - echo Branch is ${TRAVIS_BRANCH} and Tag is $TRAVIS_TAG
+- apt-get update && apt-get install -y zstd
 
 install:
 # Install dependencies
