@@ -13,7 +13,7 @@ before_install:
 install:
 # Install dependencies
 # This filters out all imports from the local project, and all "base" imports that don't contain slash.
-- apt-get update && sudo apt-get install -y zstd
+- sudo apt-get update && sudo apt-get install -y zstd
 - go get -v -t ./...
 
 script:
