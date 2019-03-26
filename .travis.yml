@@ -2,22 +2,22 @@
 language: go
 
 dist: xenial
+sudo: true
 
 ###########################################################################
 before_install:
 # Coverage tools
 - go get github.com/mattn/goveralls
 - echo Branch is ${TRAVIS_BRANCH} and Tag is $TRAVIS_TAG
-- apt-get update && apt-get install -y zstd
 
 install:
 # Install dependencies
 # This filters out all imports from the local project, and all "base" imports that don't contain slash.
+- apt-get update && sudo apt-get install -y zstd
 - go get -v -t ./...
 
 script:
 # Run all the tests.
-- golint ./...
 - go vet ./...
 - go build ./...
 - go test ./... -v -coverpkg=./... -coverprofile=_coverage.cov
