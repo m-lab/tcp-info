@@ -40,9 +40,15 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/m-lab/tcp-info/tcp"
 	"golang.org/x/sys/unix"
+
+	"github.com/m-lab/tcp-info/tcp"
 )
+
+// TODO: Refactor this package, or at least this file. It feels like it
+// currently defines a little too much, does a little too much, and exports a
+// little too much. Peter and Greg each suspect there are, implicitly, multiple
+// packages defined in this file and/or directory.
 
 // Error types.
 var (
@@ -263,7 +269,7 @@ const (
 	Other                           // Some other attribute changed
 )
 
-// Useful offsets
+// Useful offsets for Compare
 const (
 	lastDataSentOffset = unsafe.Offsetof(syscall.TCPInfo{}.Last_data_sent)
 	pmtuOffset         = unsafe.Offsetof(syscall.TCPInfo{}.Pmtu)
@@ -284,10 +290,6 @@ const (
 // in the TCPInfo struct related to packets, bytes, and segments.  In addition to the TCPState
 // and CAState fields, these are probably adequate, but we also check for new or missing attributes
 // and any attribute difference outside of the TCPInfo (INET_DIAG_INFO) attribute.
-// TODO:
-//  Consider moving this function, together with LinuxTCPInfo, into another package depending only on
-//  inetdiag. However, that would require exporting all fields of LinuxTCPInfo, which is not
-//  necessary if we keep this here.
 func (pm *ParsedMessage) Compare(previous *ParsedMessage) ChangeType {
 	// If the TCP state has changed, that is important!
 	if previous.InetDiagMsg.IDiagState != pm.InetDiagMsg.IDiagState {
