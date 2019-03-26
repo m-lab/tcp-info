@@ -1,48 +1,23 @@
 # Travis configuration for tcp-info fast sidestream tool.
 language: go
-services:
-  - docker
-
-go:
-   - 1.10.x
 
 ###########################################################################
 before_install:
 # Coverage tools
 - go get github.com/mattn/goveralls
-
 - echo Branch is ${TRAVIS_BRANCH} and Tag is $TRAVIS_TAG
 
-# Install test credentials.
-# The service account variables are uploaded to travis by running,
-# from root of repo directory:
-#  travis/setup_service_accounts_for_travis.sh
-#
-# All of the gcloud library calls will detect the GOOGLE_APPLICATION_CREDENTIALS
-# environment variable, and use that file for authentication.
-# If the application requires authentication outside the libraries, consider
-# also using travis/activate_service_account.sh
-- if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  echo "$SERVICE_ACCOUNT_mlab_testing" > $TRAVIS_BUILD_DIR/creds.json ;
-  export GOOGLE_APPLICATION_CREDENTIALS=$TRAVIS_BUILD_DIR/creds.json ;
-  fi
-
-# These directories will be cached on successful "script" builds, and restored,
-# if available, to save time on future builds.
-cache:
-  directories:
-    - "$HOME/google-cloud-sdk/"
+# Install zstd tool.
+- bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/install)
 
 install:
 # Install dependencies
 # This filters out all imports from the local project, and all "base" imports that don't contain slash.
 - go get -v -t ./...
 
-# Install zstd tool.
-- bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/install)
-
 script:
-# To start, run all the non-integration tests.
+# Run all the tests.
+- golint ./...
 - go vet ./...
 - go build ./...
 - go test ./... -v -coverpkg=./... -coverprofile=_coverage.cov
