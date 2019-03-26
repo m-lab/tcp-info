@@ -33,7 +33,8 @@ func NewCache() *Cache {
 
 // Update swaps msg with the cache contents, and returns the evicted value.
 func (c *Cache) Update(msg *inetdiag.ParsedMessage) *inetdiag.ParsedMessage {
-	cookie := msg.InetDiagMsg.ID.Cookie()
+	idm, _ := msg.RawIDM.Parse()
+	cookie := idm.ID.Cookie()
 	c.current[cookie] = msg
 	evicted, ok := c.previous[cookie]
 	if ok {
