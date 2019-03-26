@@ -150,8 +150,12 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if mp.NLMsgHdr.Len != 356 {
-		t.Error("wrong length")
+	hdr, err := mp.NLMsgHdr.Parse()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if hdr.Len != 356 {
+		t.Error("wrong length", hdr.Len)
 	}
 	idm, _ := mp.RawIDM.Parse()
 	if idm.IDiagFamily != unix.AF_INET6 {

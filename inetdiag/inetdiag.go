@@ -1,3 +1,5 @@
+//go:generate ffjson $GOFILE
+
 // Package inetdiag provides basic structs and utilities for INET_DIAG messaages.
 // Based on uapi/linux/inet_diag.h.
 package inetdiag
@@ -35,6 +37,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"reflect"
 	"syscall"
 	"time"
 	"unsafe"
@@ -77,6 +80,7 @@ const (
 	INET_DIAG_BBRINFO
 	INET_DIAG_CLASS_ID
 	INET_DIAG_MD5SIG
+	// TODO - Should check whether this matches the current linux header.
 	INET_DIAG_MAX
 )
 
@@ -239,6 +243,18 @@ func splitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
 	return RawInetDiagMsg(data[:align]), data[align:]
 }
 
+// RawNlMsgHdr contains a byte slice version of a syscall.NlMsgHdr
+type RawNlMsgHdr []byte
+
+// Parse returns the syscall.NlMsghdr
+func (raw RawNlMsgHdr) Parse() (*syscall.NlMsghdr, error) {
+	size := int(unsafe.Sizeof(syscall.NlMsghdr{}))
+	if len(raw) != size {
+		return nil, ErrParseFailed
+	}
+	return (*syscall.NlMsghdr)(unsafe.Pointer(&raw[0])), nil
+}
+
 // Metadata contains the metadata for a particular TCP stream.
 type Metadata struct {
 	UUID      string
@@ -252,8 +268,13 @@ type RouteAttrValue []byte
 // ParsedMessage is a container for parsed InetDiag messages and attributes.
 type ParsedMessage struct {
 	Timestamp time.Time
-	NLMsgHdr  *syscall.NlMsghdr // The header of the raw netlink message.
-	RawIDM    RawInetDiagMsg    // RawInetDiagMsg within NLMsg
+	// Storing this as raw bytes instead of as NlMsgHdr only saves 200 nsec in Marshaling.  Not worth the added complexity.
+	// However, the size of the test zstd file drops to from 14491 to 13978, which might be worth considering.
+	NLMsgHdr RawNlMsgHdr // []byte containing the unparsed NlMsgHdr header.
+	// Storing the RawIDM instead of the parsed InetDiagMsg reduces Marshalling from 6.8 to 4.2 usec, and sample zstd file
+	// size drops from about 16363 to 14491, about 12%.  Actual size savings may be considerably smaller, though cpu time
+	// savings might be even greater.
+	RawIDM RawInetDiagMsg // RawInetDiagMsg within NLMsg
 	// Saving just the .Value fields reduces Marshalling from 8.7 usec to 6.8 usec.
 	// TODO should this be a slice instead of array, in case we get attributes > INET_DIAG_MAX?
 	Attributes [INET_DIAG_MAX]RouteAttrValue // RouteAttr.Value, backed by NLMsg
@@ -262,6 +283,13 @@ type ParsedMessage struct {
 
 func isLocal(addr net.IP) bool {
 	return addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsMulticast() || addr.IsUnspecified()
+}
+
+func slice(hp *syscall.NlMsghdr) []byte {
+	hdrSlice := make([]byte, int(unsafe.Sizeof(*hp)), int(unsafe.Sizeof(*hp)))
+	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&hdrSlice))
+	hdr.Data = uintptr(unsafe.Pointer(hp))
+	return hdrSlice
 }
 
 // Parse parses the NetlinkMessage into a ParsedMessage.  If skipLocal is true, it will return nil for
@@ -285,7 +313,8 @@ func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) 
 			return nil, nil
 		}
 	}
-	parsedMsg := ParsedMessage{NLMsgHdr: &msg.Header, RawIDM: raw}
+
+	parsedMsg := ParsedMessage{NLMsgHdr: slice(&msg.Header), RawIDM: raw}
 	attrs, err := ParseRouteAttr(attrBytes)
 	if err != nil {
 		return nil, err
@@ -300,6 +329,7 @@ func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) 
 // e.g. from a file of saved netlink messages.
 func LoadNext(rdr io.Reader) (*syscall.NetlinkMessage, error) {
 	var header syscall.NlMsghdr
+	// TODO - should we pass in LittleEndian as a parameter?
 	err := binary.Read(rdr, binary.LittleEndian, &header)
 	if err != nil {
 		// Note that this may be EOF
