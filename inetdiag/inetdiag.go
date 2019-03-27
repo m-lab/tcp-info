@@ -31,6 +31,7 @@ expressed in host-byte order"
 */
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -237,6 +238,14 @@ func (raw RawInetDiagMsg) Parse() (*InetDiagMsg, error) {
 	return (*InetDiagMsg)(unsafe.Pointer(&raw[0])), nil
 }
 
+func (idm *InetDiagMsg) toRaw() RawInetDiagMsg {
+	p := unsafe.Pointer(idm)
+	array := [unsafe.Sizeof(*idm)]byte
+	result := make(RawInetDiagMsg,len(array))
+	copy(result, array)
+	return result
+}
+
 func splitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
 	align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
 	if len(data) < align {
@@ -287,6 +296,113 @@ type ParsedMessage struct {
 	// Saving just the .Value fields reduces Marshalling by 1.9 usec.
 	Attributes []RouteAttrValue `json:",omitempty"` // RouteAttr.Value, backed by NLMsg
 	Metadata   *Metadata        `json:",omitempty"`
+}
+
+func (pm *ParsedMessage) SetIDM(idm *InetDiagMsg) {
+	raw := idm.toRaw()
+	pm.RawIDM = raw
+}
+
+// ChangeType indicates why a new record is worthwhile saving.
+type ChangeType int
+
+// Constants to describe the degree of change between two different ParsedMessages.
+const (
+	NoMajorChange        ChangeType = iota
+	IDiagStateChange                // The IDiagState changed
+	NoTCPInfo                       // There is no TCPInfo attribute
+	NewAttribute                    // There is a new attribute
+	LostAttribute                   // There is a dropped attribute
+	AttributeLength                 // The length of an attribute changed
+	StateOrCounterChange            // One of the early fields in DIAG_INFO changed.
+	PacketCountChange               // One of the packet/byte/segment counts (or other late field) changed
+	Other                           // Some other attribute changed
+)
+
+// Useful offsets for Compare
+const (
+	lastDataSentOffset = unsafe.Offsetof(syscall.TCPInfo{}.Last_data_sent)
+	pmtuOffset         = unsafe.Offsetof(syscall.TCPInfo{}.Pmtu)
+)
+
+// Compare compares important fields to determine whether significant updates have occurred.
+// We ignore a bunch of fields:
+//  * The TCPInfo fields matching last_* are rapidly changing, but don't have much significance.
+//    Are they elapsed time fields?
+//  * The InetDiagMsg.Expires is also rapidly changing in many connections, but also seems
+//    unimportant.
+//
+// Significant updates are reflected in the packet, segment and byte count updates, so we
+// generally want to record a snapshot when any of those change.  They are in the latter
+// part of the linux struct, following the pmtu field.
+//
+// The simplest test that seems to tell us what we care about is to look at all the fields
+// in the TCPInfo struct related to packets, bytes, and segments.  In addition to the TCPState
+// and CAState fields, these are probably adequate, but we also check for new or missing attributes
+// and any attribute difference outside of the TCPInfo (INET_DIAG_INFO) attribute.
+func (pm *ParsedMessage) Compare(previous *ParsedMessage) ChangeType {
+	// If the TCP state has changed, that is important!
+	prevIDM, err := previous.RawIDM.Parse()
+	if err != nil {
+		log.Println(err)
+	}
+	pmIDM, err := pm.RawIDM.Parse()
+	if err != nil {
+		log.Println(err)
+	}
+	if prevIDM.IDiagState != pmIDM.IDiagState {
+		return IDiagStateChange
+	}
+
+	// TODO - should we validate that ID matches?  Otherwise, we shouldn't even be comparing the rest.
+
+	a := previous.Attributes[INET_DIAG_INFO]
+	b := pm.Attributes[INET_DIAG_INFO]
+	if a == nil || b == nil {
+		return NoTCPInfo
+	}
+
+	// If any of the byte/segment/package counters have changed, that is what we are most
+	// interested in.
+	if 0 != bytes.Compare(a[pmtuOffset:], b[pmtuOffset:]) {
+		return StateOrCounterChange
+	}
+
+	// Check all the earlier fields, too.  Usually these won't change unless the counters above
+	// change, but this way we won't miss something subtle.
+	if 0 != bytes.Compare(a[:lastDataSentOffset], b[:lastDataSentOffset]) {
+		return StateOrCounterChange
+	}
+
+	// If any attributes have been added or removed, that is likely significant.
+	for tp := range previous.Attributes {
+		switch tp {
+		case INET_DIAG_INFO:
+			// Handled explicitly above.
+		default:
+			// Detect any change in anything other than INET_DIAG_INFO
+			a := previous.Attributes[tp]
+			b := pm.Attributes[tp]
+			if a == nil && b != nil {
+				return NewAttribute
+			}
+			if a != nil && b == nil {
+				return LostAttribute
+			}
+			if a == nil && b == nil {
+				continue
+			}
+			if len(a) != len(b) {
+				return AttributeLength
+			}
+			// All others we want to be identical
+			if 0 != bytes.Compare(a, b) {
+				return Other
+			}
+		}
+	}
+
+	return NoMajorChange
 }
 
 func isLocal(addr net.IP) bool {

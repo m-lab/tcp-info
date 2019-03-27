@@ -210,11 +210,11 @@ func (svr *Saver) queue(msg *inetdiag.ParsedMessage) error {
 	if !ok {
 		// Likely first time we have seen this connection.  Create a new Connection, unless
 		// the connection is already closing.
-		if idm.IDiagState >= uint8(tcp.TCPState_FIN_WAIT1) {
+		if idm.IDiagState >= uint8(tcp.FIN_WAIT1) {
 			log.Println("Skipping", idm, msg.Timestamp)
 			return nil
 		}
-		if svr.cache.CycleCount() > 0 || idm.IDiagState != uint8(tcp.TCPState_ESTABLISHED) {
+		if svr.cache.CycleCount() > 0 || idm.IDiagState != uint8(tcp.ESTABLISHED) {
 			log.Println("New conn:", idm, msg.Timestamp)
 		}
 		conn = newConnection(idm, msg.Timestamp)

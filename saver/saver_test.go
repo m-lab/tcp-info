@@ -29,7 +29,7 @@ func dump(mp *inetdiag.ParsedMessage) {
 	for i := range mp.Attributes {
 		a := mp.Attributes[i]
 		if a != nil {
-			log.Printf("%d %d %+v\n", i, len(a.Value), a)
+			log.Printf("%d %d %+v\n", i, len(a), a)
 		}
 	}
 }
@@ -101,13 +101,13 @@ func TestBasic(t *testing.T) {
 
 	// This changes the first connection, and ends the second connection.
 	m3 := []*inetdiag.ParsedMessage{msg(1234, 1234)}
-	m3[0].Attributes[inetdiag.INET_DIAG_INFO].Value[20] = 127
+	m3[0].Attributes[inetdiag.INET_DIAG_INFO][20] = 127
 	svrChan <- m3
 
 	// This changes the first connection again.
 	m4 := []*inetdiag.ParsedMessage{msg(1234, 1234)}
-	m3[0].Attributes[inetdiag.INET_DIAG_INFO].Value[20] = 127
-	m4[0].Attributes[inetdiag.INET_DIAG_INFO].Value[105] = 127
+	m3[0].Attributes[inetdiag.INET_DIAG_INFO][20] = 127
+	m4[0].Attributes[inetdiag.INET_DIAG_INFO][105] = 127
 	svrChan <- m4
 
 	m5 := []*inetdiag.ParsedMessage{msg(1234, 1234)}
