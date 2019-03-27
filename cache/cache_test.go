@@ -41,7 +41,6 @@ func fakeMsg(t *testing.T, cookie uint64, dport uint16) inetdiag.ParsedMessage {
 		idm.ID.IDiagDPort[i] = byte(dport & 0x0FF)
 		dport >>= 8
 	}
-	log.Printf("Cookie: %x\n", idm.ID.Cookie())
 	return *mp
 }
 
