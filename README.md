@@ -18,4 +18,3 @@ If you want to use this tool outside of a container, then you will also require
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/install)
 ```
-

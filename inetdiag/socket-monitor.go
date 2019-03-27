@@ -30,6 +30,9 @@ var (
 
 	// ErrBadSequence is used when the Netlink response has a bad sequence number.
 	ErrBadSequence = errors.New("bad sequence number, can't interpret NetLink response")
+
+	// ErrBadMsgData is used when the NHetlink response has bad or missing data.
+	ErrBadMsgData = errors.New("bad message data from netlink message")
 )
 
 // TODO - Figure out why we aren't seeing INET_DIAG_DCTCPINFO or INET_DIAG_BBRINFO messages.
@@ -69,6 +72,9 @@ func processSingleMessage(m *syscall.NetlinkMessage, seq uint32, pid uint32) (*s
 	}
 	if m.Header.Type == unix.NLMSG_ERROR {
 		native := nl.NativeEndian()
+		if len(m.Data) < 4 {
+			return nil, false, ErrBadMsgData
+		}
 		error := int32(native.Uint32(m.Data[0:4]))
 		if error == 0 {
 			return nil, false, nil
