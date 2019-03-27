@@ -238,14 +238,6 @@ func (raw RawInetDiagMsg) Parse() (*InetDiagMsg, error) {
 	return (*InetDiagMsg)(unsafe.Pointer(&raw[0])), nil
 }
 
-func (idm *InetDiagMsg) toRaw() RawInetDiagMsg {
-	p := unsafe.Pointer(idm)
-	array := [unsafe.Sizeof(*idm)]byte
-	result := make(RawInetDiagMsg,len(array))
-	copy(result, array)
-	return result
-}
-
 func splitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
 	align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
 	if len(data) < align {
@@ -296,11 +288,6 @@ type ParsedMessage struct {
 	// Saving just the .Value fields reduces Marshalling by 1.9 usec.
 	Attributes []RouteAttrValue `json:",omitempty"` // RouteAttr.Value, backed by NLMsg
 	Metadata   *Metadata        `json:",omitempty"`
-}
-
-func (pm *ParsedMessage) SetIDM(idm *InetDiagMsg) {
-	raw := idm.toRaw()
-	pm.RawIDM = raw
 }
 
 // ChangeType indicates why a new record is worthwhile saving.

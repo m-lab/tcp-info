@@ -91,7 +91,8 @@ func TestRun(t *testing.T) {
 			if m == nil {
 				continue
 			}
-			if m.InetDiagMsg != nil && m.InetDiagMsg.ID.SPort() == uint16(port) {
+			idm, _ := m.RawIDM.Parse()
+			if idm != nil && idm.ID.SPort() == uint16(port) {
 				if prev == nil || prev.Compare(m) > inetdiag.NoMajorChange {
 					prev = m
 					changed = true
