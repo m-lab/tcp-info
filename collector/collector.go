@@ -10,6 +10,11 @@ import (
 	"github.com/m-lab/tcp-info/saver"
 )
 
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
 var (
 	errCount   = 0
 	localCount = 0

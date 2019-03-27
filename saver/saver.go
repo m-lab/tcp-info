@@ -289,10 +289,17 @@ func (svr *Saver) swapAndQueue(pm *inetdiag.ParsedMessage) {
 		if oldIDM.ID != pmIDM.ID {
 			log.Println("Mismatched SockIDs", oldIDM.ID, pmIDM.ID)
 		}
-		if pm.Compare(old) > inetdiag.NoMajorChange {
+		change, err := pm.Compare(old)
+		if err != nil {
+			// TODO metric
+			log.Println(err)
+			return
+		}
+		if change > inetdiag.NoMajorChange {
 			svr.stats.DiffCount++
 			err := svr.queue(pm)
 			if err != nil {
+				// TODO metric
 				log.Println(err)
 			}
 		}

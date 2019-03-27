@@ -276,14 +276,8 @@ type ParsedMessage struct {
 	// Using int64 milliseconds instead reduces compressed size by 0.5 bytes/record, or about 1.5%
 	Timestamp time.Time `json:",omitempty"`
 
-	// TODO - should we just drop the NLMsgHdr?  It doesn't seem useful, since the type is already known.
-	// Dropping this field reduces Marshaling by 400 nsec, and reduces size by 2.5 bytes/record - about 8%.
-	// Encoding this as []byte would reduce compressed size by 1 byte/record
-	// NLMsgHdr *syscall.NlMsghdr `json:",omitempty"` // []byte containing the unparsed NlMsgHdr header.
-
-	// Storing the RawIDM instead of the parsed InetDiagMsg reduces Marshalling by 2.6 usec, and sample zstd file
-	// size drops from about 16363 to 14491, about 12%.  Actual size savings may be considerably smaller, though cpu time
-	// savings might be even greater.
+	// Storing the RawIDM instead of the parsed InetDiagMsg reduces Marshalling by 2.6 usec, and
+	// typical compressed size by 3-4 bytes/record
 	RawIDM RawInetDiagMsg `json:",omitempty"` // RawInetDiagMsg within NLMsg
 	// Saving just the .Value fields reduces Marshalling by 1.9 usec.
 	Attributes []RouteAttrValue `json:",omitempty"` // RouteAttr.Value, backed by NLMsg
@@ -303,6 +297,7 @@ const (
 	AttributeLength                 // The length of an attribute changed
 	StateOrCounterChange            // One of the early fields in DIAG_INFO changed.
 	PacketCountChange               // One of the packet/byte/segment counts (or other late field) changed
+	PreviousWasNil                  // The previous message was nil
 	Other                           // Some other attribute changed
 )
 
@@ -327,18 +322,21 @@ const (
 // in the TCPInfo struct related to packets, bytes, and segments.  In addition to the TCPState
 // and CAState fields, these are probably adequate, but we also check for new or missing attributes
 // and any attribute difference outside of the TCPInfo (INET_DIAG_INFO) attribute.
-func (pm *ParsedMessage) Compare(previous *ParsedMessage) ChangeType {
+func (pm *ParsedMessage) Compare(previous *ParsedMessage) (ChangeType, error) {
+	if previous == nil {
+		return PreviousWasNil, nil
+	}
 	// If the TCP state has changed, that is important!
 	prevIDM, err := previous.RawIDM.Parse()
 	if err != nil {
-		log.Println(err)
+		return NoMajorChange, ErrParseFailed
 	}
 	pmIDM, err := pm.RawIDM.Parse()
 	if err != nil {
-		log.Println(err)
+		return NoMajorChange, ErrParseFailed
 	}
 	if prevIDM.IDiagState != pmIDM.IDiagState {
-		return IDiagStateChange
+		return IDiagStateChange, nil
 	}
 
 	// TODO - should we validate that ID matches?  Otherwise, we shouldn't even be comparing the rest.
@@ -346,19 +344,19 @@ func (pm *ParsedMessage) Compare(previous *ParsedMessage) ChangeType {
 	a := previous.Attributes[INET_DIAG_INFO]
 	b := pm.Attributes[INET_DIAG_INFO]
 	if a == nil || b == nil {
-		return NoTCPInfo
+		return NoTCPInfo, nil
 	}
 
 	// If any of the byte/segment/package counters have changed, that is what we are most
 	// interested in.
 	if 0 != bytes.Compare(a[pmtuOffset:], b[pmtuOffset:]) {
-		return StateOrCounterChange
+		return StateOrCounterChange, nil
 	}
 
 	// Check all the earlier fields, too.  Usually these won't change unless the counters above
 	// change, but this way we won't miss something subtle.
 	if 0 != bytes.Compare(a[:lastDataSentOffset], b[:lastDataSentOffset]) {
-		return StateOrCounterChange
+		return StateOrCounterChange, nil
 	}
 
 	// If any attributes have been added or removed, that is likely significant.
@@ -371,25 +369,25 @@ func (pm *ParsedMessage) Compare(previous *ParsedMessage) ChangeType {
 			a := previous.Attributes[tp]
 			b := pm.Attributes[tp]
 			if a == nil && b != nil {
-				return NewAttribute
+				return NewAttribute, nil
 			}
 			if a != nil && b == nil {
-				return LostAttribute
+				return LostAttribute, nil
 			}
 			if a == nil && b == nil {
 				continue
 			}
 			if len(a) != len(b) {
-				return AttributeLength
+				return AttributeLength, nil
 			}
 			// All others we want to be identical
 			if 0 != bytes.Compare(a, b) {
-				return Other
+				return Other, nil
 			}
 		}
 	}
 
-	return NoMajorChange
+	return NoMajorChange, nil
 }
 
 func isLocal(addr net.IP) bool {

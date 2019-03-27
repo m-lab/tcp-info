@@ -324,7 +324,7 @@ func TestCompare(t *testing.T) {
 	for i := int(lastDataSentOffset); i < int(pmtuOffset); i++ {
 		mp2.Attributes[inetdiag.INET_DIAG_INFO][i] += 1
 	}
-	diff := mp1.Compare(mp2)
+	diff, _ := mp1.Compare(mp2)
 	if diff != inetdiag.NoMajorChange {
 		t.Error("Last field changes should not be detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
 			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
@@ -332,7 +332,7 @@ func TestCompare(t *testing.T) {
 
 	// Early parts of INET_DIAG_INFO Should be ignored
 	mp2.Attributes[inetdiag.INET_DIAG_INFO][10] = 7
-	diff = mp1.Compare(mp2)
+	diff, _ = mp1.Compare(mp2)
 	if diff != inetdiag.StateOrCounterChange {
 		t.Error("Early field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
 			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
@@ -340,7 +340,7 @@ func TestCompare(t *testing.T) {
 
 	// packet, segment, and byte counts should NOT be ignored
 	mp2.Attributes[inetdiag.INET_DIAG_INFO][pmtuOffset] = 123
-	diff = mp1.Compare(mp2)
+	diff, _ = mp1.Compare(mp2)
 	if diff != inetdiag.StateOrCounterChange {
 		t.Error("Late field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
 			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
