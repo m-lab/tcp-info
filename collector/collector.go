@@ -1,3 +1,6 @@
+// Package collector repeatedly queries the netlink socket to discover
+// measurement data about open TCP connections and sends that data down a
+// channel.
 package collector
 
 import (
