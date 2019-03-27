@@ -30,6 +30,12 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
+func testFatal(t *testing.T, err error) {
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSizes(t *testing.T) {
 	if unsafe.Sizeof(inetdiag.InetDiagSockID{}) != 48 {
 		t.Error("SockID wrong size", unsafe.Sizeof(inetdiag.InetDiagSockID{}))
@@ -47,7 +53,9 @@ func TestParseInetDiagMsg(t *testing.T) {
 		data[i] = byte(i + 2)
 	}
 	raw, value := inetdiag.SplitInetDiagMsg(data[:])
-	hdr, _ := raw.Parse()
+	hdr, err := raw.Parse()
+	testFatal(t, err)
+
 	if hdr.ID.Interface() == 0 || hdr.ID.Cookie() == 0 || hdr.ID.DPort() == 0 || hdr.ID.String() == "" {
 		t.Errorf("None of the accessed values should be zero")
 	}
@@ -96,7 +104,8 @@ func TestID4(t *testing.T) {
 	data[dstIPOffset+3] = 127 // Looks like localhost, but its reversed.
 
 	raw, _ := inetdiag.SplitInetDiagMsg(data[:])
-	hdr, _ := raw.Parse()
+	hdr, err := raw.Parse()
+	testFatal(t, err)
 	if !hdr.ID.SrcIP().IsLoopback() {
 		t.Errorf("Should be loopback but isn't")
 	}
@@ -128,7 +137,8 @@ func TestID6(t *testing.T) {
 	}
 
 	raw, _ := inetdiag.SplitInetDiagMsg(data[:])
-	hdr, _ := raw.Parse()
+	hdr, err := raw.Parse()
+	testFatal(t, err)
 
 	if hdr.ID.SrcIP().IsLoopback() {
 		t.Errorf("Should not be identified as loopback")
@@ -142,18 +152,11 @@ func TestParse(t *testing.T) {
 	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
 	nm := syscall.NetlinkMessage{}
 	err := json.Unmarshal([]byte(json1), &nm)
-	if err != nil {
-		log.Fatal(err)
-	}
+	testFatal(t, err)
 	mp, err := inetdiag.Parse(&nm, true)
-	if err != nil {
-		log.Fatal(err)
-	}
-	/*
-		if mp.NLMsgHdr.Len != 356 {
-			t.Error("wrong length", mp.NLMsgHdr.Len)
-		}*/
-	idm, _ := mp.RawIDM.Parse()
+	testFatal(t, err)
+	idm, err := mp.RawIDM.Parse()
+	testFatal(t, err)
 	if idm.IDiagFamily != unix.AF_INET6 {
 		t.Error("Should not be IPv6")
 	}
@@ -324,7 +327,8 @@ func TestCompare(t *testing.T) {
 	for i := int(lastDataSentOffset); i < int(pmtuOffset); i++ {
 		mp2.Attributes[inetdiag.INET_DIAG_INFO][i] += 1
 	}
-	diff, _ := mp1.Compare(mp2)
+	diff, err := mp1.Compare(mp2)
+	testFatal(t, err)
 	if diff != inetdiag.NoMajorChange {
 		t.Error("Last field changes should not be detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
 			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
@@ -332,7 +336,8 @@ func TestCompare(t *testing.T) {
 
 	// Early parts of INET_DIAG_INFO Should be ignored
 	mp2.Attributes[inetdiag.INET_DIAG_INFO][10] = 7
-	diff, _ = mp1.Compare(mp2)
+	diff, err = mp1.Compare(mp2)
+	testFatal(t, err)
 	if diff != inetdiag.StateOrCounterChange {
 		t.Error("Early field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
 			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
@@ -340,7 +345,8 @@ func TestCompare(t *testing.T) {
 
 	// packet, segment, and byte counts should NOT be ignored
 	mp2.Attributes[inetdiag.INET_DIAG_INFO][pmtuOffset] = 123
-	diff, _ = mp1.Compare(mp2)
+	diff, err = mp1.Compare(mp2)
+	testFatal(t, err)
 	if diff != inetdiag.StateOrCounterChange {
 		t.Error("Late field change not detected:", deep.Equal(mp1.Attributes[inetdiag.INET_DIAG_INFO],
 			mp2.Attributes[inetdiag.INET_DIAG_INFO]))
@@ -393,6 +399,8 @@ func TestNLMsgSerialize(t *testing.T) {
 	}
 }
 
+// The bytes/record criterion was determined using zstd 1.3.8.
+// These may change with different zstd versions.
 func TestCompressionSize(t *testing.T) {
 	source := "testdata/testdata.zst"
 	srcInfo, err := os.Stat(source)
@@ -426,7 +434,8 @@ func TestCompressionSize(t *testing.T) {
 	}
 	defer os.RemoveAll(outDir)
 	fn := outDir + "/comp.zstd"
-	w, _ := zstd.NewWriter(fn)
+	w, err := zstd.NewWriter(fn)
+	testFatal(t, err)
 	total := 0
 	for _, m := range msgs {
 		jsonBytes, err := json.Marshal(m)
@@ -440,9 +449,12 @@ func TestCompressionSize(t *testing.T) {
 	log.Println("Total", total)
 	w.Close()
 	log.Printf("Raw zstd (no timestamp): %s, %d, %6.1f bytes/record\n", srcInfo.Name(), srcInfo.Size(), float32(srcInfo.Size())/float32(total))
-	stats, _ := os.Stat(fn)
+	stats, err := os.Stat(fn)
+	testFatal(t, err)
 	log.Printf("Json zstd: %s, %d, %6.1f bytes/record\n", stats.Name(), stats.Size(), float32(stats.Size())/float32(total))
 
+	// The bytes/record criterion was determined using zstd 1.3.8.
+	// These may change with different zstd versions.
 	if float32(stats.Size())/float32(total) > 40 {
 		t.Errorf("Bytes/Record too large: %6.1f\n", float32(stats.Size())/float32(total))
 	}

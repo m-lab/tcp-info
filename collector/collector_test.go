@@ -13,6 +13,17 @@ import (
 	"github.com/m-lab/tcp-info/inetdiag"
 )
 
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
+func testFatal(t *testing.T, err error) {
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 type testCacheLogger struct{}
 
 func (t *testCacheLogger) LogCacheStats(_, _ int) {}
@@ -91,7 +102,8 @@ func TestRun(t *testing.T) {
 			if m == nil {
 				continue
 			}
-			idm, _ := m.RawIDM.Parse()
+			idm, err := m.RawIDM.Parse()
+			testFatal(t, err)
 			if idm != nil && idm.ID.SPort() == uint16(port) {
 				change, err := m.Compare(prev)
 				if err != nil {

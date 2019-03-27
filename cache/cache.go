@@ -32,15 +32,18 @@ func NewCache() *Cache {
 }
 
 // Update swaps msg with the cache contents, and returns the evicted value.
-func (c *Cache) Update(msg *inetdiag.ParsedMessage) *inetdiag.ParsedMessage {
-	idm, _ := msg.RawIDM.Parse()
+func (c *Cache) Update(msg *inetdiag.ParsedMessage) (*inetdiag.ParsedMessage, error) {
+	idm, err := msg.RawIDM.Parse()
+	if err != nil {
+		return nil, err
+	}
 	cookie := idm.ID.Cookie()
 	c.current[cookie] = msg
 	evicted, ok := c.previous[cookie]
 	if ok {
 		delete(c.previous, cookie)
 	}
-	return evicted
+	return evicted, nil
 }
 
 // EndCycle marks the completion of updates from one set of netlink messages.

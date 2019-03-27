@@ -264,9 +264,10 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*inetdiag.ParsedMessag
 		}
 		residual := svr.cache.EndCycle()
 
+		// Remove all missing connections from the cache.
 		for i := range residual {
-			idm, _ := residual[i].RawIDM.Parse()
-			svr.endConn(idm.ID.Cookie())
+			// residual is the list of all keys that were not updated.
+			svr.endConn(i)
 			svr.stats.ExpiredCount++
 		}
 	}
@@ -275,7 +276,12 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*inetdiag.ParsedMessag
 
 func (svr *Saver) swapAndQueue(pm *inetdiag.ParsedMessage) {
 	svr.stats.TotalCount++
-	old := svr.cache.Update(pm)
+	old, err := svr.cache.Update(pm)
+	if err != nil {
+		// TODO metric
+		log.Println(err)
+		return
+	}
 	if old == nil {
 		svr.stats.NewCount++
 		err := svr.queue(pm)
@@ -284,8 +290,18 @@ func (svr *Saver) swapAndQueue(pm *inetdiag.ParsedMessage) {
 			log.Println("Connections", len(svr.Connections))
 		}
 	} else {
-		oldIDM, _ := old.RawIDM.Parse()
-		pmIDM, _ := pm.RawIDM.Parse()
+		oldIDM, err := old.RawIDM.Parse()
+		if err != nil {
+			// TODO metric
+			log.Println(err)
+			return
+		}
+		pmIDM, err := pm.RawIDM.Parse()
+		if err != nil {
+			// TODO metric
+			log.Println(err)
+			return
+		}
 		if oldIDM.ID != pmIDM.ID {
 			log.Println("Mismatched SockIDs", oldIDM.ID, pmIDM.ID)
 		}

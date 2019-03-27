@@ -15,6 +15,12 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
+func testFatal(t *testing.T, err error) {
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func fakeMsg(t *testing.T, cookie uint64, dport uint16) inetdiag.ParsedMessage {
 	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
 	nm := syscall.NetlinkMessage{}
@@ -42,12 +48,14 @@ func fakeMsg(t *testing.T, cookie uint64, dport uint16) inetdiag.ParsedMessage {
 func TestUpdate(t *testing.T) {
 	c := cache.NewCache()
 	pm1 := fakeMsg(t, 0x1234, 1)
-	old := c.Update(&pm1)
+	old, err := c.Update(&pm1)
+	testFatal(t, err)
 	if old != nil {
 		t.Error("old should be nil")
 	}
 	pm2 := fakeMsg(t, 4321, 1)
-	old = c.Update(&pm2)
+	old, err = c.Update(&pm2)
+	testFatal(t, err)
 	if old != nil {
 		t.Error("old should be nil")
 	}
@@ -61,7 +69,8 @@ func TestUpdate(t *testing.T) {
 	}
 
 	pm3 := fakeMsg(t, 4321, 1)
-	old = c.Update(&pm3)
+	old, err = c.Update(&pm3)
+	testFatal(t, err)
 	if old == nil {
 		t.Error("old should NOT be nil")
 	}

@@ -121,6 +121,8 @@ func TestBasic(t *testing.T) {
 	svr.Done.Wait()
 	// We have to use a range-based size verification because different versions of
 	// zstd have slightly different compression ratios.
+	// The min/max criteria are based on zstd 1.3.8.
+	// These may change with different zstd versions.
 	verifySizeBetween(t, 350, 450, "0001/01/01/*_0000000000002BE2.00000.jsonl.zst")
 	verifySizeBetween(t, 350, 450, "0001/01/01/*_00000000000000EB.00000.jsonl.zst")
 }
