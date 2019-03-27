@@ -1,3 +1,5 @@
+//go:generate ffjson $GOFILE
+
 // Package inetdiag provides basic structs and utilities for INET_DIAG messaages.
 // Based on uapi/linux/inet_diag.h.
 package inetdiag
@@ -36,6 +38,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"reflect"
 	"syscall"
 	"time"
 	"unsafe"
@@ -222,16 +225,39 @@ func (msg *InetDiagMsg) String() string {
 	return fmt.Sprintf("%s, %s, %s", diagFamilyMap[msg.IDiagFamily], tcp.State(msg.IDiagState), msg.ID.String())
 }
 
-// ParseInetDiagMsg returns the InetDiagMsg itself, and the aligned byte array containing the message content.
+// RawInetDiagMsg holds the []byte representation of an InetDiagMsg
+type RawInetDiagMsg []byte
+
+// Parse returns the InetDiagMsg itself
 // Modified from original to also return attribute data array.
-func ParseInetDiagMsg(data []byte) (*InetDiagMsg, []byte) {
+func (raw RawInetDiagMsg) Parse() (*InetDiagMsg, error) {
+	align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
+	if len(raw) < align {
+		return nil, ErrParseFailed
+	}
+	return (*InetDiagMsg)(unsafe.Pointer(&raw[0])), nil
+}
+
+func splitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
 	align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
 	if len(data) < align {
 		log.Println("Wrong length", len(data), "<", align)
 		log.Println(data)
 		return nil, nil
 	}
-	return (*InetDiagMsg)(unsafe.Pointer(&data[0])), data[rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{}))):]
+	return RawInetDiagMsg(data[:align]), data[align:]
+}
+
+// RawNlMsgHdr contains a byte slice version of a syscall.NlMsgHdr
+type RawNlMsgHdr []byte
+
+// Parse returns the syscall.NlMsghdr
+func (raw RawNlMsgHdr) Parse() (*syscall.NlMsghdr, error) {
+	size := int(unsafe.Sizeof(syscall.NlMsghdr{}))
+	if len(raw) != size {
+		return nil, ErrParseFailed
+	}
+	return (*syscall.NlMsghdr)(unsafe.Pointer(&raw[0])), nil
 }
 
 // Metadata contains the metadata for a particular TCP stream.
@@ -241,16 +267,21 @@ type Metadata struct {
 	StartTime time.Time
 }
 
-type NetlinkRouteAttr syscall.NetlinkRouteAttr
+// RouteAttrValue is the type of RouteAttr.Value
+type RouteAttrValue []byte
 
 // ParsedMessage is a container for parsed InetDiag messages and attributes.
 type ParsedMessage struct {
-	Timestamp   time.Time
-	NLMsgHdr    *syscall.NlMsghdr // The header of the raw netlink message.
-	InetDiagMsg *InetDiagMsg      // Pointer to actual InetDiagMsg within NLMsg
-	// TODO should this be a slice instead of array, in case we get attributes > INET_DIAG_MAX?
-	Attributes [INET_DIAG_MAX]*NetlinkRouteAttr // Pointers to RouteAttr, with Value fields backed by NLMsg
-	Metadata   *Metadata
+	// Timestamp should be truncated to 1 millisecond for best compression.
+	// Using int64 milliseconds instead reduces compressed size by 0.5 bytes/record, or about 1.5%
+	Timestamp time.Time `json:",omitempty"`
+
+	// Storing the RawIDM instead of the parsed InetDiagMsg reduces Marshalling by 2.6 usec, and
+	// typical compressed size by 3-4 bytes/record
+	RawIDM RawInetDiagMsg `json:",omitempty"` // RawInetDiagMsg within NLMsg
+	// Saving just the .Value fields reduces Marshalling by 1.9 usec.
+	Attributes []RouteAttrValue `json:",omitempty"` // RouteAttr.Value, backed by NLMsg
+	Metadata   *Metadata        `json:",omitempty"`
 }
 
 // ChangeType indicates why a new record is worthwhile saving.
@@ -266,6 +297,7 @@ const (
 	AttributeLength                 // The length of an attribute changed
 	StateOrCounterChange            // One of the early fields in DIAG_INFO changed.
 	PacketCountChange               // One of the packet/byte/segment counts (or other late field) changed
+	PreviousWasNil                  // The previous message was nil
 	Other                           // Some other attribute changed
 )
 
@@ -290,10 +322,21 @@ const (
 // in the TCPInfo struct related to packets, bytes, and segments.  In addition to the TCPState
 // and CAState fields, these are probably adequate, but we also check for new or missing attributes
 // and any attribute difference outside of the TCPInfo (INET_DIAG_INFO) attribute.
-func (pm *ParsedMessage) Compare(previous *ParsedMessage) ChangeType {
+func (pm *ParsedMessage) Compare(previous *ParsedMessage) (ChangeType, error) {
+	if previous == nil {
+		return PreviousWasNil, nil
+	}
 	// If the TCP state has changed, that is important!
-	if previous.InetDiagMsg.IDiagState != pm.InetDiagMsg.IDiagState {
-		return IDiagStateChange
+	prevIDM, err := previous.RawIDM.Parse()
+	if err != nil {
+		return NoMajorChange, ErrParseFailed
+	}
+	pmIDM, err := pm.RawIDM.Parse()
+	if err != nil {
+		return NoMajorChange, ErrParseFailed
+	}
+	if prevIDM.IDiagState != pmIDM.IDiagState {
+		return IDiagStateChange, nil
 	}
 
 	// TODO - should we validate that ID matches?  Otherwise, we shouldn't even be comparing the rest.
@@ -301,19 +344,19 @@ func (pm *ParsedMessage) Compare(previous *ParsedMessage) ChangeType {
 	a := previous.Attributes[INET_DIAG_INFO]
 	b := pm.Attributes[INET_DIAG_INFO]
 	if a == nil || b == nil {
-		return NoTCPInfo
+		return NoTCPInfo, nil
 	}
 
 	// If any of the byte/segment/package counters have changed, that is what we are most
 	// interested in.
-	if 0 != bytes.Compare(a.Value[pmtuOffset:], b.Value[pmtuOffset:]) {
-		return StateOrCounterChange
+	if 0 != bytes.Compare(a[pmtuOffset:], b[pmtuOffset:]) {
+		return StateOrCounterChange, nil
 	}
 
 	// Check all the earlier fields, too.  Usually these won't change unless the counters above
 	// change, but this way we won't miss something subtle.
-	if 0 != bytes.Compare(a.Value[:lastDataSentOffset], b.Value[:lastDataSentOffset]) {
-		return StateOrCounterChange
+	if 0 != bytes.Compare(a[:lastDataSentOffset], b[:lastDataSentOffset]) {
+		return StateOrCounterChange, nil
 	}
 
 	// If any attributes have been added or removed, that is likely significant.
@@ -326,55 +369,36 @@ func (pm *ParsedMessage) Compare(previous *ParsedMessage) ChangeType {
 			a := previous.Attributes[tp]
 			b := pm.Attributes[tp]
 			if a == nil && b != nil {
-				return NewAttribute
+				return NewAttribute, nil
 			}
 			if a != nil && b == nil {
-				return LostAttribute
+				return LostAttribute, nil
 			}
 			if a == nil && b == nil {
 				continue
 			}
-			if len(a.Value) != len(b.Value) {
-				return AttributeLength
+			if len(a) != len(b) {
+				return AttributeLength, nil
 			}
 			// All others we want to be identical
-			if 0 != bytes.Compare(a.Value, b.Value) {
-				return Other
+			if 0 != bytes.Compare(a, b) {
+				return Other, nil
 			}
 		}
 	}
 
-	return NoMajorChange
+	return NoMajorChange, nil
 }
-
-func (pm *ParsedMessage) FixupTypes() {
-	for i := range pm.Attributes {
-		if pm.Attributes[i] != nil {
-			if pm.Attributes[i].Attr.Type == 0 {
-				pm.Attributes[i].Attr.Type = uint16(i)
-			}
-		}
-	}
-}
-
-/*
-First json object will be a metadata object, including the UUID, the host endianess, and possibly connection data.
-All subsequent rows will initially look like:
-{ Time: Timestamp, header: {...}, data: base64(data) }
-ASAP, we will likely break down the netlink message content into an array of base64 encoded RouteAttr messages.
-
-
-Metadata fields: (preliminary)
-UUID:  A universal connection identifier, from code in github/m-lab/uuid.
-Block sequence number, 0 for first file per connection, incrementing for each subsequent file.
-ConnectionStartTime: The time at which the connection was initiated.
-ExperimentConfigID: ???
-PlatformConfigID: ???
-*/
-// Serialize converts a ParsedMessage to a single line JSONL string.
 
 func isLocal(addr net.IP) bool {
 	return addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsMulticast() || addr.IsUnspecified()
+}
+
+func slice(hp *syscall.NlMsghdr) []byte {
+	hdrSlice := make([]byte, int(unsafe.Sizeof(*hp)), int(unsafe.Sizeof(*hp)))
+	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&hdrSlice))
+	hdr.Data = uintptr(unsafe.Pointer(hp))
+	return hdrSlice
 }
 
 // Parse parses the NetlinkMessage into a ParsedMessage.  If skipLocal is true, it will return nil for
@@ -384,24 +408,46 @@ func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) 
 	if msg.Header.Type != 20 {
 		return nil, ErrNotType20
 	}
-	idm, attrBytes := ParseInetDiagMsg(msg.Data)
-	if idm == nil {
+	raw, attrBytes := splitInetDiagMsg(msg.Data)
+	if raw == nil {
 		return nil, ErrParseFailed
 	}
 	if skipLocal {
+		idm, err := raw.Parse()
+		if err != nil {
+			return nil, err
+		}
+
 		if isLocal(idm.ID.SrcIP()) || isLocal(idm.ID.DstIP()) {
 			return nil, nil
 		}
 	}
-	parsedMsg := ParsedMessage{NLMsgHdr: &msg.Header, InetDiagMsg: idm}
+
+	parsedMsg := ParsedMessage{RawIDM: raw}
+	// parsedMsg.NLMsgHdr = &msg.Header
+
 	attrs, err := ParseRouteAttr(attrBytes)
 	if err != nil {
 		return nil, err
 	}
-	for i, a := range attrs {
-		// We copy the RouteAttr here, but the Value is backed by msg.Data
-		nla := NetlinkRouteAttr(a)
-		parsedMsg.Attributes[attrs[i].Attr.Type] = &nla
+	maxAttrType := uint16(0)
+	for _, a := range attrs {
+		t := a.Attr.Type
+		if t > maxAttrType {
+			maxAttrType = t
+		}
+	}
+	if maxAttrType > 2*INET_DIAG_MAX {
+		maxAttrType = 2 * INET_DIAG_MAX
+	}
+	parsedMsg.Attributes = make([]RouteAttrValue, maxAttrType+1, maxAttrType+1)
+	for _, a := range attrs {
+		t := a.Attr.Type
+		if t > maxAttrType {
+			log.Println("Error!! Received RouteAttr with very large Type:", t)
+			continue
+		}
+		parsedMsg.Attributes[t] = a.Value
 	}
 	return &parsedMsg, nil
 }
@@ -410,6 +456,7 @@ func Parse(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) 
 // e.g. from a file of saved netlink messages.
 func LoadNext(rdr io.Reader) (*syscall.NetlinkMessage, error) {
 	var header syscall.NlMsghdr
+	// TODO - should we pass in LittleEndian as a parameter?
 	err := binary.Read(rdr, binary.LittleEndian, &header)
 	if err != nil {
 		// Note that this may be EOF

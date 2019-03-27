@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"testing"
 
@@ -29,7 +30,7 @@ func dump(mp *inetdiag.ParsedMessage) {
 	for i := range mp.Attributes {
 		a := mp.Attributes[i]
 		if a != nil {
-			log.Printf("%d %d %+v\n", i, len(a.Value), a)
+			log.Printf("%d %d %+v\n", i, len(a), a)
 		}
 	}
 }
@@ -47,15 +48,17 @@ func msg(cookie uint64, dport uint16) *inetdiag.ParsedMessage {
 		log.Println(err)
 		return nil
 	}
+	idm, err := mp.RawIDM.Parse()
 	for i := 0; i < 8; i++ {
-		mp.InetDiagMsg.ID.IDiagCookie[i] = byte(cookie & 0x0FF)
-		cookie <<= 8
+		idm.ID.IDiagCookie[i] = byte(cookie & 0x0FF)
+		cookie >>= 8
 	}
 	for i := 0; i < 2; i++ {
-		mp.InetDiagMsg.ID.IDiagDPort[i] = byte(dport & 0x0FF)
-		dport <<= 8
+		idm.ID.IDiagDPort[i] = byte(dport & 0x0FF)
+		dport >>= 8
 	}
-	log.Printf("%+v\n", mp)
+	//pm.SetIDM(idm)
+	log.Printf("%+v\n", mp.RawIDM)
 	return mp
 }
 
@@ -71,7 +74,8 @@ func verifySizeBetween(t *testing.T, minSize, maxSize int64, pattern string) {
 		t.Fatal(err)
 	}
 	if info.Size() < minSize || info.Size() > maxSize {
-		t.Error("Size of", filename, " (", info.Size(), ") is out of bounds.  We expect", minSize, "<=", info.Size(), "<=", maxSize, ".")
+		_, file, line, _ := runtime.Caller(1)
+		t.Error("Size of", filename, " (", info.Size(), ") is out of bounds.  We expect", minSize, "<=", info.Size(), "<=", maxSize, "at", file, line, ".")
 	}
 }
 
@@ -91,7 +95,7 @@ func TestBasic(t *testing.T) {
 	go svr.MessageSaverLoop(svrChan)
 
 	// This round just initializes the cache.
-	m1 := []*inetdiag.ParsedMessage{msg(1234, 1234), msg(234, 234)}
+	m1 := []*inetdiag.ParsedMessage{msg(11234, 11234), msg(235, 235)}
 	dump(m1[0])
 	svrChan <- m1
 
@@ -101,25 +105,26 @@ func TestBasic(t *testing.T) {
 
 	// This changes the first connection, and ends the second connection.
 	m3 := []*inetdiag.ParsedMessage{msg(1234, 1234)}
-	m3[0].Attributes[inetdiag.INET_DIAG_INFO].Value[20] = 127
+	m3[0].Attributes[inetdiag.INET_DIAG_INFO][20] = 127
 	svrChan <- m3
 
 	// This changes the first connection again.
 	m4 := []*inetdiag.ParsedMessage{msg(1234, 1234)}
-	m3[0].Attributes[inetdiag.INET_DIAG_INFO].Value[20] = 127
-	m4[0].Attributes[inetdiag.INET_DIAG_INFO].Value[105] = 127
+	m3[0].Attributes[inetdiag.INET_DIAG_INFO][20] = 127
+	m4[0].Attributes[inetdiag.INET_DIAG_INFO][105] = 127
 	svrChan <- m4
 
 	m5 := []*inetdiag.ParsedMessage{msg(1234, 1234)}
 	svrChan <- m5
-
 	// Force close all the files.
 	close(svrChan)
 	svr.Done.Wait()
 	// We have to use a range-based size verification because different versions of
 	// zstd have slightly different compression ratios.
-	verifySizeBetween(t, 500, 750, "0001/01/01/*_00000000000000D2.00000.jsonl.zst")
-	verifySizeBetween(t, 500, 750, "0001/01/01/*_00000000000000EA.00000.jsonl.zst")
+	// The min/max criteria are based on zstd 1.3.8.
+	// These may change with different zstd versions.
+	verifySizeBetween(t, 350, 450, "0001/01/01/*_0000000000002BE2.00000.jsonl.zst")
+	verifySizeBetween(t, 350, 450, "0001/01/01/*_00000000000000EB.00000.jsonl.zst")
 }
 
 // If this compiles, the "test" passes

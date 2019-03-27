@@ -16,7 +16,9 @@ var (
 )
 
 func appendAll(all []*inetdiag.ParsedMessage, msgs []*syscall.NetlinkMessage, skipLocal bool) []*inetdiag.ParsedMessage {
-	ts := time.Now()
+	// We use UTC, and truncate to millisecond to improve compression.
+	// Since the syscall to collect the data takes multiple milliseconds, this truncation seems reasonable.
+	ts := time.Now().UTC().Truncate(time.Millisecond)
 	for i := range msgs {
 		pm, err := inetdiag.Parse(msgs[i], skipLocal)
 		if err != nil {

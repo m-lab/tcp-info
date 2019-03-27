@@ -69,6 +69,7 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 		}
 		b, _ := json.Marshal(task.Message) // FIXME: don't ignore error
 		task.Writer.Write(b)
+		task.Writer.Write([]byte("\n"))
 	}
 	log.Println("Marshaller Done")
 	wg.Done()
@@ -192,7 +193,12 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 // queue queues a single ParsedMessage to the appropriate marshalling queue, based on the
 // connection Cookie.
 func (svr *Saver) queue(msg *inetdiag.ParsedMessage) error {
-	cookie := msg.InetDiagMsg.ID.Cookie()
+	idm, err := msg.RawIDM.Parse()
+	if err != nil {
+		log.Println(err)
+		// TODO error metric
+	}
+	cookie := idm.ID.Cookie()
 	if cookie == 0 {
 		return errors.New("Cookie = 0")
 	}
@@ -204,14 +210,14 @@ func (svr *Saver) queue(msg *inetdiag.ParsedMessage) error {
 	if !ok {
 		// Likely first time we have seen this connection.  Create a new Connection, unless
 		// the connection is already closing.
-		if msg.InetDiagMsg.IDiagState >= uint8(tcp.FIN_WAIT1) {
-			log.Println("Skipping", msg.InetDiagMsg, msg.Timestamp)
+		if idm.IDiagState >= uint8(tcp.FIN_WAIT1) {
+			log.Println("Skipping", idm, msg.Timestamp)
 			return nil
 		}
-		if svr.cache.CycleCount() > 0 || msg.InetDiagMsg.IDiagState != uint8(tcp.ESTABLISHED) {
-			log.Println("New conn:", msg.InetDiagMsg, msg.Timestamp)
+		if svr.cache.CycleCount() > 0 || idm.IDiagState != uint8(tcp.ESTABLISHED) {
+			log.Println("New conn:", idm, msg.Timestamp)
 		}
-		conn = newConnection(msg.InetDiagMsg, msg.Timestamp)
+		conn = newConnection(idm, msg.Timestamp)
 		svr.Connections[cookie] = conn
 	} else {
 		//log.Println("Diff inode:", inode)
@@ -258,8 +264,10 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*inetdiag.ParsedMessag
 		}
 		residual := svr.cache.EndCycle()
 
+		// Remove all missing connections from the cache.
 		for i := range residual {
-			svr.endConn(residual[i].InetDiagMsg.ID.Cookie())
+			// residual is the list of all keys that were not updated.
+			svr.endConn(i)
 			svr.stats.ExpiredCount++
 		}
 	}
@@ -268,7 +276,12 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*inetdiag.ParsedMessag
 
 func (svr *Saver) swapAndQueue(pm *inetdiag.ParsedMessage) {
 	svr.stats.TotalCount++
-	old := svr.cache.Update(pm)
+	old, err := svr.cache.Update(pm)
+	if err != nil {
+		// TODO metric
+		log.Println(err)
+		return
+	}
 	if old == nil {
 		svr.stats.NewCount++
 		err := svr.queue(pm)
@@ -277,13 +290,32 @@ func (svr *Saver) swapAndQueue(pm *inetdiag.ParsedMessage) {
 			log.Println("Connections", len(svr.Connections))
 		}
 	} else {
-		if old.InetDiagMsg.ID != pm.InetDiagMsg.ID {
-			log.Println("Mismatched SockIDs", old.InetDiagMsg.ID, pm.InetDiagMsg.ID)
+		oldIDM, err := old.RawIDM.Parse()
+		if err != nil {
+			// TODO metric
+			log.Println(err)
+			return
 		}
-		if pm.Compare(old) > inetdiag.NoMajorChange {
+		pmIDM, err := pm.RawIDM.Parse()
+		if err != nil {
+			// TODO metric
+			log.Println(err)
+			return
+		}
+		if oldIDM.ID != pmIDM.ID {
+			log.Println("Mismatched SockIDs", oldIDM.ID, pmIDM.ID)
+		}
+		change, err := pm.Compare(old)
+		if err != nil {
+			// TODO metric
+			log.Println(err)
+			return
+		}
+		if change > inetdiag.NoMajorChange {
 			svr.stats.DiffCount++
 			err := svr.queue(pm)
 			if err != nil {
+				// TODO metric
 				log.Println(err)
 			}
 		}
