@@ -85,12 +85,8 @@ func main() {
 
 	if *enableTrace {
 		traceFile, err := os.Create("trace")
-		if err != nil {
-			log.Fatal(err)
-		}
-		if err := trace.Start(traceFile); err != nil {
-			log.Fatalf("failed to start trace: %v", err)
-		}
+		rtx.Must(err, "Could not creat trace file")
+		rtx.Must(trace.Start(traceFile), "failed to start trace: %v", err)
 		defer trace.Stop()
 	}
 
