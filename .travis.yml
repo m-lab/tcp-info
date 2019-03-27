@@ -1,106 +1,36 @@
 # Travis configuration for tcp-info fast sidestream tool.
 language: go
-services:
-  - docker
 
-go:
-   - 1.10.x
+dist: xenial
+sudo: true
+services:
+- docker
 
 ###########################################################################
 before_install:
 # Coverage tools
 - go get github.com/mattn/goveralls
-- go get github.com/wadey/gocovmerge
-
 - echo Branch is ${TRAVIS_BRANCH} and Tag is $TRAVIS_TAG
-
-# Install test credentials.
-# The service account variables are uploaded to travis by running,
-# from root of repo directory:
-#  travis/setup_service_accounts_for_travis.sh
-#
-# All of the gcloud library calls will detect the GOOGLE_APPLICATION_CREDENTIALS
-# environment variable, and use that file for authentication.
-# If the application requires authentication outside the libraries, consider
-# also using travis/activate_service_account.sh
-- if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  echo "$SERVICE_ACCOUNT_mlab_testing" > $TRAVIS_BUILD_DIR/creds.json ;
-  export GOOGLE_APPLICATION_CREDENTIALS=$TRAVIS_BUILD_DIR/creds.json ;
-  fi
-
-# These directories will be cached on successful "script" builds, and restored,
-# if available, to save time on future builds.
-cache:
-  directories:
-    - "$HOME/google-cloud-sdk/"
 
 install:
 # Install dependencies
 # This filters out all imports from the local project, and all "base" imports that don't contain slash.
-- GO_IMPORTS=$(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}{{join .XTestImports "\n"}}' ./... | sort | uniq | grep -e / | grep -v m-lab/tcp-info)
-- go get -u -v -d $GO_IMPORTS
-- go get github.com/golang/protobuf/protoc-gen-go/ github.com/golang/protobuf/proto
-
-# Install protobuf compiler
-# NOTE: This should be updated periodically to use latest version.
-- wget https://github.com/protocolbuffers/protobuf/releases/download/v3.7.0/protoc-3.7.0-linux-x86_64.zip
-- unzip protoc-3.7.0-linux-x86_64.zip  # Should provide bin/protoc
-- bin/protoc --version
-
-# Install zstd tool.
-- bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/install)
+- sudo apt-get update && sudo apt-get install -y zstd
+- go get -v -t ./...
 
 script:
-# Compile and compare protobufs
-- cd $TRAVIS_BUILD_DIR
-- mkdir backup
-- cp nl-proto/*.pb.go backup
-- $TRAVIS_BUILD_DIR/bin/protoc --go_out=. nl-proto/*.proto
-- for x in `ls nl-proto/*.pb.go`; do
-    diff $x backup/$(basename $x);
-  done
-- cd $TRAVIS_BUILD_DIR
-
-# To start, run all the non-integration tests.
+# Vet the code, build the code, and run all the tests.
 - go vet ./...
 - go build ./...
-- MODULES="inetdiag zstd nl-proto/pbtools cache saver"
-- for module in $MODULES; do
-    COVER_PKGS=${COVER_PKGS}./$module/..., ;
-  done
-- COVER_PKGS=${COVER_PKGS::-1}  # Trim the trailing comma
-- EC=0
-# Note that for modules in subdirectories, this replaces separating slashes with _.
-- for module in $MODULES; do
-    go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/tcp-info/$module ;
-    EC=$[ $EC || $? ] ;
-  done
-- echo "summary status $EC" ;
-- if [[ $EC != 0 ]]; then false; fi
+- go test ./... -v -coverpkg=./... -coverprofile=_coverage.cov
 
-
-# Rerun modules with integration tests.  This means that some tests are repeated, but otherwise
-# we lose some coverage.  The corresponding cov files are overwritten, but that is OK since
-# the non-integration tests are repeated.  If we change the unit tests to NOT run when integration
-# test tag is set, then we would need to have separate cov files.
-# Note: we do not run integration tests from forked repos b/c the SA is unavailable.
-# Note that for modules in subdirectories, this replaces separating slashes with _.
-- if [[ -n "$SERVICE_ACCOUNT_mlab_testing" ]] ; then
-  for module in ; do
-    go test -v -coverpkg=$COVER_PKGS -coverprofile=${module//\//_}.cov github.com/m-lab/tcp-info/$module -tags=integration ;
-    EC=$[ $EC || $? ] ;
-  done ;
-  echo "summary status $EC" ;
-  if [[ $EC != 0 ]]; then false; fi ;
-  fi
+# Build a Docker image to make sure that we can.
+- docker build --build-arg COMMIT=$TRAVIS_BRANCH -t measurementlab/tcp-info .
 
 # Coveralls
-# Run "unit tests" with coverage.
-- $HOME/gopath/bin/gocovmerge *.cov > merge.cov
-- $HOME/gopath/bin/goveralls -coverprofile=merge.cov -service=travis-ci
+# Upload coverage information for unit tests.
+- $HOME/gopath/bin/goveralls -coverprofile=_coverage.cov -service=travis-ci
 
-# Docker build
-#- docker build --build-arg COMMIT=$TRAVIS_BRANCH -t mlab/tcpinfo .
 
 #################################################################################
 # Deployment Section
@@ -129,10 +59,10 @@ script:
 # an explicit tag that matches "on:" conditions.
 #################################################################################
 
-
-# uncomment this once we get a deployment we want to use.  An empty deploy:
-# makes the linter angry.
+# uncomment this once we get a deployment.  An empty deploy: makes the linter
+# angry.
 # deploy:
+
 #########################################
 ## Sandbox
 

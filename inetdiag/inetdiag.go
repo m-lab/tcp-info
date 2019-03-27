@@ -29,8 +29,8 @@ expressed in host-byte order"
 */
 
 import (
+	"bytes"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -42,8 +42,13 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	tcpinfo "github.com/m-lab/tcp-info/nl-proto"
+	"github.com/m-lab/tcp-info/tcp"
 )
+
+// TODO: Refactor this package, or at least this file. It feels like it
+// currently defines a little too much, does a little too much, and exports a
+// little too much. Peter and Greg each suspect there are, implicitly, multiple
+// packages defined in this file and/or directory.
 
 // Error types.
 var (
@@ -138,9 +143,8 @@ func (id *InetDiagSockID) Cookie() uint64 {
 func ip(bytes [16]byte) net.IP {
 	if isIpv6(bytes) {
 		return ipv6(bytes)
-	} else {
-		return ipv4(bytes)
 	}
+	return ipv4(bytes)
 }
 
 func isIpv6(original [16]byte) bool {
@@ -215,7 +219,7 @@ type InetDiagMsg struct {
 }
 
 func (msg *InetDiagMsg) String() string {
-	return fmt.Sprintf("%s, %s, %s", diagFamilyMap[msg.IDiagFamily], tcpinfo.TCPState(msg.IDiagState), msg.ID.String())
+	return fmt.Sprintf("%s, %s, %s", diagFamilyMap[msg.IDiagFamily], tcp.State(msg.IDiagState), msg.ID.String())
 }
 
 // ParseInetDiagMsg returns the InetDiagMsg itself, and the aligned byte array containing the message content.
@@ -237,6 +241,8 @@ type Metadata struct {
 	StartTime time.Time
 }
 
+type NetlinkRouteAttr syscall.NetlinkRouteAttr
+
 // ParsedMessage is a container for parsed InetDiag messages and attributes.
 type ParsedMessage struct {
 	Timestamp   time.Time
@@ -247,6 +253,100 @@ type ParsedMessage struct {
 	Metadata   *Metadata
 }
 
+// ChangeType indicates why a new record is worthwhile saving.
+type ChangeType int
+
+// Constants to describe the degree of change between two different ParsedMessages.
+const (
+	NoMajorChange        ChangeType = iota
+	IDiagStateChange                // The IDiagState changed
+	NoTCPInfo                       // There is no TCPInfo attribute
+	NewAttribute                    // There is a new attribute
+	LostAttribute                   // There is a dropped attribute
+	AttributeLength                 // The length of an attribute changed
+	StateOrCounterChange            // One of the early fields in DIAG_INFO changed.
+	PacketCountChange               // One of the packet/byte/segment counts (or other late field) changed
+	Other                           // Some other attribute changed
+)
+
+// Useful offsets for Compare
+const (
+	lastDataSentOffset = unsafe.Offsetof(syscall.TCPInfo{}.Last_data_sent)
+	pmtuOffset         = unsafe.Offsetof(syscall.TCPInfo{}.Pmtu)
+)
+
+// Compare compares important fields to determine whether significant updates have occurred.
+// We ignore a bunch of fields:
+//  * The TCPInfo fields matching last_* are rapidly changing, but don't have much significance.
+//    Are they elapsed time fields?
+//  * The InetDiagMsg.Expires is also rapidly changing in many connections, but also seems
+//    unimportant.
+//
+// Significant updates are reflected in the packet, segment and byte count updates, so we
+// generally want to record a snapshot when any of those change.  They are in the latter
+// part of the linux struct, following the pmtu field.
+//
+// The simplest test that seems to tell us what we care about is to look at all the fields
+// in the TCPInfo struct related to packets, bytes, and segments.  In addition to the TCPState
+// and CAState fields, these are probably adequate, but we also check for new or missing attributes
+// and any attribute difference outside of the TCPInfo (INET_DIAG_INFO) attribute.
+func (pm *ParsedMessage) Compare(previous *ParsedMessage) ChangeType {
+	// If the TCP state has changed, that is important!
+	if previous.InetDiagMsg.IDiagState != pm.InetDiagMsg.IDiagState {
+		return IDiagStateChange
+	}
+
+	// TODO - should we validate that ID matches?  Otherwise, we shouldn't even be comparing the rest.
+
+	a := previous.Attributes[INET_DIAG_INFO]
+	b := pm.Attributes[INET_DIAG_INFO]
+	if a == nil || b == nil {
+		return NoTCPInfo
+	}
+
+	// If any of the byte/segment/package counters have changed, that is what we are most
+	// interested in.
+	if 0 != bytes.Compare(a.Value[pmtuOffset:], b.Value[pmtuOffset:]) {
+		return StateOrCounterChange
+	}
+
+	// Check all the earlier fields, too.  Usually these won't change unless the counters above
+	// change, but this way we won't miss something subtle.
+	if 0 != bytes.Compare(a.Value[:lastDataSentOffset], b.Value[:lastDataSentOffset]) {
+		return StateOrCounterChange
+	}
+
+	// If any attributes have been added or removed, that is likely significant.
+	for tp := range previous.Attributes {
+		switch tp {
+		case INET_DIAG_INFO:
+			// Handled explicitly above.
+		default:
+			// Detect any change in anything other than INET_DIAG_INFO
+			a := previous.Attributes[tp]
+			b := pm.Attributes[tp]
+			if a == nil && b != nil {
+				return NewAttribute
+			}
+			if a != nil && b == nil {
+				return LostAttribute
+			}
+			if a == nil && b == nil {
+				continue
+			}
+			if len(a.Value) != len(b.Value) {
+				return AttributeLength
+			}
+			// All others we want to be identical
+			if 0 != bytes.Compare(a.Value, b.Value) {
+				return Other
+			}
+		}
+	}
+
+	return NoMajorChange
+}
+
 func (pm *ParsedMessage) FixupTypes() {
 	for i := range pm.Attributes {
 		if pm.Attributes[i] != nil {
@@ -255,26 +355,6 @@ func (pm *ParsedMessage) FixupTypes() {
 			}
 		}
 	}
-}
-
-type NetlinkRouteAttr syscall.NetlinkRouteAttr
-
-func (n *NetlinkRouteAttr) MarshalJSON() ([]byte, error) {
-	if n == nil {
-		return []byte("null"), nil
-	}
-	return json.Marshal(n.Value)
-}
-
-func (n *NetlinkRouteAttr) UnmarshalJSON(input []byte) error {
-	var data []byte
-	err := json.Unmarshal(input, &data)
-	if err != nil {
-		return err
-	}
-	n.Value = data
-	n.Attr.Len = uint16(len(data) + 4)
-	return nil
 }
 
 /*

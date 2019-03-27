@@ -8,6 +8,8 @@
 package metrics
 
 import (
+	"log"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -86,3 +88,12 @@ var (
 		},
 	)
 )
+
+// init() prints a log message to let the user know that the package has been
+// loaded and the metrics registered. The metrics are auto-registered, which
+// means they are registered as soon as this package is loaded, and the exact
+// time this occurs (and whether this occurs at all in a given context) can be
+// opaque.
+func init() {
+	log.Println("Prometheus metrics in tcp-info.metrics are registered.")
+}

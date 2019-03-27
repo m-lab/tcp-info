@@ -1,43 +1,39 @@
+# An image for building zstd
 FROM ubuntu as zstd-builder
 
+# Get zstd source and compile zstd as a static binary.
 RUN apt-get update && apt-get update -y && apt-get install -y make gcc libc-dev git
-
 RUN git clone https://github.com/facebook/zstd src
+RUN mkdir /pkg && cd /src && make MOREFLAGS="-static" zstd && make DESTDIR=/pkg install
 
-RUN mkdir /pkg && cd /src && make && make DESTDIR=/pkg install
 
-# Second minimal image to only keep the built binary
-#FROM electrotumbao/golang-protoc as go-builder
-FROM golang as go-builder
+# Build tcp-info
+FROM golang:1.12 as tcp-info-builder
 
+# Add the tcp-info code from the local repo.
 ADD . /go/src/github.com/m-lab/tcp-info
 WORKDIR /go/src/github.com/m-lab/tcp-info
 
-# List all of the go imports, excluding any in this repo, and run go get to import them.
-RUN go get -u -v $(go list -f '{{join .Imports "\n"}}{{"\n"}}{{join .TestImports "\n"}}' ./... | sort | uniq | grep -v m-lab/tcp-info)
-RUN go get github.com/golang/protobuf/protoc-gen-go/ github.com/golang/protobuf/proto
+# Get all of our imports, including test imports.
+RUN go get -v -t ./...
 
-# Install all go executables.  Creates all build targets in /go/bin directory.
+# Install the tcp-info binary into /go/bin
 RUN go install -v ./...
 
-# Must keep this the same as the zstd-builder env until we figure out how to
-# make the zstd binary comile as a static binary.
-# TODO: Make zstd compile as a static binary.
-FROM ubuntu
 
-# Copy the built files (from /pkg/usr/local/bin)
-COPY --from=zstd-builder /pkg /
+# Build the image containing both binaries.
+FROM alpine
 
-# Copy the license as well
-RUN mkdir -p /usr/local/share/licenses/zstd
-COPY --from=zstd-builder /src/LICENSE /usr/local/share/licences/zstd/
+# Copy the zstd binary and license.
+COPY --from=zstd-builder /pkg/usr/local/bin/zstd /bin/zstd
+RUN mkdir -p /licenses/zstd
+COPY --from=zstd-builder /src/LICENSE /licences/zstd/
 
-COPY --from=go-builder /go/bin /usr/local/bin
-
-EXPOSE 9090 8080
+# Copy the tcp-info binary.
+COPY --from=tcp-info-builder /go/bin/tcp-info /bin/tcp-info
 
 # TODO - Make the destination directory flag controlled.
-# Probably should default to /data
+# Probably should default to /var/spool/tcp-info/
 WORKDIR /home
 
-ENTRYPOINT ["/usr/local/bin/tcp-info"]
+ENTRYPOINT ["/bin/tcp-info"]

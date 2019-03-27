@@ -1,7 +1,7 @@
 // Package saver contains all logic for writing records to files.
 //  1. Sets up a channel that accepts slices of *inetdiag.ParsedMessage
 //  2. Maintains a map of Connections, one for each connection.
-//  3. Uses several marshallers goroutines to convert to protobufs and write to
+//  3. Uses several marshallers goroutines to serialize data and and write to
 //     zstd files.
 //  4. Rotates Connection output files every 10 minutes for long lasting connections.
 //  5. uses a cache to detect meaningful state changes, and avoid excessive
@@ -21,8 +21,7 @@ import (
 	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/metrics"
-	tcp "github.com/m-lab/tcp-info/nl-proto"
-	"github.com/m-lab/tcp-info/nl-proto/pbtools"
+	"github.com/m-lab/tcp-info/tcp"
 	"github.com/m-lab/tcp-info/zstd"
 	"github.com/m-lab/uuid"
 )
@@ -205,11 +204,11 @@ func (svr *Saver) queue(msg *inetdiag.ParsedMessage) error {
 	if !ok {
 		// Likely first time we have seen this connection.  Create a new Connection, unless
 		// the connection is already closing.
-		if msg.InetDiagMsg.IDiagState >= uint8(tcp.TCPState_FIN_WAIT1) {
+		if msg.InetDiagMsg.IDiagState >= uint8(tcp.FIN_WAIT1) {
 			log.Println("Skipping", msg.InetDiagMsg, msg.Timestamp)
 			return nil
 		}
-		if svr.cache.CycleCount() > 0 || msg.InetDiagMsg.IDiagState != uint8(tcp.TCPState_ESTABLISHED) {
+		if svr.cache.CycleCount() > 0 || msg.InetDiagMsg.IDiagState != uint8(tcp.ESTABLISHED) {
 			log.Println("New conn:", msg.InetDiagMsg, msg.Timestamp)
 		}
 		conn = newConnection(msg.InetDiagMsg, msg.Timestamp)
@@ -281,7 +280,7 @@ func (svr *Saver) swapAndQueue(pm *inetdiag.ParsedMessage) {
 		if old.InetDiagMsg.ID != pm.InetDiagMsg.ID {
 			log.Println("Mismatched SockIDs", old.InetDiagMsg.ID, pm.InetDiagMsg.ID)
 		}
-		if pbtools.Compare(pm, old) > pbtools.NoMajorChange {
+		if pm.Compare(old) > inetdiag.NoMajorChange {
 			svr.stats.DiffCount++
 			err := svr.queue(pm)
 			if err != nil {

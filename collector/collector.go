@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"context"
 	"log"
 	"syscall"
 	"time"
@@ -14,10 +15,10 @@ var (
 	localCount = 0
 )
 
-func appendAll(all []*inetdiag.ParsedMessage, msgs []*syscall.NetlinkMessage) []*inetdiag.ParsedMessage {
+func appendAll(all []*inetdiag.ParsedMessage, msgs []*syscall.NetlinkMessage, skipLocal bool) []*inetdiag.ParsedMessage {
 	ts := time.Now()
 	for i := range msgs {
-		pm, err := inetdiag.Parse(msgs[i], true)
+		pm, err := inetdiag.Parse(msgs[i], skipLocal)
 		if err != nil {
 			log.Println(err)
 			errCount++
@@ -33,7 +34,7 @@ func appendAll(all []*inetdiag.ParsedMessage, msgs []*syscall.NetlinkMessage) []
 
 // collectDefaultNamespace collects all AF_INET6 and AF_INET connection stats, and sends them
 // to svr.
-func collectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
+func collectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage, skipLocal bool) (int, int) {
 	// Preallocate space for up to 500 connections.  We may want to adjust this upwards if profiling
 	// indicates a lot of reallocation.
 	all := make([]*inetdiag.ParsedMessage, 0, 500)
@@ -44,7 +45,7 @@ func collectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 		// TODO add metric
 		log.Println(err)
 	} else {
-		all = appendAll(all, res6)
+		all = appendAll(all, res6, skipLocal)
 	}
 	res4, err := inetdiag.OneType(syscall.AF_INET)
 	if err != nil {
@@ -52,7 +53,7 @@ func collectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 		// TODO add metric
 		log.Println(err)
 	} else {
-		all = appendAll(all, res4)
+		all = appendAll(all, res4, skipLocal)
 	}
 
 	// Submit full set of message to the marshalling service.
@@ -63,7 +64,7 @@ func collectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage) (int, int) {
 
 // Run the collector, either for the specified number of loops, or, if the
 // number specified is infinite, run forever.
-func Run(svrChan chan<- []*inetdiag.ParsedMessage, reps int, cl saver.CacheLogger) (localCount, errCount int) {
+func Run(ctx context.Context, reps int, svrChan chan<- []*inetdiag.ParsedMessage, cl saver.CacheLogger, skipLocal bool) (localCount, errCount int) {
 	totalCount := 0
 	remoteCount := 0
 	loops := 0
@@ -71,8 +72,8 @@ func Run(svrChan chan<- []*inetdiag.ParsedMessage, reps int, cl saver.CacheLogge
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
-	for loops = 0; reps == 0 || loops < reps; loops++ {
-		total, remote := collectDefaultNamespace(svrChan)
+	for loops = 0; (reps == 0 || loops < reps) && (ctx.Err() == nil); loops++ {
+		total, remote := collectDefaultNamespace(svrChan, skipLocal)
 		totalCount += total
 		remoteCount += remote
 		// print stats roughly once per minute.
