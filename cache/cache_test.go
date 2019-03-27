@@ -87,3 +87,12 @@ func TestUpdate(t *testing.T) {
 		t.Error("CycleCount should be 2, is", c.CycleCount())
 	}
 }
+
+func TestUpdateWithBadData(t *testing.T) {
+	var m inetdiag.ParsedMessage
+	c := cache.NewCache()
+	_, err := c.Update(&m)
+	if err == nil {
+		t.Error("Should have had an error")
+	}
+}
