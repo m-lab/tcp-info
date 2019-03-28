@@ -12,8 +12,6 @@ metrics published on port 7070:
 docker run --network=host -v ~/data:/home/ -it measurementlab/tcp-info -prom=7070
 ```
 
-If you want to use this tool outside of a container, then you will also require
-`zstd`, which can be installed with:
 # Fast tcp-info collector in Go
 
 This repository uses the netlink API to collect inet_diag messages, partially parses them, caches the intermediate representation.
@@ -32,13 +30,6 @@ OR
 
 ```bash
 sudo apt-get update && sudo apt-get install -y zstd
-```
-
-
-To invoke, with data written to ~/data, and prometheus metrics published on port
-7070:
-```bash
-docker run --network=host -v ~/data:/home/ -it measurementlab/tcp-info -prom=7070
 ```
 
 # Code Layout
