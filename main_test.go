@@ -27,7 +27,7 @@ func TestMain(t *testing.T) {
 	// immediately crash.
 	for _, v := range []struct{ name, val string }{
 		{"REPS", "1"},
-		{"TRACE", "false"},
+		{"TRACE", "true"},
 		{"PROM", fmt.Sprintf(":%d", port)},
 		{"OUTPUT", dir},
 	} {

@@ -1,3 +1,5 @@
+// Package tcp provides TCP state constants and string coversions for those
+// constants.
 package tcp
 
 import "fmt"

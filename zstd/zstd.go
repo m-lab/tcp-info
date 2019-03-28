@@ -7,31 +7,34 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+
+	"github.com/m-lab/go/rtx"
+)
+
+// Variables to allow whitebox mocking for testing error conditions.
+var (
+	osPipe      = os.Pipe
+	zstdCommand = "zstd"
 )
 
 // NewReader creates a reader piped to external zstd process reading from file.
-// Read from returned pipe
-// Close pipe when done
+// This function is only expected to be used for tests, so all errors are fatal.
+//
+// Users of this function should read from the returned pipe and close it when
+// done.
 func NewReader(filename string) io.ReadCloser {
-	pipeR, pipeW, err := os.Pipe()
-	if err != nil {
-		// TODO - should return error to caller.
-		log.Fatal(err)
-	}
-	cmd := exec.Command("zstd", "-d", "-c", filename)
+	pipeR, pipeW, err := osPipe()
+	rtx.Must(err, "Could not call os.Pipe. Something is very wrong.")
+
+	cmd := exec.Command(zstdCommand, "-d", "-c", filename)
 	cmd.Stdout = pipeW
 
 	f, err := os.Open(filename)
-	if err != nil {
-		log.Fatal(err)
-	}
+	rtx.Must(err, "Cloud not open file %q for zstd", filename)
 	f.Close()
 
 	go func() {
-		err := cmd.Run()
-		if err != nil {
-			log.Println("ZSTD error", filename, err)
-		}
+		rtx.Must(cmd.Run(), "ZSTD error for file %q", filename)
 		pipeW.Close()
 	}()
 
@@ -52,15 +55,14 @@ func (w waitingWriteCloser) Close() error {
 	return nil
 }
 
-// NewWriter creates a writer piped to an external zstd process writing to filename
-// Write to io.Writer
-// close io.Writer when done
-// wait on waitgroup to finish
-// TODO encapsulate the WaitGroup in a WriteCloser wrapper.
+// NewWriter creates a writer piped to an external zstd process writing to
+// filename. It returns a WriteCloser that pipes all writes through a zstd
+// compression process. Upon Close(), the returned WriteCloser will wait for the
+// zstd process to finish writing to disk.
 func NewWriter(filename string) (io.WriteCloser, error) {
 	var wg sync.WaitGroup
 	wg.Add(1)
-	pipeR, pipeW, err := os.Pipe()
+	pipeR, pipeW, err := osPipe()
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +70,7 @@ func NewWriter(filename string) (io.WriteCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command("zstd")
+	cmd := exec.Command(zstdCommand)
 	cmd.Stdin = pipeR
 	cmd.Stdout = f
 
