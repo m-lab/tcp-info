@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/m-lab/tcp-info/inetdiag"
+	"github.com/m-lab/tcp-info/parse"
 	"github.com/m-lab/tcp-info/saver"
 )
 
@@ -18,12 +18,12 @@ var (
 	localCount = 0
 )
 
-func appendAll(all []*inetdiag.ParsedMessage, msgs []*syscall.NetlinkMessage, skipLocal bool) []*inetdiag.ParsedMessage {
+func appendAll(all []*parse.ParsedMessage, msgs []*syscall.NetlinkMessage, skipLocal bool) []*parse.ParsedMessage {
 	// We use UTC, and truncate to millisecond to improve compression.
 	// Since the syscall to collect the data takes multiple milliseconds, this truncation seems reasonable.
 	ts := time.Now().UTC().Truncate(time.Millisecond)
 	for i := range msgs {
-		pm, err := inetdiag.Parse(msgs[i], skipLocal)
+		pm, err := parse.ParseNetlinkMessage(msgs[i], skipLocal)
 		if err != nil {
 			log.Println(err)
 			errCount++
@@ -39,12 +39,12 @@ func appendAll(all []*inetdiag.ParsedMessage, msgs []*syscall.NetlinkMessage, sk
 
 // collectDefaultNamespace collects all AF_INET6 and AF_INET connection stats, and sends them
 // to svr.
-func collectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage, skipLocal bool) (int, int) {
+func collectDefaultNamespace(svr chan<- []*parse.ParsedMessage, skipLocal bool) (int, int) {
 	// Preallocate space for up to 500 connections.  We may want to adjust this upwards if profiling
 	// indicates a lot of reallocation.
-	all := make([]*inetdiag.ParsedMessage, 0, 500)
+	all := make([]*parse.ParsedMessage, 0, 500)
 	remoteCount := 0
-	res6, err := inetdiag.OneType(syscall.AF_INET6)
+	res6, err := OneType(syscall.AF_INET6)
 	if err != nil {
 		// Properly handle errors
 		// TODO add metric
@@ -52,7 +52,7 @@ func collectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage, skipLocal boo
 	} else {
 		all = appendAll(all, res6, skipLocal)
 	}
-	res4, err := inetdiag.OneType(syscall.AF_INET)
+	res4, err := OneType(syscall.AF_INET)
 	if err != nil {
 		// Properly handle errors
 		// TODO add metric
@@ -69,7 +69,7 @@ func collectDefaultNamespace(svr chan<- []*inetdiag.ParsedMessage, skipLocal boo
 
 // Run the collector, either for the specified number of loops, or, if the
 // number specified is infinite, run forever.
-func Run(ctx context.Context, reps int, svrChan chan<- []*inetdiag.ParsedMessage, cl saver.CacheLogger, skipLocal bool) (localCount, errCount int) {
+func Run(ctx context.Context, reps int, svrChan chan<- []*parse.ParsedMessage, cl saver.CacheLogger, skipLocal bool) (localCount, errCount int) {
 	totalCount := 0
 	remoteCount := 0
 	loops := 0

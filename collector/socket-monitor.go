@@ -1,4 +1,4 @@
-package inetdiag
+package collector
 
 /*
 #include <asm/types.h>
@@ -9,7 +9,6 @@ import "C"
 */
 
 import (
-	"errors"
 	"log"
 	"syscall"
 	"time"
@@ -18,40 +17,28 @@ import (
 	"github.com/vishvananda/netlink/nl"
 	"golang.org/x/sys/unix"
 
+	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/metrics"
 	"github.com/m-lab/tcp-info/tcp"
 )
 
-const TCPF_ALL = 0xFFF
-
-var (
-	// ErrBadPid is used when the PID is mismatched between the netlink socket and the calling process.
-	ErrBadPid = errors.New("bad PID, can't listen to NL socket")
-
-	// ErrBadSequence is used when the Netlink response has a bad sequence number.
-	ErrBadSequence = errors.New("bad sequence number, can't interpret NetLink response")
-
-	// ErrBadMsgData is used when the NHetlink response has bad or missing data.
-	ErrBadMsgData = errors.New("bad message data from netlink message")
-)
-
 // TODO - Figure out why we aren't seeing INET_DIAG_DCTCPINFO or INET_DIAG_BBRINFO messages.
 func makeReq(inetType uint8) *nl.NetlinkRequest {
-	req := nl.NewNetlinkRequest(SOCK_DIAG_BY_FAMILY, syscall.NLM_F_DUMP|syscall.NLM_F_REQUEST)
-	msg := NewInetDiagReqV2(inetType, syscall.IPPROTO_TCP,
-		TCPF_ALL & ^((1<<uint(tcp.SYN_RECV))|(1<<uint(tcp.TIME_WAIT))|(1<<uint(tcp.CLOSE))))
-	msg.IDiagExt |= (1 << (INET_DIAG_MEMINFO - 1))
-	msg.IDiagExt |= (1 << (INET_DIAG_INFO - 1))
-	msg.IDiagExt |= (1 << (INET_DIAG_VEGASINFO - 1))
-	msg.IDiagExt |= (1 << (INET_DIAG_CONG - 1))
+	req := nl.NewNetlinkRequest(inetdiag.SOCK_DIAG_BY_FAMILY, syscall.NLM_F_DUMP|syscall.NLM_F_REQUEST)
+	msg := inetdiag.NewInetDiagReqV2(inetType, syscall.IPPROTO_TCP,
+		inetdiag.TCPF_ALL & ^((1<<uint(tcp.SYN_RECV))|(1<<uint(tcp.TIME_WAIT))|(1<<uint(tcp.CLOSE))))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_MEMINFO - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_INFO - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_VEGASINFO - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_CONG - 1))
 
-	msg.IDiagExt |= (1 << (INET_DIAG_TCLASS - 1))
-	msg.IDiagExt |= (1 << (INET_DIAG_TOS - 1))
-	msg.IDiagExt |= (1 << (INET_DIAG_SKMEMINFO - 1))
-	msg.IDiagExt |= (1 << (INET_DIAG_SHUTDOWN - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_TCLASS - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_TOS - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_SKMEMINFO - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_SHUTDOWN - 1))
 
 	req.AddData(msg)
-	req.NlMsghdr.Type = SOCK_DIAG_BY_FAMILY
+	req.NlMsghdr.Type = inetdiag.SOCK_DIAG_BY_FAMILY
 	req.NlMsghdr.Flags |= syscall.NLM_F_DUMP | syscall.NLM_F_REQUEST
 	return req
 }
@@ -60,12 +47,12 @@ func processSingleMessage(m *syscall.NetlinkMessage, seq uint32, pid uint32) (*s
 	if m.Header.Seq != seq {
 		log.Printf("Wrong Seq nr %d, expected %d", m.Header.Seq, seq)
 		metrics.ErrorCount.With(prometheus.Labels{"type": "wrong seq num"}).Inc()
-		return nil, false, ErrBadSequence
+		return nil, false, inetdiag.ErrBadSequence
 	}
 	if m.Header.Pid != pid {
 		log.Printf("Wrong pid %d, expected %d", m.Header.Pid, pid)
 		metrics.ErrorCount.With(prometheus.Labels{"type": "wrong pid"}).Inc()
-		return nil, false, ErrBadPid
+		return nil, false, inetdiag.ErrBadPid
 	}
 	if m.Header.Type == unix.NLMSG_DONE {
 		return nil, false, nil
@@ -73,7 +60,7 @@ func processSingleMessage(m *syscall.NetlinkMessage, seq uint32, pid uint32) (*s
 	if m.Header.Type == unix.NLMSG_ERROR {
 		native := nl.NativeEndian()
 		if len(m.Data) < 4 {
-			return nil, false, ErrBadMsgData
+			return nil, false, inetdiag.ErrBadMsgData
 		}
 		error := int32(native.Uint32(m.Data[0:4]))
 		if error == 0 {

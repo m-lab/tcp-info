@@ -12,9 +12,47 @@ metrics published on port 7070:
 docker run --network=host -v ~/data:/home/ -it measurementlab/tcp-info -prom=7070
 ```
 
-If you want to use this tool outside of a container, then you will also require
-`zstd`, which can be installed with:
+# Fast tcp-info collector in Go
+
+This repository uses the netlink API to collect inet_diag messages, partially parses them, caches the intermediate representation.
+It then detects differences from one scan to the next, and queues connections that have changed for logging.
+It logs the intermediate representation through external zstd processes to one file per connection.
+
+The previous version uses protobufs, but we have discontinued that largely because of the increased maintenance overhead, and risk of losing unparsed data.
+
+To run the tests or the collection tool, you will also require zstd, which can be installed with:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/install)
 ```
+
+OR
+
+```bash
+sudo apt-get update && sudo apt-get install -y zstd
+```
+
+# Code Layout
+
+* inetdiag - code related to include/uapi/linux/inet_diag.h.  All structs will be in structs.go
+* tcp - Should include ONLY the code related to include/uapi/linux/tcp.h
+* parse - code related to parsing the messages in inetdiag and tcp.
+* zstd - zstd reader and writer.
+* saver - code related to writing ParsedMessages to files.
+* cache - code to cache netlink messages and detect changes.
+* collector - code related to collecting netlink messages from the kernel.
+
+## Dependencies (as of March 2019)
+
+* saver: inetdiag, cache, parse, tcp, zstd
+* collector: parse, saver, inetdiag, tcp
+* main.go: collector, saver, parse (just for sanity check)
+* cache: parse
+* parse: inetdiag
+
+And (almost) all package use metrics.
+
+### Layers (each layer depends only on items to right, or lower layers)
+1. main.go
+1. collector > saver > cache > parse
+1. inetdiag, tcp, zstd, metrics
