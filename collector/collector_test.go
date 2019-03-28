@@ -1,4 +1,4 @@
-package collector
+package collector_test
 
 import (
 	"context"
@@ -10,7 +10,8 @@ import (
 	"time"
 
 	"github.com/m-lab/go/rtx"
-	"github.com/m-lab/tcp-info/inetdiag"
+	"github.com/m-lab/tcp-info/collector"
+	"github.com/m-lab/tcp-info/parse"
 )
 
 func init() {
@@ -67,12 +68,12 @@ func TestRun(t *testing.T) {
 	port := findPort()
 
 	// A nice big buffer on the channel
-	msgChan := make(chan []*inetdiag.ParsedMessage, 10000)
+	msgChan := make(chan []*parse.ParsedMessage, 10000)
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	go func() {
-		Run(ctx, 0, msgChan, &testCacheLogger{}, false)
+		collector.Run(ctx, 0, msgChan, &testCacheLogger{}, false)
 		wg.Done()
 	}()
 
@@ -95,7 +96,7 @@ func TestRun(t *testing.T) {
 
 	// Make sure we receive multiple different messages regarding the open port
 	count := 0
-	var prev *inetdiag.ParsedMessage
+	var prev *parse.ParsedMessage
 	for msgs := range msgChan {
 		changed := false
 		for _, m := range msgs {
@@ -108,7 +109,7 @@ func TestRun(t *testing.T) {
 				change, err := m.Compare(prev)
 				if err != nil {
 					log.Println(err)
-				} else if change > inetdiag.NoMajorChange {
+				} else if change > parse.NoMajorChange {
 					prev = m
 					changed = true
 				}

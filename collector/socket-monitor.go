@@ -1,4 +1,4 @@
-package inetdiag
+package collector
 
 /*
 #include <asm/types.h>
@@ -13,13 +13,21 @@ import (
 	"log"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink/nl"
 	"golang.org/x/sys/unix"
 
+	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/metrics"
 	"github.com/m-lab/tcp-info/tcp"
+)
+
+// Constants from linux.
+const (
+	TCPDIAG_GETSOCK     = 18 // uapi/linux/inet_diag.h
+	SOCK_DIAG_BY_FAMILY = 20 // uapi/linux/sock_diag.h
 )
 
 const TCPF_ALL = 0xFFF
@@ -35,20 +43,55 @@ var (
 	ErrBadMsgData = errors.New("bad message data from netlink message")
 )
 
+// InetDiagReqV2 is the Netlink request struct, as in linux/inet_diag.h
+// Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
+type InetDiagReqV2 struct {
+	SDiagFamily   uint8
+	SDiagProtocol uint8
+	IDiagExt      uint8
+	Pad           uint8
+	IDiagStates   uint32
+	ID            inetdiag.InetDiagSockID
+}
+
+// SizeofInetDiagReqV2 is the size of the struct.
+// TODO should we just make this explicit in the code?
+const SizeofInetDiagReqV2 = int(unsafe.Sizeof(InetDiagReqV2{})) // Should be 0x38
+
+// Serialize is provided for json serialization?
+// TODO - should use binary functions instead?
+func (req *InetDiagReqV2) Serialize() []byte {
+	return (*(*[SizeofInetDiagReqV2]byte)(unsafe.Pointer(req)))[:]
+}
+
+// Len is provided for json serialization?
+func (req *InetDiagReqV2) Len() int {
+	return SizeofInetDiagReqV2
+}
+
+// NewInetDiagReqV2 creates a new request.
+func NewInetDiagReqV2(family, protocol uint8, states uint32) *InetDiagReqV2 {
+	return &InetDiagReqV2{
+		SDiagFamily:   family,
+		SDiagProtocol: protocol,
+		IDiagStates:   states,
+	}
+}
+
 // TODO - Figure out why we aren't seeing INET_DIAG_DCTCPINFO or INET_DIAG_BBRINFO messages.
 func makeReq(inetType uint8) *nl.NetlinkRequest {
 	req := nl.NewNetlinkRequest(SOCK_DIAG_BY_FAMILY, syscall.NLM_F_DUMP|syscall.NLM_F_REQUEST)
 	msg := NewInetDiagReqV2(inetType, syscall.IPPROTO_TCP,
 		TCPF_ALL & ^((1<<uint(tcp.SYN_RECV))|(1<<uint(tcp.TIME_WAIT))|(1<<uint(tcp.CLOSE))))
-	msg.IDiagExt |= (1 << (INET_DIAG_MEMINFO - 1))
-	msg.IDiagExt |= (1 << (INET_DIAG_INFO - 1))
-	msg.IDiagExt |= (1 << (INET_DIAG_VEGASINFO - 1))
-	msg.IDiagExt |= (1 << (INET_DIAG_CONG - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_MEMINFO - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_INFO - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_VEGASINFO - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_CONG - 1))
 
-	msg.IDiagExt |= (1 << (INET_DIAG_TCLASS - 1))
-	msg.IDiagExt |= (1 << (INET_DIAG_TOS - 1))
-	msg.IDiagExt |= (1 << (INET_DIAG_SKMEMINFO - 1))
-	msg.IDiagExt |= (1 << (INET_DIAG_SHUTDOWN - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_TCLASS - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_TOS - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_SKMEMINFO - 1))
+	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_SHUTDOWN - 1))
 
 	req.AddData(msg)
 	req.NlMsghdr.Type = SOCK_DIAG_BY_FAMILY

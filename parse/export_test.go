@@ -1,3 +1,3 @@
-package inetdiag
+package parse
 
 var SplitInetDiagMsg = splitInetDiagMsg
