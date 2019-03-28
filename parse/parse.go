@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
+	"github.com/m-lab/tcp-info/tcp"
 	"golang.org/x/sys/unix"
 )
 
@@ -294,5 +295,92 @@ func netlinkRouteAttrAndValue(b []byte) (*unix.RtAttr, []byte, int, error) {
 	return a, b[unix.SizeofRtAttr:], rtaAlignOf(int(a.Len)), nil
 }
 
+/*********************************************************************************************/
+/*          Conversions from RouteAttr.Value to various tcp and inetdiag structs             */
+/*********************************************************************************************/
+
 // RouteAttrValue is the type of RouteAttr.Value
 type RouteAttrValue []byte
+
+// maybeCopy checks whether the src is the full size of the intended struct size.
+// If so, it just returns the pointer, otherwise it copies the content to an
+// appropriately sized new byte slice, and returns pointer to that.
+func maybeCopy(src []byte, size int) unsafe.Pointer {
+	if len(src) < size {
+		data := make([]byte, size)
+		copy(data, src)
+		return unsafe.Pointer(&data[0])
+	}
+	// TODO Check for larger than expected, and increment a metric with appropriate label.
+	return unsafe.Pointer(&src[0])
+}
+
+// ToLinuxTCPInfo maps the raw RouteAttrValue into a LinuxTCPInfo struct.
+// For older data, it may have to copy the bytes.
+func (raw RouteAttrValue) ToLinuxTCPInfo() *tcp.LinuxTCPInfo {
+	structSize := (int)(unsafe.Sizeof(tcp.LinuxTCPInfo{}))
+	return (*tcp.LinuxTCPInfo)(maybeCopy(raw, structSize))
+}
+
+// ToSockMemInfo maps the raw RouteAttrValue onto a SockMemInfo.
+// For older data, it may have to copy the bytes.
+func (raw RouteAttrValue) ToSockMemInfo() *inetdiag.SocketMemInfo {
+	structSize := (int)(unsafe.Sizeof(inetdiag.SocketMemInfo{}))
+	return (*inetdiag.SocketMemInfo)(maybeCopy(raw, structSize))
+}
+
+// ToMemInfo maps the raw RouteAttrValue onto a MemInfo.
+func (raw RouteAttrValue) ToMemInfo() *inetdiag.MemInfo {
+	structSize := (int)(unsafe.Sizeof(inetdiag.MemInfo{}))
+	return (*inetdiag.MemInfo)(maybeCopy(raw, structSize))
+}
+
+// ToBBRInfo maps the raw RouteAttrValue onto a BBRInfo.
+// For older data, it may have to copy the bytes.
+func (raw RouteAttrValue) ToBBRInfo() *inetdiag.BBRInfo {
+	structSize := (int)(unsafe.Sizeof(inetdiag.BBRInfo{}))
+	return (*inetdiag.BBRInfo)(maybeCopy(raw, structSize))
+}
+
+// ParseCong returns the congestion algorithm string
+func (raw *RouteAttrValue) Cong(rta *syscall.NetlinkRouteAttr) string {
+	return string(rta.Value[:len(rta.Value)-1])
+}
+
+// Parent containing all info gathered through netlink library.
+type Wrapper struct {
+	// Info from struct inet_diag_msg, including socket_id;
+	InetDiagMsg *inetdiag.InetDiagMsg
+
+	// From INET_DIAG_PROTOCOL message.
+	DiagProtocol inetdiag.Protocol
+
+	// From INET_DIAG_CONG message.
+	CongestionAlgorithm string
+
+	// The following three are mutually exclusive, as they provide
+	// data from different congestion control strategies.
+	//Vegas *VegasInfo
+	BBR *inetdiag.BBRInfo
+	//DCTCP *DCTCPInfo
+
+	// Data obtained from INET_DIAG_SKMEMINFO.
+	SocketMem *inetdiag.SocketMemInfo
+
+	// Data obtained from INET_DIAG_MEMINFO.
+	MemInfo *inetdiag.MemInfo
+
+	// Data obtained from struct tcp_info.
+	TcpInfo *tcp.LinuxTCPInfo
+
+	// TODO
+	// If there is shutdown info, this is the mask value.
+	// Check has_shutdown_mask to determine whether present.
+	//
+	// Types that are valid to be assigned to Shutdown:
+	//	*TCPDiagnosticsProto_ShutdownMask
+	// Shutdown isTCPDiagnosticsProto_Shutdown
+
+	// Timestamp of batch of messages containing this message.
+	Timestamp int64
+}

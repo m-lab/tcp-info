@@ -152,3 +152,47 @@ type InetDiagMsg struct {
 	IDiagUID     uint32
 	IDiagInode   uint32
 }
+
+// Haven't found a corresponding linux struct, but the message is described
+// in https://manpages.debian.org/stretch/manpages/sock_diag.7.en.html
+type SocketMemInfo struct {
+	RmemAlloc  uint32
+	Rcvbuf     uint32
+	WmemAlloc  uint32
+	Sndbuf     uint32
+	FwdAlloc   uint32
+	WmemQueued uint32
+	Optmem     uint32
+	Backlog    uint32
+	Drops      uint32
+}
+
+// MemInfo corresponds to the linux struct inet_diag_meminfo.
+type MemInfo struct {
+	Rmem uint32
+	Wmem uint32
+	Fmem uint32
+	Tmem uint32
+}
+
+type VegasInfo struct {
+	Enabled  uint32
+	RTTCount uint32
+	RTT      uint32
+	MinRTT   uint32
+}
+type DCTCPInfo struct {
+	Enabled uint16
+	CEState uint16
+	Alpha   uint32
+	ABEcn   uint32
+	ABTot   uint32
+}
+
+// BBRInfo corresponds to linux struct tcp_bbr_info.
+type BBRInfo struct {
+	Bw         int64  // Max-filtered BW (app throughput) estimate in bytes/second
+	MinRtt     uint32 // Min-filtered RTT in uSec
+	PacingGain uint32 // Pacing gain shifted left 8 bits
+	CwndGain   uint32 // Cwnd gain shifted left 8 bits
+}

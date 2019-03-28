@@ -63,3 +63,26 @@ var diagFamilyMap = map[uint8]string{
 	syscall.AF_INET:  "tcp",
 	syscall.AF_INET6: "tcp6",
 }
+
+type Protocol int32
+
+const (
+	Protocol_IPPROTO_UNUSED Protocol = 0
+	Protocol_IPPROTO_TCP    Protocol = 6
+	Protocol_IPPROTO_UDP    Protocol = 17
+	Protocol_IPPROTO_DCCP   Protocol = 33
+)
+
+var Protocol_name = map[int32]string{
+	0:  "IPPROTO_UNUSED",
+	6:  "IPPROTO_TCP",
+	17: "IPPROTO_UDP",
+	33: "IPPROTO_DCCP",
+}
+
+var Protocol_value = map[string]int32{
+	"IPPROTO_UNUSED": 0,
+	"IPPROTO_TCP":    6,
+	"IPPROTO_UDP":    17,
+	"IPPROTO_DCCP":   33,
+}
