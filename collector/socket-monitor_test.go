@@ -8,7 +8,9 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/collector"
+	"golang.org/x/sys/unix"
 )
 
 func TestInetDiagReqV2Serialize(t *testing.T) {
@@ -66,5 +68,42 @@ func TestOneType(t *testing.T) {
 	}
 	if len(res) == 0 {
 		t.Error("We have at least one active stream open right now.")
+	}
+}
+
+func TestProcessSingleMessageErrorPaths(t *testing.T) {
+	var m syscall.NetlinkMessage
+	m.Header.Seq = 1
+	_, _, err := collector.ProcessSingleMessage(&m, 2, 0)
+	if err != collector.ErrBadSequence {
+		t.Error("Should have had ErrBadSequence not", err)
+	}
+	m.Header.Pid = 2
+	_, _, err = collector.ProcessSingleMessage(&m, 1, 3)
+	if err != collector.ErrBadPid {
+		t.Error("Should have had ErrBadPid not", err)
+	}
+	m.Header.Type = unix.NLMSG_ERROR
+	_, _, err = collector.ProcessSingleMessage(&m, 1, 2)
+	if err != collector.ErrBadMsgData {
+		t.Error("Should have had ErrBadMsgData not", err)
+	}
+	m.Data = []byte{0, 0, 0, 0}
+	_, ok, err := collector.ProcessSingleMessage(&m, 1, 2)
+	rtx.Must(err, "A zero error should be fine")
+	if ok {
+		t.Error("Should not be ok is")
+	}
+	m.Data = []byte{0, 0, 0, 1}
+	_, ok, err = collector.ProcessSingleMessage(&m, 1, 2)
+	rtx.Must(err, "An error message should be fine")
+	if ok {
+		t.Error("Should not be ok but is")
+	}
+	m.Header.Flags |= unix.NLM_F_MULTI
+	_, ok, err = collector.ProcessSingleMessage(&m, 1, 2)
+	rtx.Must(err, "An error message should be fine")
+	if !ok {
+		t.Error("Should be ok but isn't")
 	}
 }

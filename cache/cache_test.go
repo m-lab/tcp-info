@@ -89,7 +89,7 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestUpdateWithBadData(t *testing.T) {
-	var m inetdiag.ParsedMessage
+	var m parse.ParsedMessage
 	c := cache.NewCache()
 	_, err := c.Update(&m)
 	if err == nil {
