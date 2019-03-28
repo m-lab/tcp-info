@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"reflect"
 	"syscall"
 	"time"
 	"unsafe"
@@ -154,13 +153,6 @@ const (
 
 func isLocal(addr net.IP) bool {
 	return addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsMulticast() || addr.IsUnspecified()
-}
-
-func slice(hp *syscall.NlMsghdr) []byte {
-	hdrSlice := make([]byte, int(unsafe.Sizeof(*hp)), int(unsafe.Sizeof(*hp)))
-	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&hdrSlice))
-	hdr.Data = uintptr(unsafe.Pointer(hp))
-	return hdrSlice
 }
 
 // Compare compares important fields to determine whether significant updates have occurred.

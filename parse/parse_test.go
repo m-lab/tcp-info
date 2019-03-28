@@ -134,9 +134,6 @@ func TestParse(t *testing.T) {
 	if idm.IDiagFamily != unix.AF_INET6 {
 		t.Error("Should not be IPv6")
 	}
-	if idm.String() == "" {
-		t.Error("Empty string made from InetDiagMsg")
-	}
 
 	nonNil := 0
 	for i := range mp.Attributes {

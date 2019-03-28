@@ -48,13 +48,28 @@ docker run --network=host -v ~/data:/home/ -it measurementlab/tcp-info -prom=707
 
 # Code Layout
 
-The code needs a bit of restructuring at this point.  Ideally it should look like:
-
-* inetdiag - Should contain ONLY the code related to include/uapi/linux/inet_diag.h
+* inetdiag - code related to include/uapi/linux/inet_diag.h.  All structs will be in structs.go
 * tcp - Should include ONLY the code related to include/uapi/linux/tcp.h
-* netlink - Should include ONLY code related to using the netlink syscall and handling syscall.NetlinkMessage.  It might have a dependency on inetdiag.
-* parsing - Should include code related to parsing the messages in inetdiag and tcp.
-* zstd - Already fine.  Contains just zstd reader and writer code.
-* saver, cache, collector - already fine.
+* parse - code related to parsing the messages in inetdiag and tcp.
+* zstd - zstd reader and writer.
+* saver - code related to writing ParsedMessages to files.
+* cache - code to cache netlink messages and detect changes.
+* collector - code related to collecting netlink messages from the kernel.
+
+## Dependencies (as of March 2019)
+
+* saver: inetdiag, cache, parse, tcp, zstd
+* collector: parse, saver, inetdiag, tcp
+* main.go: collector, saver, parse (just for sanity check)
+* cache: parse
+* parse: inetdiag
+
+And (almost) all package use metrics.
+
+### Layers (each layer depends only on items to right, or lower layers)
+1. main.go
+1. collector > saver > cache > parse
+1. inetdiag, tcp, zstd, metrics
+
 
 >>>>>>> 489c6ec... Update README.md

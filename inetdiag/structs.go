@@ -4,8 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
-
-	"github.com/m-lab/tcp-info/tcp"
 )
 
 // InetDiagSockID is the binary linux representation of a socket, as in linux/inet_diag.h
@@ -97,8 +95,4 @@ type InetDiagMsg struct {
 	IDiagWqueue  uint32
 	IDiagUID     uint32
 	IDiagInode   uint32
-}
-
-func (msg *InetDiagMsg) String() string {
-	return fmt.Sprintf("%s, %s, %s", diagFamilyMap[msg.IDiagFamily], tcp.State(msg.IDiagState), msg.ID.String())
 }
