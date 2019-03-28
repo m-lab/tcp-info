@@ -10,16 +10,9 @@ import (
 
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/collector"
+	"github.com/m-lab/tcp-info/inetdiag"
 	"golang.org/x/sys/unix"
 )
-
-func TestInetDiagReqV2Serialize(t *testing.T) {
-	v2 := collector.NewInetDiagReqV2(syscall.AF_INET, 23, 0x0E)
-	data := v2.Serialize()
-	if v2.Len() != len(data) {
-		t.Error(data, "should be length", v2.Len())
-	}
-}
 
 func TestOneType(t *testing.T) {
 	// Open an AF_LOCAL socket connection.
@@ -75,17 +68,17 @@ func TestProcessSingleMessageErrorPaths(t *testing.T) {
 	var m syscall.NetlinkMessage
 	m.Header.Seq = 1
 	_, _, err := collector.ProcessSingleMessage(&m, 2, 0)
-	if err != collector.ErrBadSequence {
+	if err != inetdiag.ErrBadSequence {
 		t.Error("Should have had ErrBadSequence not", err)
 	}
 	m.Header.Pid = 2
 	_, _, err = collector.ProcessSingleMessage(&m, 1, 3)
-	if err != collector.ErrBadPid {
+	if err != inetdiag.ErrBadPid {
 		t.Error("Should have had ErrBadPid not", err)
 	}
 	m.Header.Type = unix.NLMSG_ERROR
 	_, _, err = collector.ProcessSingleMessage(&m, 1, 2)
-	if err != collector.ErrBadMsgData {
+	if err != inetdiag.ErrBadMsgData {
 		t.Error("Should have had ErrBadMsgData not", err)
 	}
 	m.Data = []byte{0, 0, 0, 0}
