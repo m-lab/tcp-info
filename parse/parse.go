@@ -124,6 +124,10 @@ func ParseNetlinkMessage(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMe
 			log.Println("Error!! Received RouteAttr with very large Type:", t)
 			continue
 		}
+		if parsedMsg.Attributes[t] != nil {
+			// TODO - add metric so we can alert on these.
+			log.Println("Parse error - Attribute appears more than once:", t)
+		}
 		parsedMsg.Attributes[t] = a.Value
 	}
 	return &parsedMsg, nil
@@ -239,6 +243,61 @@ func (pm *ParsedMessage) Compare(previous *ParsedMessage) (ChangeType, error) {
 	return NoMajorChange, nil
 }
 
+var ErrEmptyMessage = errors.New("Message should contain Metadata or RawIDM")
+
+// TODO - better names for ParsedMessage and Wrapper.
+func (pm *ParsedMessage) Decode() (*Wrapper, error) {
+	var err error
+	result := Wrapper{}
+	result.Timestamp = pm.Timestamp
+	if pm.Metadata == nil && pm.RawIDM == nil {
+		return nil, ErrEmptyMessage
+	}
+	result.Metadata = pm.Metadata
+	if pm.RawIDM != nil {
+		result.InetDiagMsg, err = pm.RawIDM.Parse()
+		if err != nil {
+			log.Println("Error decoding RawIDM:", err)
+			return nil, err
+		}
+	}
+	for i, rta := range pm.Attributes {
+		if rta == nil {
+			continue
+		}
+		switch i {
+		case inetdiag.INET_DIAG_MEMINFO:
+			result.MemInfo = rta.ToMemInfo()
+		case inetdiag.INET_DIAG_INFO:
+			result.TcpInfo = rta.ToLinuxTCPInfo()
+		case inetdiag.INET_DIAG_VEGASINFO:
+
+		case inetdiag.INET_DIAG_CONG:
+			result.CongestionAlgorithm = rta.CongestionAlgorithm()
+		case inetdiag.INET_DIAG_TOS:
+		case inetdiag.INET_DIAG_TCLASS:
+		case inetdiag.INET_DIAG_SKMEMINFO:
+			result.SocketMem = rta.ToSockMemInfo()
+		case inetdiag.INET_DIAG_SHUTDOWN:
+		case inetdiag.INET_DIAG_DCTCPINFO:
+		case inetdiag.INET_DIAG_PROTOCOL:
+		case inetdiag.INET_DIAG_SKV6ONLY:
+		case inetdiag.INET_DIAG_LOCALS:
+		case inetdiag.INET_DIAG_PEERS:
+		case inetdiag.INET_DIAG_PAD:
+		case inetdiag.INET_DIAG_MARK:
+		case inetdiag.INET_DIAG_BBRINFO:
+			result.BBR = rta.ToBBRInfo()
+		case inetdiag.INET_DIAG_CLASS_ID:
+		case inetdiag.INET_DIAG_MD5SIG:
+		default:
+			// TODO metric so we can alert.
+			log.Println("unhandled attribute type:", i)
+		}
+	}
+	return &result, nil
+}
+
 /*********************************************************************************************/
 /*             Utility function to load test data
 /*********************************************************************************************/
@@ -335,6 +394,14 @@ func (raw RouteAttrValue) ToMemInfo() *inetdiag.MemInfo {
 	return (*inetdiag.MemInfo)(maybeCopy(raw, structSize))
 }
 
+// INET_DIAG_MARK
+//	if (tb[INET_DIAG_MARK])
+//		s->mark = rta_getattr_u32(tb[INET_DIAG_MARK]);
+
+// INET_DIAG_PROTOCOL
+// if (tb[INET_DIAG_PROTOCOL])
+// s->raw_prot = rta_getattr_u8(tb[INET_DIAG_PROTOCOL]);
+
 // ToBBRInfo maps the raw RouteAttrValue onto a BBRInfo.
 // For older data, it may have to copy the bytes.
 func (raw RouteAttrValue) ToBBRInfo() *inetdiag.BBRInfo {
@@ -343,12 +410,19 @@ func (raw RouteAttrValue) ToBBRInfo() *inetdiag.BBRInfo {
 }
 
 // ParseCong returns the congestion algorithm string
-func (raw *RouteAttrValue) Cong(rta *syscall.NetlinkRouteAttr) string {
-	return string(rta.Value[:len(rta.Value)-1])
+// INET_DIAG_CONG
+func (raw RouteAttrValue) CongestionAlgorithm() string {
+	return string(raw)
 }
 
 // Parent containing all info gathered through netlink library.
 type Wrapper struct {
+	// Timestamp of batch of messages containing this message.
+	Timestamp time.Time
+
+	// Metadata for the connection.  Usually empty.
+	Metadata *Metadata
+
 	// Info from struct inet_diag_msg, including socket_id;
 	InetDiagMsg *inetdiag.InetDiagMsg
 
@@ -381,6 +455,4 @@ type Wrapper struct {
 	//	*TCPDiagnosticsProto_ShutdownMask
 	// Shutdown isTCPDiagnosticsProto_Shutdown
 
-	// Timestamp of batch of messages containing this message.
-	Timestamp int64
 }

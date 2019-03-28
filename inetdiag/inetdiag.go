@@ -64,7 +64,9 @@ var diagFamilyMap = map[uint8]string{
 	syscall.AF_INET6: "tcp6",
 }
 
-type Protocol int32
+//	if (tb[INET_DIAG_PROTOCOL])
+//		s->raw_prot = rta_getattr_u8(tb[INET_DIAG_PROTOCOL]);
+type Protocol uint8
 
 const (
 	Protocol_IPPROTO_UNUSED Protocol = 0

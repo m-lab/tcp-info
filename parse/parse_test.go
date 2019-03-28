@@ -381,6 +381,39 @@ func TestCompressionSize(t *testing.T) {
 
 }
 
+// TODO - should produce and use intermediate message file.
+func TestDecoding(t *testing.T) {
+	source := "testdata/testdata.zst"
+	log.Println("Reading messages from", source)
+	rdr := zstd.NewReader(source)
+	parsed := int64(0)
+	for {
+		raw, err := parse.LoadNext(rdr)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatal(err)
+		}
+
+		pm, err := parse.ParseNetlinkMessage(raw, false)
+		rtx.Must(err, "Could not parse test data")
+		// Parse doesn't fill the Timestamp, so for now, populate it with something...
+		pm.Timestamp = time.Date(2009, time.May, 29, 23, 59, 59, 0, time.UTC)
+
+		_, err = pm.Decode()
+		if err != nil {
+			t.Error(err)
+		}
+		parsed++
+	}
+	// TODO - count the field frequency.
+
+	if parsed != 420 {
+		t.Error("Wrong count:", parsed)
+	}
+}
+
 // With []byte representations for most fields, this takes about 3.5 usec/record.
 func BenchmarkNLMsgSerialize(b *testing.B) {
 	b.StopTimer()

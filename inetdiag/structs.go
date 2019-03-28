@@ -1,5 +1,29 @@
 package inetdiag
 
+/*
+There should be a corresponding struct for every element of this enum
+defined in uapi/linux/inet_diag.h
+
+	INET_DIAG_MEMINFO
+	INET_DIAG_INFO  // This one is in tcp.go
+	INET_DIAG_VEGASINFO
+	INET_DIAG_CONG
+	INET_DIAG_TOS
+	INET_DIAG_TCLASS
+	INET_DIAG_SKMEMINFO
+	INET_DIAG_SHUTDOWN
+	INET_DIAG_DCTCPINFO
+	INET_DIAG_PROTOCOL
+	INET_DIAG_SKV6ONLY
+	INET_DIAG_LOCALS
+	INET_DIAG_PEERS
+	INET_DIAG_PAD
+	INET_DIAG_MARK
+	INET_DIAG_BBRINFO
+	INET_DIAG_CLASS_ID
+	INET_DIAG_MD5SIG
+*/
+
 import (
 	"encoding/binary"
 	"errors"
@@ -10,7 +34,6 @@ import (
 
 // Constants from linux.
 const (
-	TCPDIAG_GETSOCK     = 18 // uapi/linux/inet_diag.h
 	SOCK_DIAG_BY_FAMILY = 20 // uapi/linux/sock_diag.h
 )
 
@@ -138,8 +161,21 @@ func (id *InetDiagSockID) String() string {
 	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort())
 }
 
+// These are related to filters.  We don't currently use filters, so we ignore this type.
+type HostCond struct { // inet_diag_hostcond
+	Family    uint8  // __u8 family
+	PrefixLen uint8  // __u8 prefix_len
+	Port      uint16 // int port
+	Addr      uint32 // __be32	addr[0];
+}
+type MarkCond struct { // inet_diag_markcond
+	Mark uint32
+	Mask uint32
+}
+
 // InetDiagMsg is the linux binary representation of a InetDiag message header, as in linux/inet_diag.h
 // Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
+// INET_DIAG_INFO
 type InetDiagMsg struct {
 	IDiagFamily  uint8
 	IDiagState   uint8
@@ -155,6 +191,7 @@ type InetDiagMsg struct {
 
 // Haven't found a corresponding linux struct, but the message is described
 // in https://manpages.debian.org/stretch/manpages/sock_diag.7.en.html
+// INET_DIAG_SKMEMINFO
 type SocketMemInfo struct {
 	RmemAlloc  uint32
 	Rcvbuf     uint32
@@ -168,6 +205,7 @@ type SocketMemInfo struct {
 }
 
 // MemInfo corresponds to the linux struct inet_diag_meminfo.
+// In is used to decode attribute Type INET_DIAG_MEMINFO
 type MemInfo struct {
 	Rmem uint32
 	Wmem uint32
@@ -175,12 +213,15 @@ type MemInfo struct {
 	Tmem uint32
 }
 
+// INET_DIAG_VEGASINFO
 type VegasInfo struct {
 	Enabled  uint32
 	RTTCount uint32
 	RTT      uint32
 	MinRTT   uint32
 }
+
+// INET_DIAG_DCTCPINFO
 type DCTCPInfo struct {
 	Enabled uint16
 	CEState uint16
@@ -190,9 +231,69 @@ type DCTCPInfo struct {
 }
 
 // BBRInfo corresponds to linux struct tcp_bbr_info.
+// Used for decoding attribute Type:INET_DIAG_BBRINFO
 type BBRInfo struct {
 	Bw         int64  // Max-filtered BW (app throughput) estimate in bytes/second
 	MinRtt     uint32 // Min-filtered RTT in uSec
 	PacingGain uint32 // Pacing gain shifted left 8 bits
 	CwndGain   uint32 // Cwnd gain shifted left 8 bits
 }
+
+// LOCALS and PEERS contain an array of sockaddr_storage elements.
+/* ss.c parses these elements like this:
+static const char *format_host_sa(struct sockaddr_storage *sa)
+{
+	union {
+		struct sockaddr_in sin;
+		struct sockaddr_in6 sin6;
+	} *saddr = (void *)sa;
+
+	switch (sa->ss_family) {
+	case AF_INET:
+		return format_host(AF_INET, 4, &saddr->sin.sin_addr);
+	case AF_INET6:
+		return format_host(AF_INET6, 16, &saddr->sin6.sin6_addr);
+	default:
+		return "";
+	}
+}
+
+	INET_DIAG_LOCALS
+if (tb[INET_DIAG_LOCALS]) {
+	len = RTA_PAYLOAD(tb[INET_DIAG_LOCALS]);
+	sa = RTA_DATA(tb[INET_DIAG_LOCALS]);
+
+	printf("locals:%s", format_host_sa(sa));
+	for (sa++, len -= sizeof(*sa); len > 0; sa++, len -= sizeof(*sa))
+		printf(",%s", format_host_sa(sa));
+
+}
+	INET_DIAG_PEERS
+if (tb[INET_DIAG_PEERS]) {
+	len = RTA_PAYLOAD(tb[INET_DIAG_PEERS]);
+	sa = RTA_DATA(tb[INET_DIAG_PEERS]);
+
+	printf(" peers:%s", format_host_sa(sa));
+	for (sa++, len -= sizeof(*sa); len > 0; sa++, len -= sizeof(*sa))
+		printf(",%s", format_host_sa(sa));
+}
+*/
+
+/*
+
+//	INET_DIAG_SKV6ONLY
+			v6only = rta_getattr_u8(tb[INET_DIAG_SKV6ONLY]);
+
+//	INET_DIAG_SHUTDOWN
+			mask = rta_getattr_u8(tb[INET_DIAG_SHUTDOWN]);
+
+
+
+
+*/
+
+//	INET_DIAG_TOS
+//	INET_DIAG_TCLASS
+//	INET_DIAG_PAD
+//	INET_DIAG_CLASS_ID
+//	INET_DIAG_MD5SIG
