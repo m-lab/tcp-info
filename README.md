@@ -4,7 +4,6 @@
 
 The `tcp-info` tool executes a polling loop that tracks the measurement statistics of every open TCP socket on a system.  Data is written, in `jsonl` format, to files compressed using `zstd`.  This tool forms the basis of a lot of measurements on the Kubernetes-based [Measurement Lab](https://measurementlab.net) platform.
 
-<<<<<<< HEAD
 We expect most people will run this tool using a
 docker container.  To invoke, with data written to ~/data, and prometheus
 metrics published on port 7070:
@@ -15,7 +14,6 @@ docker run --network=host -v ~/data:/home/ -it measurementlab/tcp-info -prom=707
 
 If you want to use this tool outside of a container, then you will also require
 `zstd`, which can be installed with:
-=======
 # Fast tcp-info collector in Go
 
 This repository uses the netlink API to collect inet_diag messages, partially parses them, caches the intermediate representation.
@@ -31,13 +29,10 @@ bash <(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/master/in
 ```
 
 OR
->>>>>>> 489c6ec... Update README.md
 
 ```bash
 sudo apt-get update && sudo apt-get install -y zstd
 ```
-<<<<<<< HEAD
-=======
 
 
 To invoke, with data written to ~/data, and prometheus metrics published on port
@@ -70,6 +65,3 @@ And (almost) all package use metrics.
 1. main.go
 1. collector > saver > cache > parse
 1. inetdiag, tcp, zstd, metrics
-
-
->>>>>>> 489c6ec... Update README.md
