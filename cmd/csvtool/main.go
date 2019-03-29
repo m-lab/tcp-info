@@ -33,6 +33,8 @@ func main() {
 		wrappers = append(wrappers, wrapper)
 	}
 
+	wrappers[0].Metadata = &parse.Metadata{}
+
 	err := gocsv.Marshal(wrappers, os.Stdout)
 	if err != nil {
 		log.Println(err)
