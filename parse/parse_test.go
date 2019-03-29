@@ -387,6 +387,7 @@ func TestDecoding(t *testing.T) {
 	log.Println("Reading messages from", source)
 	rdr := zstd.NewReader(source)
 	parsed := int64(0)
+	var fields uint32
 	for {
 		raw, err := parse.LoadNext(rdr)
 		if err != nil {
@@ -401,14 +402,19 @@ func TestDecoding(t *testing.T) {
 		// Parse doesn't fill the Timestamp, so for now, populate it with something...
 		pm.Timestamp = time.Date(2009, time.May, 29, 23, 59, 59, 0, time.UTC)
 
-		_, err = pm.Decode()
+		wrapper, err := pm.Decode()
 		if err != nil {
 			t.Error(err)
 		}
+		fields |= wrapper.FieldMask
 		parsed++
 	}
 	// TODO - count the field frequency.
 
+	if fields != (1<<inetdiag.INET_DIAG_MAX)-1 {
+		// Uncomment to see which fields are untested.
+		// t.Errorf("Fields %0X\n", fields)
+	}
 	if parsed != 420 {
 		t.Error("Wrong count:", parsed)
 	}
