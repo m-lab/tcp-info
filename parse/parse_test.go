@@ -49,7 +49,6 @@ func TestDecoding(t *testing.T) {
 		fields |= wrapper.FieldMask
 		parsed++
 	}
-	// TODO - count the field frequency.
 
 	if fields != (1<<inetdiag.INET_DIAG_MAX)-1 {
 		// Uncomment to see which fields are untested.
