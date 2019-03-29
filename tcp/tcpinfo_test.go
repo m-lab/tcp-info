@@ -6,6 +6,8 @@ import (
 	"github.com/m-lab/tcp-info/tcp"
 )
 
+// TODO - sanity checks against syscall structs?
+
 func TestState_String(t *testing.T) {
 	tests := []struct {
 		in   tcp.State
