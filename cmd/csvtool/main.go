@@ -63,9 +63,7 @@ func ConvertFileToCSV(fn string) error {
 		snapshots = append(snapshots, snap)
 	}
 
-	if len(snapshots) > 0 && snapshots[0].Metadata == nil {
-		snapshots[0].Metadata = &netlink.Metadata{}
-	}
+	snapshots[0].Metadata = &netlink.Metadata{}
 
 	// Write output to stdout.
 	err := gocsv.Marshal(snapshots, os.Stdout)
