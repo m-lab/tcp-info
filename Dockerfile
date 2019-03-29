@@ -10,6 +10,8 @@ RUN mkdir /pkg && cd /src && make MOREFLAGS="-static" zstd && make DESTDIR=/pkg 
 # Build tcp-info
 FROM golang:1.12 as tcp-info-builder
 
+ENV CGO_ENABLED 0
+
 # Add the tcp-info code from the local repo.
 ADD . /go/src/github.com/m-lab/tcp-info
 WORKDIR /go/src/github.com/m-lab/tcp-info
