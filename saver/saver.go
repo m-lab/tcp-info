@@ -1,5 +1,5 @@
 // Package saver contains all logic for writing records to files.
-//  1. Sets up a channel that accepts slices of *parse.ParsedMessage
+//  1. Sets up a channel that accepts slices of *netlink.ParsedMessage
 //  2. Maintains a map of Connections, one for each connection.
 //  3. Uses several marshallers goroutines to serialize data and and write to
 //     zstd files.
@@ -21,7 +21,7 @@ import (
 	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/metrics"
-	"github.com/m-lab/tcp-info/parse"
+	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/tcp"
 	"github.com/m-lab/tcp-info/zstd"
 	"github.com/m-lab/uuid"
@@ -43,7 +43,7 @@ var (
 // Task represents a single marshalling task, specifying the message and the writer.
 type Task struct {
 	// nil message means close the writer.
-	Message *parse.ParsedMessage
+	Message *netlink.ParsedMessage
 	Writer  io.WriteCloser
 }
 
@@ -121,8 +121,8 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 }
 
 func (conn *Connection) writeHeader() {
-	msg := parse.ParsedMessage{
-		Metadata: &parse.Metadata{
+	msg := netlink.ParsedMessage{
+		Metadata: &netlink.Metadata{
 			UUID:      uuid.FromCookie(conn.ID.Cookie()),
 			Sequence:  conn.Sequence,
 			StartTime: conn.StartTime,
@@ -193,7 +193,7 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 
 // queue queues a single ParsedMessage to the appropriate marshalling queue, based on the
 // connection Cookie.
-func (svr *Saver) queue(msg *parse.ParsedMessage) error {
+func (svr *Saver) queue(msg *netlink.ParsedMessage) error {
 	idm, err := msg.RawIDM.Parse()
 	if err != nil {
 		log.Println(err)
@@ -248,7 +248,7 @@ func (svr *Saver) endConn(cookie uint64) {
 }
 
 // MessageSaverLoop runs a loop to receive batches of ParsedMessages.  Local connections
-func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*parse.ParsedMessage) {
+func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*netlink.ParsedMessage) {
 	log.Println("Starting Saver")
 	for {
 		msgs, ok := <-readerChannel
@@ -275,7 +275,7 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*parse.ParsedMessage) 
 	svr.Close()
 }
 
-func (svr *Saver) swapAndQueue(pm *parse.ParsedMessage) {
+func (svr *Saver) swapAndQueue(pm *netlink.ParsedMessage) {
 	svr.stats.TotalCount++
 	old, err := svr.cache.Update(pm)
 	if err != nil {
@@ -312,7 +312,7 @@ func (svr *Saver) swapAndQueue(pm *parse.ParsedMessage) {
 			log.Println(err)
 			return
 		}
-		if change > parse.NoMajorChange {
+		if change > netlink.NoMajorChange {
 			svr.stats.DiffCount++
 			err := svr.queue(pm)
 			if err != nil {

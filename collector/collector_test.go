@@ -11,7 +11,7 @@ import (
 
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/collector"
-	"github.com/m-lab/tcp-info/parse"
+	"github.com/m-lab/tcp-info/netlink"
 )
 
 func init() {
@@ -68,7 +68,7 @@ func TestRun(t *testing.T) {
 	port := findPort()
 
 	// A nice big buffer on the channel
-	msgChan := make(chan []*parse.ParsedMessage, 10000)
+	msgChan := make(chan []*netlink.ParsedMessage, 10000)
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -96,7 +96,7 @@ func TestRun(t *testing.T) {
 
 	// Make sure we receive multiple different messages regarding the open port
 	count := 0
-	var prev *parse.ParsedMessage
+	var prev *netlink.ParsedMessage
 	for msgs := range msgChan {
 		changed := false
 		for _, m := range msgs {
@@ -109,7 +109,7 @@ func TestRun(t *testing.T) {
 				change, err := m.Compare(prev)
 				if err != nil {
 					log.Println(err)
-				} else if change > parse.NoMajorChange {
+				} else if change > netlink.NoMajorChange {
 					prev = m
 					changed = true
 				}

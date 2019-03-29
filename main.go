@@ -19,7 +19,7 @@ import (
 	_ "net/http/pprof" // Support profiling
 
 	"github.com/m-lab/tcp-info/collector"
-	"github.com/m-lab/tcp-info/parse"
+	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/saver"
 )
 
@@ -93,7 +93,7 @@ func main() {
 	// Make the saver and construct the message channel, buffering up to 2 batches
 	// of messages without stalling producer. We may want to increase the buffer if
 	// we observe main() stalling.
-	svrChan := make(chan []*parse.ParsedMessage, 2)
+	svrChan := make(chan []*netlink.ParsedMessage, 2)
 	svr := saver.NewSaver("host", "pod", 3)
 	go svr.MessageSaverLoop(svrChan)
 

@@ -13,7 +13,7 @@ import (
 
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/inetdiag"
-	"github.com/m-lab/tcp-info/parse"
+	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/saver"
 )
 
@@ -27,7 +27,7 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-func dump(mp *parse.ParsedMessage) {
+func dump(mp *netlink.ParsedMessage) {
 	for i := range mp.Attributes {
 		a := mp.Attributes[i]
 		if a != nil {
@@ -36,7 +36,7 @@ func dump(mp *parse.ParsedMessage) {
 	}
 }
 
-func msg(cookie uint64, dport uint16) *parse.ParsedMessage {
+func msg(cookie uint64, dport uint16) *netlink.ParsedMessage {
 	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
 	nm := syscall.NetlinkMessage{}
 	err := json.Unmarshal([]byte(json1), &nm)
@@ -44,7 +44,7 @@ func msg(cookie uint64, dport uint16) *parse.ParsedMessage {
 		log.Println(err)
 		return nil
 	}
-	mp, err := parse.ParseNetlinkMessage(&nm, true)
+	mp, err := netlink.ParseNetlinkMessage(&nm, true)
 	if err != nil {
 		log.Println(err)
 		return nil
@@ -92,30 +92,30 @@ func TestBasic(t *testing.T) {
 		rtx.Must(os.Chdir(oldDir), "Could not switch back to %s", oldDir)
 	}()
 	svr := saver.NewSaver("foo", "bar", 1)
-	svrChan := make(chan []*parse.ParsedMessage, 0) // no buffering
+	svrChan := make(chan []*netlink.ParsedMessage, 0) // no buffering
 	go svr.MessageSaverLoop(svrChan)
 
 	// This round just initializes the cache.
-	m1 := []*parse.ParsedMessage{msg(11234, 11234), msg(235, 235)}
+	m1 := []*netlink.ParsedMessage{msg(11234, 11234), msg(235, 235)}
 	dump(m1[0])
 	svrChan <- m1
 
 	// This should NOT write to file, because nothing changed
-	m2 := []*parse.ParsedMessage{msg(1234, 1234), msg(234, 234)}
+	m2 := []*netlink.ParsedMessage{msg(1234, 1234), msg(234, 234)}
 	svrChan <- m2
 
 	// This changes the first connection, and ends the second connection.
-	m3 := []*parse.ParsedMessage{msg(1234, 1234)}
+	m3 := []*netlink.ParsedMessage{msg(1234, 1234)}
 	m3[0].Attributes[inetdiag.INET_DIAG_INFO][20] = 127
 	svrChan <- m3
 
 	// This changes the first connecti:on again.
-	m4 := []*parse.ParsedMessage{msg(1234, 1234)}
+	m4 := []*netlink.ParsedMessage{msg(1234, 1234)}
 	m3[0].Attributes[inetdiag.INET_DIAG_INFO][20] = 127
 	m4[0].Attributes[inetdiag.INET_DIAG_INFO][105] = 127
 	svrChan <- m4
 
-	m5 := []*parse.ParsedMessage{msg(1234, 1234)}
+	m5 := []*netlink.ParsedMessage{msg(1234, 1234)}
 	svrChan <- m5
 	// Force close all the files.
 	close(svrChan)
