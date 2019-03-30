@@ -6,6 +6,7 @@ import (
 	"io"
 	"syscall"
 
+	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/parse"
 )
 
@@ -30,8 +31,8 @@ func LoadNetlinkMessage(rdr io.Reader) (*syscall.NetlinkMessage, error) {
 }
 
 // LoadParsedMessages reads all PMs from a jsonl stream.
-func LoadParsedMessages(rdr io.Reader) ([]*parse.ParsedMessage, error) {
-	msgs := make([]*parse.ParsedMessage, 0, 2000) // We typically read a large number of records
+func LoadParsedMessages(rdr io.Reader) ([]*netlink.ParsedMessage, error) {
+	msgs := make([]*netlink.ParsedMessage, 0, 2000) // We typically read a large number of records
 
 	pmr := NewPMReader(rdr)
 
@@ -55,7 +56,7 @@ func NewPMReader(rdr io.Reader) *PMReader {
 	return &PMReader{rdr: rdr}
 }
 
-func (pmr *PMReader) Next() (*parse.ParsedMessage, error) {
+func (pmr *PMReader) Next() (*netlink.ParsedMessage, error) {
 	var header syscall.NlMsghdr
 	// TODO - should we pass in LittleEndian as a parameter?
 	err := binary.Read(pmr.rdr, binary.LittleEndian, &header)
@@ -70,7 +71,7 @@ func (pmr *PMReader) Next() (*parse.ParsedMessage, error) {
 	}
 
 	msg := syscall.NetlinkMessage{Header: header, Data: data}
-	return parse.ParseNetlinkMessage(&msg, false)
+	return netlink.ParseNetlinkMessage(&msg, false)
 }
 
 type InetReader struct {
@@ -88,5 +89,5 @@ func (r *InetReader) Next() (*parse.Wrapper, error) {
 		return nil, err
 	}
 
-	return pm.Decode()
+	return parse.DecodeNetlink(pm)
 }

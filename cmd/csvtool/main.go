@@ -6,6 +6,7 @@ import (
 
 	"github.com/gocarina/gocsv"
 	"github.com/m-lab/tcp-info/loader"
+	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/parse"
 )
 
@@ -33,7 +34,7 @@ func main() {
 		wrappers = append(wrappers, wrapper)
 	}
 
-	wrappers[0].Metadata = &parse.Metadata{}
+	wrappers[0].Metadata = &netlink.Metadata{}
 
 	err := gocsv.Marshal(wrappers, os.Stdout)
 	if err != nil {
