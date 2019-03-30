@@ -1,3 +1,3 @@
-package parse
+package netlink
 
 var SplitInetDiagMsg = splitInetDiagMsg

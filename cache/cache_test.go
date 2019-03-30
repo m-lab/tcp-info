@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/m-lab/tcp-info/cache"
-	"github.com/m-lab/tcp-info/parse"
+	"github.com/m-lab/tcp-info/netlink"
 )
 
 func init() {
@@ -21,14 +21,14 @@ func testFatal(t *testing.T, err error) {
 	}
 }
 
-func fakeMsg(t *testing.T, cookie uint64, dport uint16) parse.ParsedMessage {
+func fakeMsg(t *testing.T, cookie uint64, dport uint16) netlink.ParsedMessage {
 	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
 	nm := syscall.NetlinkMessage{}
 	err := json.Unmarshal([]byte(json1), &nm)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mp, err := parse.ParseNetlinkMessage(&nm, true)
+	mp, err := netlink.ParseNetlinkMessage(&nm, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestUpdateWithBadData(t *testing.T) {
-	var m parse.ParsedMessage
+	var m netlink.ParsedMessage
 	c := cache.NewCache()
 	_, err := c.Update(&m)
 	if err == nil {

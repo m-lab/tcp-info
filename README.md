@@ -52,7 +52,15 @@ sudo apt-get update && sudo apt-get install -y zstd
 
 And (almost) all package use metrics.
 
-### Layers (each layer depends only on items to right, or lower layers)
+### Layers for main.go (each layer depends only on items to right, or lower layers)
+
 1. main.go
-1. collector > saver > cache > parse
-1. inetdiag, tcp, zstd, metrics
+1. collector > saver > cache
+1. netlink > inetdiag
+1. tcp, zstd, metrics
+
+### Layers for parse package:
+
+1. parse (used by command line tools, etl)
+1. netlink > inetdiag
+1. tcp, zstd, metrics
