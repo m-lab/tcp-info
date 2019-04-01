@@ -15,15 +15,14 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
+// TODO handle gs: and local filenames.
+// TODO filter a single file from a tar file.
 func main() {
-	// TODO handle gs: and local filenames.
-
-	// TODO filter a single file from a tar file.
 
 	// Read input from stdin.
-
 	rdr := loader.NewInetReader(os.Stdin)
 
+	// Read all the ParsedMessage and convert to Wrappers.
 	wrappers := make([]*parse.Wrapper, 0, 3000)
 	for {
 		wrapper, err := rdr.Next()
@@ -36,10 +35,10 @@ func main() {
 
 	wrappers[0].Metadata = &netlink.Metadata{}
 
+	// Write output to stdout.
 	err := gocsv.Marshal(wrappers, os.Stdout)
 	if err != nil {
 		log.Println(err)
 	}
 
-	// Write output to stdout.
 }
