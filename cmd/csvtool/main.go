@@ -38,6 +38,8 @@ func ConvertFileToCSV(fn string) error {
 	if strings.HasSuffix(fn, ".zst") {
 		raw = zstd.NewReader(fn)
 		defer raw.Close()
+	} else if fn == "-" {
+		raw = os.Stdin
 	} else {
 		raw, err := os.Open(fn)
 		if err != nil {

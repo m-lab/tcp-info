@@ -14,7 +14,7 @@ docker run --network=host -v ~/data:/home/ -it measurementlab/tcp-info -prom=707
 
 # Fast tcp-info collector in Go
 
-This repository uses the netlink API to collect inet_diag messages, partially parses them, caches the intermediate representation.
+This repository uses the netlink API to collect inet_diag messages, partially parses them, and caches the intermediate representation.
 It then detects differences from one scan to the next, and queues connections that have changed for logging.
 It logs the intermediate representation through external zstd processes to one file per connection.
 
@@ -35,13 +35,9 @@ sudo apt-get update && sudo apt-get install -y zstd
 
 # Parse library and command line tools
 
-## The *parse* package
-
-This package is intended to be used as a library for command line tools and other applications that need to parse the ArchivedRecord messages.
-
 ## CSV tool
 
-The cmd/csvtool directory contains a tool for parsing ArchivedRecord and producing CSV files.  Currently reads netlink-jSONL from stdin and writes CSV to stdout.
+The cmd/csvtool directory contains a tool for parsing netlink-JSONL and producing CSV files.  Currently reads netlink-jSONL from stdin and writes CSV to stdout.
 
 
 # Code Layout
