@@ -7,7 +7,7 @@ RUN git clone https://github.com/facebook/zstd src
 RUN mkdir /pkg && cd /src && make MOREFLAGS="-static" zstd && make DESTDIR=/pkg install
 
 
-# Build tcp-info
+# An image for building tcp-info
 FROM golang:1.12 as tcp-info-builder
 
 ENV CGO_ENABLED 0
@@ -16,12 +16,10 @@ ENV CGO_ENABLED 0
 ADD . /go/src/github.com/m-lab/tcp-info
 WORKDIR /go/src/github.com/m-lab/tcp-info
 
-# Get all of our imports, including test imports.
-RUN go get -v -t ./...
-
-# Install the tcp-info binary into /go/bin
-RUN go install -v ./...
-
+# Get all of our imports and compile the tcp-info binary into /go/bin
+RUN go get -v \
+      -ldflags "-X github.com/m-lab/go/prometheusx.GitShortCommit=$(git log -1 --format=%h)" \
+      .
 
 # Build the image containing both binaries.
 FROM alpine
@@ -34,8 +32,9 @@ COPY --from=zstd-builder /src/LICENSE /licences/zstd/
 # Copy the tcp-info binary.
 COPY --from=tcp-info-builder /go/bin/tcp-info /bin/tcp-info
 
-# TODO - Make the destination directory flag controlled.
-# Probably should default to /var/spool/tcp-info/
+# This WORKDIR should be mostly unused, because the tcp-info binary takes a
+# flag of the form --output=dir, and we expect all users should pass in that
+# flag.
 WORKDIR /home
 
 ENTRYPOINT ["/bin/tcp-info"]
