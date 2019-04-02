@@ -194,6 +194,10 @@ func (pm *ParsedMessage) Compare(previous *ParsedMessage) (ChangeType, error) {
 
 	// TODO - should we validate that ID matches?  Otherwise, we shouldn't even be comparing the rest.
 
+	// We now allocate only the size
+	if len(previous.Attributes) <= inetdiag.INET_DIAG_INFO || len(pm.Attributes) <= inetdiag.INET_DIAG_INFO {
+		return NoTCPInfo, nil
+	}
 	a := previous.Attributes[inetdiag.INET_DIAG_INFO]
 	b := pm.Attributes[inetdiag.INET_DIAG_INFO]
 	if a == nil || b == nil {
