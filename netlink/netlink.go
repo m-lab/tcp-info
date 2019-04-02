@@ -194,6 +194,10 @@ func (pm *ParsedMessage) Compare(previous *ParsedMessage) (ChangeType, error) {
 
 	// TODO - should we validate that ID matches?  Otherwise, we shouldn't even be comparing the rest.
 
+	// We now allocate only the size
+	if len(previous.Attributes) <= inetdiag.INET_DIAG_INFO || len(pm.Attributes) <= inetdiag.INET_DIAG_INFO {
+		return NoTCPInfo, nil
+	}
 	a := previous.Attributes[inetdiag.INET_DIAG_INFO]
 	b := pm.Attributes[inetdiag.INET_DIAG_INFO]
 	if a == nil || b == nil {
@@ -213,7 +217,17 @@ func (pm *ParsedMessage) Compare(previous *ParsedMessage) (ChangeType, error) {
 	}
 
 	// If any attributes have been added or removed, that is likely significant.
+	if len(previous.Attributes) < len(pm.Attributes) {
+		return NewAttribute, nil
+	}
+	if len(previous.Attributes) > len(pm.Attributes) {
+		return LostAttribute, nil
+	}
+	// Both slices are the same length, check for other differences...
 	for tp := range previous.Attributes {
+		if tp >= len(pm.Attributes) {
+			return LostAttribute, nil
+		}
 		switch tp {
 		case inetdiag.INET_DIAG_INFO:
 			// Handled explicitly above.
