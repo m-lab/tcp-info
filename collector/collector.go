@@ -18,12 +18,12 @@ var (
 	localCount = 0
 )
 
-func appendAll(all []*netlink.ParsedMessage, msgs []*syscall.NetlinkMessage, skipLocal bool) []*netlink.ParsedMessage {
+func appendAll(all []*netlink.ArchivalRecord, msgs []*syscall.NetlinkMessage, skipLocal bool) []*netlink.ArchivalRecord {
 	// We use UTC, and truncate to millisecond to improve compression.
 	// Since the syscall to collect the data takes multiple milliseconds, this truncation seems reasonable.
 	ts := time.Now().UTC().Truncate(time.Millisecond)
 	for i := range msgs {
-		pm, err := netlink.ParseNetlinkMessage(msgs[i], skipLocal)
+		pm, err := netlink.ParseRecord(msgs[i], skipLocal)
 		if err != nil {
 			log.Println(err)
 			errCount++
@@ -39,10 +39,10 @@ func appendAll(all []*netlink.ParsedMessage, msgs []*syscall.NetlinkMessage, ski
 
 // collectDefaultNamespace collects all AF_INET6 and AF_INET connection stats, and sends them
 // to svr.
-func collectDefaultNamespace(svr chan<- []*netlink.ParsedMessage, skipLocal bool) (int, int) {
+func collectDefaultNamespace(svr chan<- []*netlink.ArchivalRecord, skipLocal bool) (int, int) {
 	// Preallocate space for up to 500 connections.  We may want to adjust this upwards if profiling
 	// indicates a lot of reallocation.
-	all := make([]*netlink.ParsedMessage, 0, 500)
+	all := make([]*netlink.ArchivalRecord, 0, 500)
 	remoteCount := 0
 	res6, err := OneType(syscall.AF_INET6)
 	if err != nil {
@@ -69,7 +69,7 @@ func collectDefaultNamespace(svr chan<- []*netlink.ParsedMessage, skipLocal bool
 
 // Run the collector, either for the specified number of loops, or, if the
 // number specified is infinite, run forever.
-func Run(ctx context.Context, reps int, svrChan chan<- []*netlink.ParsedMessage, cl saver.CacheLogger, skipLocal bool) (localCount, errCount int) {
+func Run(ctx context.Context, reps int, svrChan chan<- []*netlink.ArchivalRecord, cl saver.CacheLogger, skipLocal bool) (localCount, errCount int) {
 	totalCount := 0
 	remoteCount := 0
 	loops := 0

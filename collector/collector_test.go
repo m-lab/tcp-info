@@ -68,7 +68,7 @@ func TestRun(t *testing.T) {
 	port := findPort()
 
 	// A nice big buffer on the channel
-	msgChan := make(chan []*netlink.ParsedMessage, 10000)
+	msgChan := make(chan []*netlink.ArchivalRecord, 10000)
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -96,7 +96,7 @@ func TestRun(t *testing.T) {
 
 	// Make sure we receive multiple different messages regarding the open port
 	count := 0
-	var prev *netlink.ParsedMessage
+	var prev *netlink.ArchivalRecord
 	for msgs := range msgChan {
 		changed := false
 		for _, m := range msgs {

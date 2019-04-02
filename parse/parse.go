@@ -14,7 +14,7 @@ import (
 var ErrEmptyMessage = errors.New("Message should contain Metadata or RawIDM")
 
 // TODO - better names for ParsedMessage and Wrapper.
-func DecodeNetlink(pm *netlink.ParsedMessage) (*Wrapper, error) {
+func DecodeNetlink(pm *netlink.ArchivalRecord) (*Wrapper, error) {
 	var err error
 	result := Wrapper{}
 	result.Timestamp = pm.Timestamp

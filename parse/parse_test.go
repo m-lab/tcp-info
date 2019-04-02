@@ -37,7 +37,7 @@ func TestDecoding(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		pm, err := netlink.ParseNetlinkMessage(raw, false)
+		pm, err := netlink.ParseRecord(raw, false)
 		rtx.Must(err, "Could not parse test data")
 		// Parse doesn't fill the Timestamp, so for now, populate it with something...
 		pm.Timestamp = time.Date(2009, time.May, 29, 23, 59, 59, 0, time.UTC)
