@@ -16,6 +16,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/m-lab/tcp-info/cache"
@@ -135,10 +136,35 @@ func (conn *Connection) writeHeader() {
 }
 
 type stats struct {
-	TotalCount   int
-	NewCount     int
-	DiffCount    int
-	ExpiredCount int
+	TotalCount   int64
+	NewCount     int64
+	DiffCount    int64
+	ExpiredCount int64
+}
+
+func (s *stats) IncTotalCount() {
+	atomic.AddInt64(&s.TotalCount, 1)
+}
+
+func (s *stats) IncNewCount() {
+	atomic.AddInt64(&s.NewCount, 1)
+}
+
+func (s *stats) IncDiffCount() {
+	atomic.AddInt64(&s.DiffCount, 1)
+}
+
+func (s *stats) IncExpiredCount() {
+	atomic.AddInt64(&s.ExpiredCount, 1)
+}
+
+func (s *stats) Copy() stats {
+	result := stats{}
+	result.TotalCount = atomic.LoadInt64(&s.TotalCount)
+	result.NewCount = atomic.LoadInt64(&s.NewCount)
+	result.DiffCount = atomic.LoadInt64(&s.DiffCount)
+	result.ExpiredCount = atomic.LoadInt64(&s.ExpiredCount)
+	return result
 }
 
 // Print prints out some basic stats about saver use.
@@ -269,14 +295,14 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*netlink.ArchivalRecor
 		for i := range residual {
 			// residual is the list of all keys that were not updated.
 			svr.endConn(i)
-			svr.stats.ExpiredCount++
+			svr.stats.IncExpiredCount()
 		}
 	}
 	svr.Close()
 }
 
 func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
-	svr.stats.TotalCount++
+	svr.stats.IncTotalCount() // TODO fix race
 	old, err := svr.cache.Update(pm)
 	if err != nil {
 		// TODO metric
@@ -284,7 +310,7 @@ func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
 		return
 	}
 	if old == nil {
-		svr.stats.NewCount++
+		svr.stats.IncNewCount()
 		err := svr.queue(pm)
 		if err != nil {
 			log.Println(err)
@@ -313,7 +339,7 @@ func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
 			return
 		}
 		if change > netlink.NoMajorChange {
-			svr.stats.DiffCount++
+			svr.stats.IncDiffCount()
 			err := svr.queue(pm)
 			if err != nil {
 				// TODO metric
@@ -340,9 +366,9 @@ func (svr *Saver) Close() {
 // LogCacheStats prints out some basic cache stats.
 // TODO - should also export all of these as Prometheus metrics.  (Issue #32)
 func (svr *Saver) LogCacheStats(localCount, errCount int) {
-	stats := svr.stats // Get a copy
+	stats := svr.stats.Copy() // Get a copy
 	log.Printf("Cache info total %d  local %d same %d diff %d new %d err %d\n",
-		stats.TotalCount+localCount, localCount,
-		stats.TotalCount-(errCount+stats.NewCount+stats.DiffCount+localCount),
+		stats.TotalCount+(int64)(localCount), localCount,
+		stats.TotalCount-((int64)(errCount)+stats.NewCount+stats.DiffCount+(int64)(localCount)),
 		stats.DiffCount, stats.NewCount, errCount)
 }
