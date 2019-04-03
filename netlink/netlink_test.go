@@ -2,6 +2,7 @@ package netlink_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -29,6 +30,10 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
+func toString(id inetdiag.InetDiagSockID) string {
+	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort())
+}
+
 func TestParseInetDiagMsg(t *testing.T) {
 	var data [100]byte
 	for i := range data {
@@ -38,7 +43,7 @@ func TestParseInetDiagMsg(t *testing.T) {
 	hdr, err := raw.Parse()
 	rtx.Must(err, "")
 
-	if hdr.ID.Interface() == 0 || hdr.ID.Cookie() == 0 || hdr.ID.DPort() == 0 || hdr.ID.String() == "" {
+	if hdr.ID.Interface() == 0 || hdr.ID.Cookie() == 0 || hdr.ID.DPort() == 0 || toString(hdr.ID) == "" {
 		t.Errorf("None of the accessed values should be zero")
 	}
 	if hdr.IDiagFamily != syscall.AF_INET {

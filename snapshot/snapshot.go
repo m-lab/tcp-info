@@ -32,13 +32,13 @@ func Decode(ar *netlink.ArchivalRecord) (*Snapshot, error) {
 			return nil, err
 		}
 	}
-	for i, raw := range ar.Attributes {
+	for t, raw := range ar.Attributes {
 		if raw == nil {
 			continue
 		}
 		rta := RouteAttrValue(raw)
 		ok := false
-		switch i {
+		switch t {
 		case inetdiag.INET_DIAG_MEMINFO:
 			result.MemInfo, ok = rta.ToMemInfo()
 		case inetdiag.INET_DIAG_INFO:
@@ -77,9 +77,9 @@ func Decode(ar *netlink.ArchivalRecord) (*Snapshot, error) {
 			log.Println("MD5SIGnot handled", len(rta))
 		default:
 			// TODO metric so we can alert.
-			log.Println("unhandled attribute type:", i)
+			log.Println("unhandled attribute type:", t)
 		}
-		bit := uint32(1) << uint8(i-1)
+		bit := uint32(1) << uint8(t-1)
 		result.Observed |= bit
 		if !ok {
 			result.NotFullyParsed |= bit
@@ -112,6 +112,9 @@ func maybeCopy(src []byte, size int) (unsafe.Pointer, bool) {
 func (raw RouteAttrValue) ToMemInfo() (*inetdiag.MemInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(inetdiag.MemInfo{}))
 	data, ok := maybeCopy(raw, structSize)
+	if !ok {
+		log.Println("not ok")
+	}
 	return (*inetdiag.MemInfo)(data), ok
 }
 
@@ -120,6 +123,9 @@ func (raw RouteAttrValue) ToMemInfo() (*inetdiag.MemInfo, bool) {
 func (raw RouteAttrValue) ToLinuxTCPInfo() (*tcp.LinuxTCPInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(tcp.LinuxTCPInfo{}))
 	data, ok := maybeCopy(raw, structSize)
+	if !ok {
+		log.Println("not ok")
+	}
 	return (*tcp.LinuxTCPInfo)(data), ok
 }
 
@@ -134,7 +140,8 @@ func (raw RouteAttrValue) ToVegasInfo() (*inetdiag.VegasInfo, bool) {
 // CongestionAlgorithm returns the congestion algorithm string
 // INET_DIAG_CONG
 func (raw RouteAttrValue) CongestionAlgorithm() (string, bool) {
-	return string(raw), len(raw) < 1
+	// This is sometimes empty, but that is valid, so we return true.
+	return string(raw[:len(raw)-1]), true
 }
 
 func (raw RouteAttrValue) toUint8() (uint8, bool) {
