@@ -51,18 +51,6 @@ func splitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
 	return RawInetDiagMsg(data[:align]), data[align:]
 }
 
-// RawNlMsgHdr contains a byte slice version of a syscall.NlMsgHdr
-type RawNlMsgHdr []byte
-
-// Parse returns the syscall.NlMsghdr
-func (raw RawNlMsgHdr) Parse() (*syscall.NlMsghdr, error) {
-	size := int(unsafe.Sizeof(syscall.NlMsghdr{}))
-	if len(raw) != size {
-		return nil, ErrParseFailed
-	}
-	return (*syscall.NlMsghdr)(unsafe.Pointer(&raw[0])), nil
-}
-
 // ParseRouteAttr parses a byte array into slice of NetlinkRouteAttr struct.
 // Derived from "github.com/vishvananda/netlink/nl/nl_linux.go"
 func ParseRouteAttr(b []byte) ([]syscall.NetlinkRouteAttr, error) {
@@ -303,6 +291,26 @@ func (pm *ArchivalRecord) Compare(previous *ArchivalRecord) (ChangeType, error) 
 /*                            Utilities for loading data                                     */
 /*********************************************************************************************/
 
+// LoadRawNetlinkMessage is a simple utility to read the next NetlinkMessage from a source reader,
+// e.g. from a file of naked binary netlink messages.
+// NOTE: This is a bit fragile if there are any bit errors in the message headers.
+func LoadRawNetlinkMessage(rdr io.Reader) (*syscall.NetlinkMessage, error) {
+	var header syscall.NlMsghdr
+	// TODO - should we pass in LittleEndian as a parameter?
+	err := binary.Read(rdr, binary.LittleEndian, &header)
+	if err != nil {
+		// Note that this may be EOF
+		return nil, err
+	}
+	data := make([]byte, header.Len-uint32(binary.Size(header)))
+	err = binary.Read(rdr, binary.LittleEndian, data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &syscall.NetlinkMessage{Header: header, Data: data}, nil
+}
+
 // ArchiveReader produces ArchivedRecord structs from some source.
 type ArchiveReader interface {
 	// Next returns the next ArchivalRecord.  Returns nil, EOF if no more records, or other error if there is a problem.
@@ -320,21 +328,11 @@ func NewRawReader(rdr io.Reader) ArchiveReader {
 
 // Next decodes and returns the next ArchivalRecord.
 func (raw *rawReader) Next() (*ArchivalRecord, error) {
-	var header syscall.NlMsghdr
-	// TODO - should we pass in LittleEndian as a parameter?
-	err := binary.Read(raw.rdr, binary.LittleEndian, &header)
-	if err != nil {
-		// Note that this may be EOF
-		return nil, err
-	}
-	data := make([]byte, header.Len-uint32(binary.Size(header)))
-	err = binary.Read(raw.rdr, binary.LittleEndian, data)
+	msg, err := LoadRawNetlinkMessage(raw.rdr)
 	if err != nil {
 		return nil, err
 	}
-
-	msg := syscall.NetlinkMessage{Header: header, Data: data}
-	return MakeArchivalRecord(&msg, false)
+	return MakeArchivalRecord(msg, false)
 }
 
 type archiveReader struct {
@@ -378,24 +376,4 @@ func LoadAllArchivalRecords(rdr io.Reader) ([]*ArchivalRecord, error) {
 		}
 		msgs = append(msgs, pm)
 	}
-}
-
-// LoadRawNetlinkMessage is a simple utility to read the next NetlinkMessage from a source reader,
-// e.g. from a file of naked binary netlink messages.
-// NOTE: This is a bit fragile if there are any bit errors in the message headers.
-func LoadRawNetlinkMessage(rdr io.Reader) (*syscall.NetlinkMessage, error) {
-	var header syscall.NlMsghdr
-	// TODO - should we pass in LittleEndian as a parameter?
-	err := binary.Read(rdr, binary.LittleEndian, &header)
-	if err != nil {
-		// Note that this may be EOF
-		return nil, err
-	}
-	data := make([]byte, header.Len-uint32(binary.Size(header)))
-	err = binary.Read(rdr, binary.LittleEndian, data)
-	if err != nil {
-		return nil, err
-	}
-
-	return &syscall.NetlinkMessage{Header: header, Data: data}, nil
 }
