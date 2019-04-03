@@ -37,7 +37,7 @@ sudo apt-get update && sudo apt-get install -y zstd
 
 ## CSV tool
 
-The cmd/csvtool directory contains a tool for parsing netlink-JSONL and producing CSV files.  Currently reads netlink-jSONL from stdin and writes CSV to stdout.
+The cmd/csvtool directory contains a tool for parsing ArchivedRecord and producing CSV files.  Currently reads netlink-jSONL from stdin and writes CSV to stdout.
 
 
 # Code Layout
