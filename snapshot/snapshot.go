@@ -40,25 +40,25 @@ func Decode(ar *netlink.ArchivalRecord) (*Snapshot, error) {
 		ok := false
 		switch t {
 		case inetdiag.INET_DIAG_MEMINFO:
-			result.MemInfo, ok = rta.ToMemInfo()
+			result.MemInfo, ok = rta.toMemInfo()
 		case inetdiag.INET_DIAG_INFO:
-			result.TCPInfo, ok = rta.ToLinuxTCPInfo()
+			result.TCPInfo, ok = rta.toLinuxTCPInfo()
 		case inetdiag.INET_DIAG_VEGASINFO:
-			result.VegasInfo, ok = rta.ToVegasInfo()
+			result.VegasInfo, ok = rta.toVegasInfo()
 		case inetdiag.INET_DIAG_CONG:
 			result.CongestionAlgorithm, ok = rta.CongestionAlgorithm()
 		case inetdiag.INET_DIAG_TOS:
-			result.TOS, ok = rta.ToTOS()
+			result.TOS, ok = rta.toTOS()
 		case inetdiag.INET_DIAG_TCLASS:
-			result.TClass, ok = rta.ToTCLASS()
+			result.TClass, ok = rta.toTCLASS()
 		case inetdiag.INET_DIAG_SKMEMINFO:
-			result.SocketMem, ok = rta.ToSockMemInfo()
+			result.SocketMem, ok = rta.toSockMemInfo()
 		case inetdiag.INET_DIAG_SHUTDOWN:
-			result.Shutdown, ok = rta.ToShutdown()
+			result.Shutdown, ok = rta.toShutdown()
 		case inetdiag.INET_DIAG_DCTCPINFO:
-			result.DCTCPInfo, ok = rta.ToDCTCPInfo()
+			result.DCTCPInfo, ok = rta.toDCTCPInfo()
 		case inetdiag.INET_DIAG_PROTOCOL:
-			result.Protocol, ok = rta.ToProtocol()
+			result.Protocol, ok = rta.toProtocol()
 		case inetdiag.INET_DIAG_SKV6ONLY:
 			log.Println("SKV6ONLY not handled", len(rta))
 		case inetdiag.INET_DIAG_LOCALS:
@@ -68,9 +68,9 @@ func Decode(ar *netlink.ArchivalRecord) (*Snapshot, error) {
 		case inetdiag.INET_DIAG_PAD:
 			log.Println("PAD not handled", len(rta))
 		case inetdiag.INET_DIAG_MARK:
-			result.Mark, ok = rta.ToMark()
+			result.Mark, ok = rta.toMark()
 		case inetdiag.INET_DIAG_BBRINFO:
-			result.BBRInfo, ok = rta.ToBBRInfo()
+			result.BBRInfo, ok = rta.toBBRInfo()
 		case inetdiag.INET_DIAG_CLASS_ID:
 			log.Println("CLASS_ID not handled", len(rta))
 		case inetdiag.INET_DIAG_MD5SIG:
@@ -108,8 +108,8 @@ func maybeCopy(src []byte, size int) (unsafe.Pointer, bool) {
 	return unsafe.Pointer(&src[0]), len(src) == size
 }
 
-// ToMemInfo maps the raw RouteAttrValue onto a MemInfo.
-func (raw RouteAttrValue) ToMemInfo() (*inetdiag.MemInfo, bool) {
+// toMemInfo maps the raw RouteAttrValue onto a MemInfo.
+func (raw RouteAttrValue) toMemInfo() (*inetdiag.MemInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(inetdiag.MemInfo{}))
 	data, ok := maybeCopy(raw, structSize)
 	if !ok {
@@ -118,9 +118,9 @@ func (raw RouteAttrValue) ToMemInfo() (*inetdiag.MemInfo, bool) {
 	return (*inetdiag.MemInfo)(data), ok
 }
 
-// ToLinuxTCPInfo maps the raw RouteAttrValue into a LinuxTCPInfo struct.
+// toLinuxTCPInfo maps the raw RouteAttrValue into a LinuxTCPInfo struct.
 // For older data, it may have to copy the bytes.
-func (raw RouteAttrValue) ToLinuxTCPInfo() (*tcp.LinuxTCPInfo, bool) {
+func (raw RouteAttrValue) toLinuxTCPInfo() (*tcp.LinuxTCPInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(tcp.LinuxTCPInfo{}))
 	data, ok := maybeCopy(raw, structSize)
 	if !ok {
@@ -129,9 +129,9 @@ func (raw RouteAttrValue) ToLinuxTCPInfo() (*tcp.LinuxTCPInfo, bool) {
 	return (*tcp.LinuxTCPInfo)(data), ok
 }
 
-// ToVegasInfo maps the raw RouteAttrValue onto a VegasInfo.
+// toVegasInfo maps the raw RouteAttrValue onto a VegasInfo.
 // For older data, it may have to copy the bytes.
-func (raw RouteAttrValue) ToVegasInfo() (*inetdiag.VegasInfo, bool) {
+func (raw RouteAttrValue) toVegasInfo() (*inetdiag.VegasInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(inetdiag.VegasInfo{}))
 	data, ok := maybeCopy(raw, structSize)
 	return (*inetdiag.VegasInfo)(data), ok
@@ -151,51 +151,51 @@ func (raw RouteAttrValue) toUint8() (uint8, bool) {
 	return uint8(raw[0]), true
 }
 
-// ToTOS marshals the TCP Type Of Service field.  See https://tools.ietf.org/html/rfc3168
-func (raw RouteAttrValue) ToTOS() (uint8, bool) {
+// toTOS marshals the TCP Type Of Service field.  See https://tools.ietf.org/html/rfc3168
+func (raw RouteAttrValue) toTOS() (uint8, bool) {
 	return raw.toUint8()
 }
 
-// ToTCLASS marshals the TCP Traffic Class octet.  See https://tools.ietf.org/html/rfc3168
-func (raw RouteAttrValue) ToTCLASS() (uint8, bool) {
+// toTCLASS marshals the TCP Traffic Class octet.  See https://tools.ietf.org/html/rfc3168
+func (raw RouteAttrValue) toTCLASS() (uint8, bool) {
 	return raw.toUint8()
 }
 
-// ToSockMemInfo maps the raw RouteAttrValue onto a SockMemInfo.
+// toSockMemInfo maps the raw RouteAttrValue onto a SockMemInfo.
 // For older data, it may have to copy the bytes.
-func (raw RouteAttrValue) ToSockMemInfo() (*inetdiag.SocketMemInfo, bool) {
+func (raw RouteAttrValue) toSockMemInfo() (*inetdiag.SocketMemInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(inetdiag.SocketMemInfo{}))
 	data, ok := maybeCopy(raw, structSize)
 	return (*inetdiag.SocketMemInfo)(data), ok
 }
 
-func (raw RouteAttrValue) ToShutdown() (uint8, bool) {
+func (raw RouteAttrValue) toShutdown() (uint8, bool) {
 	return raw.toUint8()
 }
 
-// ToVegasInfo maps the raw RouteAttrValue onto a VegasInfo.
+// toVegasInfo maps the raw RouteAttrValue onto a VegasInfo.
 // For older data, it may have to copy the bytes.
-func (raw RouteAttrValue) ToDCTCPInfo() (*inetdiag.DCTCPInfo, bool) {
+func (raw RouteAttrValue) toDCTCPInfo() (*inetdiag.DCTCPInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(inetdiag.DCTCPInfo{}))
 	data, ok := maybeCopy(raw, structSize)
 	return (*inetdiag.DCTCPInfo)(data), ok
 }
 
-func (raw RouteAttrValue) ToProtocol() (inetdiag.Protocol, bool) {
+func (raw RouteAttrValue) toProtocol() (inetdiag.Protocol, bool) {
 	p, ok := raw.toUint8()
 	return inetdiag.Protocol(p), ok
 }
 
-func (raw RouteAttrValue) ToMark() (uint32, bool) {
+func (raw RouteAttrValue) toMark() (uint32, bool) {
 	if raw == nil || len(raw) != 4 {
 		return 0, false
 	}
 	return *(*uint32)(unsafe.Pointer(&raw[0])), true
 }
 
-// ToBBRInfo maps the raw RouteAttrValue onto a BBRInfo.
+// toBBRInfo maps the raw RouteAttrValue onto a BBRInfo.
 // For older data, it may have to copy the bytes.
-func (raw RouteAttrValue) ToBBRInfo() (*inetdiag.BBRInfo, bool) {
+func (raw RouteAttrValue) toBBRInfo() (*inetdiag.BBRInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(inetdiag.BBRInfo{}))
 	data, ok := maybeCopy(raw, structSize)
 	return (*inetdiag.BBRInfo)(data), ok

@@ -169,10 +169,10 @@ func (s *stats) Copy() stats {
 
 // Print prints out some basic stats about saver use.
 // TODO - should also export all of these as Prometheus metrics.  (Issue #32)
-func (stats *stats) Print() {
+func (s *stats) Print() {
 	log.Printf("Cache info total %d same %d diff %d new %d closed %d\n",
-		stats.TotalCount, stats.TotalCount-(stats.NewCount+stats.DiffCount),
-		stats.DiffCount, stats.NewCount, stats.ExpiredCount)
+		s.TotalCount, s.TotalCount-(s.NewCount+s.DiffCount),
+		s.DiffCount, s.NewCount, s.ExpiredCount)
 }
 
 // Saver provides functionality for saving tcpinfo diffs to connection files.
