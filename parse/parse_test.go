@@ -27,7 +27,7 @@ func TestDecoding(t *testing.T) {
 	log.Println("Reading messages from", source)
 	rdr := zstd.NewReader(source)
 	parsed := int64(0)
-	var fields uint32
+	var observed uint32
 	for {
 		raw, err := netlink.LoadNext(rdr)
 		if err != nil {
@@ -42,15 +42,15 @@ func TestDecoding(t *testing.T) {
 		// Parse doesn't fill the Timestamp, so for now, populate it with something...
 		pm.Timestamp = time.Date(2009, time.May, 29, 23, 59, 59, 0, time.UTC)
 
-		wrapper, err := parse.DecodeNetlink(pm)
+		snapshot, err := parse.DecodeNetlink(pm)
 		if err != nil {
 			t.Error(err)
 		}
-		fields |= wrapper.FieldMask
+		observed |= snapshot.Observed
 		parsed++
 	}
 
-	if fields != (1<<inetdiag.INET_DIAG_MAX)-1 {
+	if observed != (1<<inetdiag.INET_DIAG_MAX)-1 {
 		// Uncomment to see which fields are untested.
 		// t.Errorf("Fields %0X\n", fields)
 	}
