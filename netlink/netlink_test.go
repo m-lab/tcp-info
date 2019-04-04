@@ -204,7 +204,7 @@ func TestReader(t *testing.T) {
 	rdr := zstd.NewReader(source)
 	parsed := int64(0)
 	for {
-		_, err := netlink.LoadNext(rdr)
+		_, err := netlink.LoadRawNetlinkMessage(rdr)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -279,7 +279,7 @@ func TestNLMsgSerialize(t *testing.T) {
 	rdr := zstd.NewReader(source)
 	parsed := 0
 	for {
-		msg, err := netlink.LoadNext(rdr)
+		msg, err := netlink.LoadRawNetlinkMessage(rdr)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -334,7 +334,7 @@ func TestCompressionSize(t *testing.T) {
 	ts := time.Now()
 
 	for {
-		msg, err := netlink.LoadNext(rdr)
+		msg, err := netlink.LoadRawNetlinkMessage(rdr)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -390,7 +390,7 @@ func BenchmarkNLMsgSerialize(b *testing.B) {
 	msgs := make([]*netlink.ArchivalRecord, 0, 200)
 
 	for {
-		msg, err := netlink.LoadNext(rdr)
+		msg, err := netlink.LoadRawNetlinkMessage(rdr)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -426,7 +426,7 @@ func BenchmarkNLMsgParseSerializeCompress(b *testing.B) {
 	msgs := make([]*netlink.ArchivalRecord, 0, 200)
 
 	for {
-		msg, err := netlink.LoadNext(rdr)
+		msg, err := netlink.LoadRawNetlinkMessage(rdr)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -465,4 +465,32 @@ func BenchmarkNLMsgParseSerializeCompress(b *testing.B) {
 	w.Close()
 }
 
-// TODO: add whitebox testing of socket-monitor to exercise error handling.
+func Test_rawReader_Next(t *testing.T) {
+	source := "testdata/testdata.zst"
+	log.Println("Reading messages from", source)
+	rdr := zstd.NewReader(source)
+	defer rdr.Close()
+	raw := netlink.NewRawReader(rdr)
+	wtr, err := zstd.NewWriter("archiveRecords.zstd")
+	rtx.Must(err, "Failed creating zstd writer")
+	defer wtr.Close()
+
+	parsed := 0
+	for {
+		_, err := raw.Next()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatal(err)
+		}
+		parsed++
+	}
+	if parsed != 420 {
+		t.Error("Wrong count:", parsed)
+	}
+}
+
+func Test_archiveReader_Next(t *testing.T) {
+	// TODO
+}

@@ -1,4 +1,6 @@
-package parse
+// Package snapshot contains code to generate Snapshots from ArchiveRecords, and utilities to
+// load them from files.
+package snapshot
 
 import (
 	"errors"
@@ -14,8 +16,8 @@ import (
 // ErrEmptyRecord is returned if an ArchivalRecord is empty.
 var ErrEmptyRecord = errors.New("Message should contain Metadata or RawIDM")
 
-// DecodeNetlink decodes a netlink.ArchivalRecord into a single Snapshot
-func DecodeNetlink(ar *netlink.ArchivalRecord) (*Snapshot, error) {
+// Decode decodes a netlink.ArchivalRecord into a single Snapshot
+func Decode(ar *netlink.ArchivalRecord) (*Snapshot, error) {
 	var err error
 	result := Snapshot{}
 	result.Timestamp = ar.Timestamp
@@ -236,4 +238,32 @@ type Snapshot struct {
 type ConnectionLog struct {
 	Metadata  netlink.Metadata
 	Snapshots []Snapshot
+}
+
+// Reader wraps an ArchiveReader to provide a Snapshot reader.
+type Reader struct {
+	archiveReader netlink.ArchiveReader
+}
+
+// NewReader wraps an ArchiveReader and provides Next()
+func NewReader(ar netlink.ArchiveReader) *Reader {
+	return &Reader{archiveReader: ar}
+}
+
+var zeroTime = time.Time{}
+
+// Next reads, parses and returns the next Snapshot
+func (rdr Reader) Next() (*Snapshot, error) {
+	ar, err := rdr.archiveReader.Next()
+	if err != nil {
+		return nil, err
+	}
+
+	// HACK
+	// Parse doesn't fill the Timestamp, so for now, populate it with something...
+	if ar.Timestamp == zeroTime {
+		ar.Timestamp = time.Date(2009, time.May, 29, 23, 59, 59, 0, time.UTC)
+	}
+
+	return Decode(ar)
 }

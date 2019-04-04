@@ -2,8 +2,10 @@
 package netlink
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -301,9 +303,87 @@ func (pm *ArchivalRecord) Compare(previous *ArchivalRecord) (ChangeType, error) 
 /*                            Utilities for loading data                                     */
 /*********************************************************************************************/
 
-// LoadNext is a simple utility to read the next NetlinkMessage from a source reader,
-// e.g. from a file of saved netlink messages.
-func LoadNext(rdr io.Reader) (*syscall.NetlinkMessage, error) {
+// ArchiveReader produces ArchivedRecord structs from some source.
+type ArchiveReader interface {
+	// Next returns the next ArchivalRecord.  Returns nil, EOF if no more records, or other error if there is a problem.
+	Next() (*ArchivalRecord, error)
+}
+
+type rawReader struct {
+	rdr io.Reader
+}
+
+// NewRawReader wraps an io.Reader to create and ArchiveReader
+func NewRawReader(rdr io.Reader) ArchiveReader {
+	return &rawReader{rdr: rdr}
+}
+
+// Next decodes and returns the next ArchivalRecord.
+func (raw *rawReader) Next() (*ArchivalRecord, error) {
+	var header syscall.NlMsghdr
+	// TODO - should we pass in LittleEndian as a parameter?
+	err := binary.Read(raw.rdr, binary.LittleEndian, &header)
+	if err != nil {
+		// Note that this may be EOF
+		return nil, err
+	}
+	data := make([]byte, header.Len-uint32(binary.Size(header)))
+	err = binary.Read(raw.rdr, binary.LittleEndian, data)
+	if err != nil {
+		return nil, err
+	}
+
+	msg := syscall.NetlinkMessage{Header: header, Data: data}
+	return ParseRecord(&msg, false)
+}
+
+type archiveReader struct {
+	scanner *bufio.Scanner
+}
+
+// NewArchiveReader wraps a source of JSONL ArchiveRecords to create ArchiveReader
+func NewArchiveReader(rdr io.Reader) ArchiveReader {
+	sc := bufio.NewScanner(rdr)
+	return &archiveReader{scanner: sc}
+}
+
+// Next decodes and returns the next ArchivalRecord.
+func (ar *archiveReader) Next() (*ArchivalRecord, error) {
+	if !ar.scanner.Scan() {
+		return nil, io.EOF
+	}
+	buf := ar.scanner.Bytes()
+
+	record := ArchivalRecord{}
+	err := json.Unmarshal(buf, &record)
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
+// LoadAllArchivalRecords reads all PMs from a jsonl stream.
+func LoadAllArchivalRecords(rdr io.Reader) ([]*ArchivalRecord, error) {
+	msgs := make([]*ArchivalRecord, 0, 2000) // We typically read a large number of records
+
+	pmr := NewArchiveReader(rdr)
+
+	for {
+		pm, err := pmr.Next()
+		if err != nil {
+			if err == io.EOF {
+				return msgs, nil
+			}
+			return msgs, err
+		}
+		msgs = append(msgs, pm)
+	}
+}
+
+// LoadRawNetlinkMessage is a simple utility to read the next NetlinkMessage from a source reader,
+// e.g. from a file of naked binary netlink messages.
+// NOTE: This is a bit fragile if there are any bit errors in the message headers.
+func LoadRawNetlinkMessage(rdr io.Reader) (*syscall.NetlinkMessage, error) {
 	var header syscall.NlMsghdr
 	// TODO - should we pass in LittleEndian as a parameter?
 	err := binary.Read(rdr, binary.LittleEndian, &header)
@@ -318,31 +398,4 @@ func LoadNext(rdr io.Reader) (*syscall.NetlinkMessage, error) {
 	}
 
 	return &syscall.NetlinkMessage{Header: header, Data: data}, nil
-}
-
-// ArchiveReader wraps an io.Reader, reads Netlink JSONL messages, and produces ArchivedRecord structs.
-type ArchiveReader struct {
-	rdr io.Reader
-}
-
-func NewArchiveReader(rdr io.Reader) *ArchiveReader {
-	return &ArchiveReader{rdr: rdr}
-}
-
-func (pmr *ArchiveReader) Next() (*ArchivalRecord, error) {
-	var header syscall.NlMsghdr
-	// TODO - should we pass in LittleEndian as a parameter?
-	err := binary.Read(pmr.rdr, binary.LittleEndian, &header)
-	if err != nil {
-		// Note that this may be EOF
-		return nil, err
-	}
-	data := make([]byte, header.Len-uint32(binary.Size(header)))
-	err = binary.Read(pmr.rdr, binary.LittleEndian, data)
-	if err != nil {
-		return nil, err
-	}
-
-	msg := syscall.NetlinkMessage{Header: header, Data: data}
-	return ParseRecord(&msg, false)
 }
