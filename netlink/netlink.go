@@ -120,10 +120,10 @@ type ArchivalRecord struct {
 	Metadata *Metadata `json:",omitempty"`
 }
 
-// ParseRecord parses the NetlinkMessage into a ArchivalRecord.  If skipLocal is true, it will return nil for
+// MakeArchivalRecord parses the NetlinkMessage into a ArchivalRecord.  If skipLocal is true, it will return nil for
 // loopback, local unicast, multicast, and unspecified connections.
 // Note that Parse does not populate the Timestamp field, so caller should do so.
-func ParseRecord(msg *syscall.NetlinkMessage, skipLocal bool) (*ArchivalRecord, error) {
+func MakeArchivalRecord(msg *syscall.NetlinkMessage, skipLocal bool) (*ArchivalRecord, error) {
 	if msg.Header.Type != 20 {
 		return nil, ErrNotType20
 	}
@@ -334,7 +334,7 @@ func (raw *rawReader) Next() (*ArchivalRecord, error) {
 	}
 
 	msg := syscall.NetlinkMessage{Header: header, Data: data}
-	return ParseRecord(&msg, false)
+	return MakeArchivalRecord(&msg, false)
 }
 
 type archiveReader struct {

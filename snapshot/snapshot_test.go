@@ -22,7 +22,7 @@ func init() {
 
 func TestRawReader(t *testing.T) {
 	source := "testdata/testdata.zst"
-	log.Println("Reading messages from", source)
+	t.Log("Reading messages from", source)
 	rdr := zstd.NewReader(source)
 	defer rdr.Close()
 	arReader := netlink.NewRawReader(rdr)
@@ -55,7 +55,7 @@ func TestRawReader(t *testing.T) {
 
 func TestDecodeArchiveRecords(t *testing.T) {
 	source := "testdata/archiveRecords.zst"
-	log.Println("Reading messages from", source)
+	t.Log("Reading messages from", source)
 	rdr := zstd.NewReader(source)
 	defer rdr.Close()
 	arReader := netlink.NewArchiveReader(rdr)

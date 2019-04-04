@@ -23,7 +23,7 @@ func appendAll(all []*netlink.ArchivalRecord, msgs []*syscall.NetlinkMessage, sk
 	// Since the syscall to collect the data takes multiple milliseconds, this truncation seems reasonable.
 	ts := time.Now().UTC().Truncate(time.Millisecond)
 	for i := range msgs {
-		pm, err := netlink.ParseRecord(msgs[i], skipLocal)
+		pm, err := netlink.MakeArchivalRecord(msgs[i], skipLocal)
 		if err != nil {
 			log.Println(err)
 			errCount++

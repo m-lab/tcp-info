@@ -28,7 +28,7 @@ func fakeMsg(t *testing.T, cookie uint64, dport uint16) netlink.ArchivalRecord {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mp, err := netlink.ParseRecord(&nm, true)
+	mp, err := netlink.MakeArchivalRecord(&nm, true)
 	if err != nil {
 		t.Fatal(err)
 	}

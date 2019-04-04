@@ -27,26 +27,26 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-func dump(mp *netlink.ArchivalRecord) {
+func dump(t *testing.T, mp *netlink.ArchivalRecord) {
 	for i := range mp.Attributes {
 		a := mp.Attributes[i]
 		if a != nil {
-			log.Printf("%d %d %+v\n", i, len(a), a)
+			t.Logf("%d %d %+v\n", i, len(a), a)
 		}
 	}
 }
 
-func msg(cookie uint64, dport uint16) *netlink.ArchivalRecord {
+func msg(t *testing.T, cookie uint64, dport uint16) *netlink.ArchivalRecord {
 	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
 	nm := syscall.NetlinkMessage{}
 	err := json.Unmarshal([]byte(json1), &nm)
 	if err != nil {
-		log.Println(err)
+		t.Log(err)
 		return nil
 	}
-	mp, err := netlink.ParseRecord(&nm, true)
+	mp, err := netlink.MakeArchivalRecord(&nm, true)
 	if err != nil {
-		log.Println(err)
+		t.Log(err)
 		return nil
 	}
 	idm, err := mp.RawIDM.Parse()
@@ -59,7 +59,7 @@ func msg(cookie uint64, dport uint16) *netlink.ArchivalRecord {
 		dport >>= 8
 	}
 	//pm.SetIDM(idm)
-	log.Printf("%+v\n", mp.RawIDM)
+	t.Logf("%+v\n", mp.RawIDM)
 	return mp
 }
 
@@ -96,26 +96,26 @@ func TestBasic(t *testing.T) {
 	go svr.MessageSaverLoop(svrChan)
 
 	// This round just initializes the cache.
-	m1 := []*netlink.ArchivalRecord{msg(11234, 11234), msg(235, 235)}
-	dump(m1[0])
+	m1 := []*netlink.ArchivalRecord{msg(t, 11234, 11234), msg(t, 235, 235)}
+	dump(t, m1[0])
 	svrChan <- m1
 
 	// This should NOT write to file, because nothing changed
-	m2 := []*netlink.ArchivalRecord{msg(1234, 1234), msg(234, 234)}
+	m2 := []*netlink.ArchivalRecord{msg(t, 1234, 1234), msg(t, 234, 234)}
 	svrChan <- m2
 
 	// This changes the first connection, and ends the second connection.
-	m3 := []*netlink.ArchivalRecord{msg(1234, 1234)}
+	m3 := []*netlink.ArchivalRecord{msg(t, 1234, 1234)}
 	m3[0].Attributes[inetdiag.INET_DIAG_INFO][20] = 127
 	svrChan <- m3
 
 	// This changes the first connecti:on again.
-	m4 := []*netlink.ArchivalRecord{msg(1234, 1234)}
+	m4 := []*netlink.ArchivalRecord{msg(t, 1234, 1234)}
 	m3[0].Attributes[inetdiag.INET_DIAG_INFO][20] = 127
 	m4[0].Attributes[inetdiag.INET_DIAG_INFO][105] = 127
 	svrChan <- m4
 
-	m5 := []*netlink.ArchivalRecord{msg(1234, 1234)}
+	m5 := []*netlink.ArchivalRecord{msg(t, 1234, 1234)}
 	svrChan <- m5
 	// Force close all the files.
 	close(svrChan)

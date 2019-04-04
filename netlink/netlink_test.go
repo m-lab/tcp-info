@@ -127,7 +127,7 @@ func TestParse(t *testing.T) {
 	nm := syscall.NetlinkMessage{}
 	err := json.Unmarshal([]byte(json1), &nm)
 	rtx.Must(err, "")
-	mp, err := netlink.ParseRecord(&nm, true)
+	mp, err := netlink.MakeArchivalRecord(&nm, true)
 	rtx.Must(err, "")
 	idm, err := mp.RawIDM.Parse()
 	rtx.Must(err, "")
@@ -158,20 +158,20 @@ func TestParseGarbage(t *testing.T) {
 	nm := syscall.NetlinkMessage{}
 	err := json.Unmarshal([]byte(good), &nm)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	// Truncate the data down to something that makes no sense.
 	badNm := nm
 	badNm.Data = badNm.Data[:1]
-	_, err = netlink.ParseRecord(&badNm, true)
+	_, err = netlink.MakeArchivalRecord(&badNm, true)
 	if err == nil {
 		t.Error("The parse should have failed")
 	}
 
 	// Replace the header type with one that we don't support.
 	nm.Header.Type = 10
-	_, err = netlink.ParseRecord(&nm, false)
+	_, err = netlink.MakeArchivalRecord(&nm, false)
 	if err == nil {
 		t.Error("Should detect wrong type")
 	}
@@ -184,14 +184,14 @@ func TestParseGarbage(t *testing.T) {
 		nm.Data[i] = byte(i)
 	}
 
-	_, err = netlink.ParseRecord(&nm, false)
+	_, err = netlink.MakeArchivalRecord(&nm, false)
 	if err == nil || err.Error() != "invalid argument" {
 		t.Error(err)
 	}
 
 	// Replace length with garbage so that data is incomplete.
 	nm.Header.Len = 400
-	_, err = netlink.ParseRecord(&nm, false)
+	_, err = netlink.MakeArchivalRecord(&nm, false)
 	if err == nil || err.Error() != "invalid argument" {
 		t.Error(err)
 	}
@@ -200,7 +200,7 @@ func TestReader(t *testing.T) {
 	// Cache info new 140  err 0 same 277 local 789 diff 3 total 1209
 	// 1209 sockets 143 remotes 403 per iteration
 	source := "testdata/testdata.zst"
-	log.Println("Reading messages from", source)
+	t.Log("Reading messages from", source)
 	rdr := zstd.NewReader(source)
 	parsed := int64(0)
 	for {
@@ -223,22 +223,22 @@ func TestCompare(t *testing.T) {
 	nm := syscall.NetlinkMessage{}
 	err := json.Unmarshal([]byte(json1), &nm)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
-	mp1, err := netlink.ParseRecord(&nm, true)
+	mp1, err := netlink.MakeArchivalRecord(&nm, true)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	// Another independent copy.
 	nm2 := syscall.NetlinkMessage{}
 	err = json.Unmarshal([]byte(json1), &nm2)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
-	mp2, err := netlink.ParseRecord(&nm2, true)
+	mp2, err := netlink.MakeArchivalRecord(&nm2, true)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	// INET_DIAG_INFO Last... fields should be ignored
@@ -275,7 +275,7 @@ func TestCompare(t *testing.T) {
 
 func TestNLMsgSerialize(t *testing.T) {
 	source := "testdata/testdata.zst"
-	log.Println("Reading messages from", source)
+	t.Log("Reading messages from", source)
 	rdr := zstd.NewReader(source)
 	parsed := 0
 	for {
@@ -286,7 +286,7 @@ func TestNLMsgSerialize(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		pm, err := netlink.ParseRecord(msg, false)
+		pm, err := netlink.MakeArchivalRecord(msg, false)
 		rtx.Must(err, "Could not parse test data")
 		// Parse doesn't fill the Timestamp, so for now, populate it with something...
 		pm.Timestamp = time.Date(2009, time.May, 29, 23, 59, 59, 0, time.UTC)
@@ -308,8 +308,8 @@ func TestNLMsgSerialize(t *testing.T) {
 			}
 		}
 		if parsed < 3 {
-			log.Println(string(s))
-			log.Printf("%+v\n", *pm)
+			t.Log(string(s))
+			t.Logf("%+v\n", *pm)
 		}
 
 		parsed++
@@ -327,7 +327,7 @@ func TestCompressionSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Println("Reading messages from", source)
+	t.Log("Reading messages from", source)
 	rdr := zstd.NewReader(source)
 	msgs := make([]*netlink.ArchivalRecord, 0, 200)
 
@@ -341,7 +341,7 @@ func TestCompressionSize(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		pm, err := netlink.ParseRecord(msg, false)
+		pm, err := netlink.MakeArchivalRecord(msg, false)
 		pm.Timestamp = ts.Truncate(time.Millisecond).UTC()
 		ts = ts.Add(6 * time.Millisecond)
 		rtx.Must(err, "Could not parse test data")
@@ -360,18 +360,18 @@ func TestCompressionSize(t *testing.T) {
 	for _, m := range msgs {
 		jsonBytes, err := json.Marshal(m)
 		if total < 5 {
-			log.Println(string(jsonBytes))
+			t.Log(string(jsonBytes))
 		}
 		rtx.Must(err, "Could not serialize %v", m)
 		w.Write(jsonBytes)
 		total++
 	}
-	log.Println("Total", total)
+	t.Log("Total", total)
 	w.Close()
-	log.Printf("Raw zstd (no timestamp): %s, %d, %6.1f bytes/record\n", srcInfo.Name(), srcInfo.Size(), float32(srcInfo.Size())/float32(total))
+	t.Logf("Raw zstd (no timestamp): %s, %d, %6.1f bytes/record\n", srcInfo.Name(), srcInfo.Size(), float32(srcInfo.Size())/float32(total))
 	stats, err := os.Stat(fn)
 	rtx.Must(err, "")
-	log.Printf("Json zstd: %s, %d, %6.1f bytes/record\n", stats.Name(), stats.Size(), float32(stats.Size())/float32(total))
+	t.Logf("Json zstd: %s, %d, %6.1f bytes/record\n", stats.Name(), stats.Size(), float32(stats.Size())/float32(total))
 
 	// The bytes/record criterion was determined using zstd 1.3.8.
 	// These may change with different zstd versions.
@@ -385,7 +385,7 @@ func TestCompressionSize(t *testing.T) {
 func BenchmarkNLMsgSerialize(b *testing.B) {
 	b.StopTimer()
 	source := "testdata/testdata.zst"
-	log.Println("Reading messages from", source)
+	b.Log("Reading messages from", source)
 	rdr := zstd.NewReader(source)
 	msgs := make([]*netlink.ArchivalRecord, 0, 200)
 
@@ -397,7 +397,7 @@ func BenchmarkNLMsgSerialize(b *testing.B) {
 			}
 			b.Fatal(err)
 		}
-		pm, err := netlink.ParseRecord(msg, false)
+		pm, err := netlink.MakeArchivalRecord(msg, false)
 		rtx.Must(err, "Could not parse test data")
 		msgs = append(msgs, pm)
 	}
@@ -420,7 +420,7 @@ func BenchmarkNLMsgSerialize(b *testing.B) {
 func BenchmarkNLMsgParseSerializeCompress(b *testing.B) {
 	b.StopTimer()
 	source := "testdata/testdata.zst"
-	log.Println("Reading messages from", source)
+	b.Log("Reading messages from", source)
 	rdr := zstd.NewReader(source)
 	raw := make([]*syscall.NetlinkMessage, 0, 200)
 	msgs := make([]*netlink.ArchivalRecord, 0, 200)
@@ -434,7 +434,7 @@ func BenchmarkNLMsgParseSerializeCompress(b *testing.B) {
 			b.Fatal(err)
 		}
 		raw = append(raw, msg)
-		pm, err := netlink.ParseRecord(msg, false)
+		pm, err := netlink.MakeArchivalRecord(msg, false)
 		rtx.Must(err, "Could not parse test data")
 		msgs = append(msgs, pm)
 	}
@@ -451,7 +451,7 @@ func BenchmarkNLMsgParseSerializeCompress(b *testing.B) {
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		for _, msg := range raw {
-			m, err := netlink.ParseRecord(msg, false)
+			m, err := netlink.MakeArchivalRecord(msg, false)
 			rtx.Must(err, "Could not parse test data")
 			jsonBytes, err := json.Marshal(m)
 			rtx.Must(err, "Could not serialize %v", m)
@@ -467,7 +467,7 @@ func BenchmarkNLMsgParseSerializeCompress(b *testing.B) {
 
 func Test_rawReader_Next(t *testing.T) {
 	source := "testdata/testdata.zst"
-	log.Println("Reading messages from", source)
+	t.Log("Reading messages from", source)
 	rdr := zstd.NewReader(source)
 	defer rdr.Close()
 	raw := netlink.NewRawReader(rdr)
