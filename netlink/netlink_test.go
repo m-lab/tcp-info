@@ -30,7 +30,7 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-func toString(id inetdiag.InetDiagSockID) string {
+func toString(id inetdiag.SockID) string {
 	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort())
 }
 
