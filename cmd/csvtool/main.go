@@ -38,19 +38,9 @@ func main() {
 func toCSV(rdr io.Reader, wtr io.Writer) error {
 	// Read input from provided filename.
 	arReader := netlink.NewArchiveReader(rdr)
-	snapReader := snapshot.NewReader(arReader)
-
-	// Read all the ParsedMessage and convert to Wrappers.
-	snapshots := make([]*snapshot.Snapshot, 0, 3000)
-	for {
-		snap, err := snapReader.Next()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
-		}
-		snapshots = append(snapshots, snap)
+	snapshots, err := snapshot.LoadAll(arReader)
+	if err != nil {
+		return err
 	}
 
 	if len(snapshots) > 0 && snapshots[0].Metadata == nil {
@@ -58,7 +48,7 @@ func toCSV(rdr io.Reader, wtr io.Writer) error {
 		snapshots[0].Metadata = &netlink.Metadata{}
 	}
 
-	err := gocsv.Marshal(snapshots, wtr)
+	err = gocsv.Marshal(snapshots, wtr)
 	return err
 }
 

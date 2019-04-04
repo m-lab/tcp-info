@@ -4,6 +4,7 @@ package snapshot
 
 import (
 	"errors"
+	"io"
 	"log"
 	"time"
 	"unsafe"
@@ -284,4 +285,24 @@ func (rdr Reader) Next() (*Snapshot, error) {
 	}
 
 	return Decode(ar)
+}
+
+// LoadAll loads all snapshots from an ArchiveReader, and returns the slice.
+func LoadAll(ar netlink.ArchiveReader) ([]*Snapshot, error) {
+	snapReader := NewReader(ar)
+
+	// Read all the ParsedMessage and convert to Wrappers.
+	snapshots := make([]*Snapshot, 0, 3000)
+	for {
+		snap, err := snapReader.Next()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+		snapshots = append(snapshots, snap)
+	}
+
+	return snapshots, nil
 }
