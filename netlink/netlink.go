@@ -2,8 +2,10 @@
 package netlink
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -21,6 +23,10 @@ var (
 	ErrNotType20   = errors.New("NetlinkMessage wrong type")
 	ErrParseFailed = errors.New("Unable to parse InetDiagMsg")
 )
+
+/*********************************************************************************************
+*                         Low level netlink message stuff
+*********************************************************************************************/
 
 // RawInetDiagMsg holds the []byte representation of an InetDiagMsg
 type RawInetDiagMsg []byte
@@ -57,6 +63,39 @@ func (raw RawNlMsgHdr) Parse() (*syscall.NlMsghdr, error) {
 	return (*syscall.NlMsghdr)(unsafe.Pointer(&raw[0])), nil
 }
 
+// ParseRouteAttr parses a byte array into slice of NetlinkRouteAttr struct.
+// Derived from "github.com/vishvananda/netlink/nl/nl_linux.go"
+func ParseRouteAttr(b []byte) ([]syscall.NetlinkRouteAttr, error) {
+	var attrs []syscall.NetlinkRouteAttr
+	for len(b) >= unix.SizeofRtAttr {
+		a, vbuf, alen, err := netlinkRouteAttrAndValue(b)
+		if err != nil {
+			return nil, err
+		}
+		ra := syscall.NetlinkRouteAttr{Attr: syscall.RtAttr(*a), Value: vbuf[:int(a.Len)-unix.SizeofRtAttr]}
+		attrs = append(attrs, ra)
+		b = b[alen:]
+	}
+	return attrs, nil
+}
+
+// rtaAlignOf rounds the length of a netlink route attribute up to align it properly.
+func rtaAlignOf(attrlen int) int {
+	return (attrlen + unix.RTA_ALIGNTO - 1) & ^(unix.RTA_ALIGNTO - 1)
+}
+
+func netlinkRouteAttrAndValue(b []byte) (*unix.RtAttr, []byte, int, error) {
+	a := (*unix.RtAttr)(unsafe.Pointer(&b[0]))
+	if int(a.Len) < unix.SizeofRtAttr || int(a.Len) > len(b) {
+		return nil, nil, 0, unix.EINVAL
+	}
+	return a, b[unix.SizeofRtAttr:], rtaAlignOf(int(a.Len)), nil
+}
+
+/*********************************************************************************************
+*          Internal representation of NetlinkJSONL messages
+*********************************************************************************************/
+
 // Metadata contains the metadata for a particular TCP stream.
 type Metadata struct {
 	UUID      string
@@ -64,8 +103,8 @@ type Metadata struct {
 	StartTime time.Time
 }
 
-// ParsedMessage is a container for parsed InetDiag messages and attributes.
-type ParsedMessage struct {
+// ArchivalRecord is a container for parsed InetDiag messages and attributes.
+type ArchivalRecord struct {
 	// Timestamp should be truncated to 1 millisecond for best compression.
 	// Using int64 milliseconds instead reduces compressed size by 0.5 bytes/record, or about 1.5%
 	Timestamp time.Time `json:",omitempty"`
@@ -74,14 +113,17 @@ type ParsedMessage struct {
 	// typical compressed size by 3-4 bytes/record
 	RawIDM RawInetDiagMsg `json:",omitempty"` // RawInetDiagMsg within NLMsg
 	// Saving just the .Value fields reduces Marshalling by 1.9 usec.
-	Attributes [][]byte  `json:",omitempty"` // byte slices from RouteAttr.Value, backed by NLMsg
-	Metadata   *Metadata `json:",omitempty"`
+	Attributes [][]byte `json:",omitempty"` // byte slices from RouteAttr.Value, backed by NLMsg
+
+	// Metadata contains connection level metadata.  It is typically included in the very first record
+	// in a file.
+	Metadata *Metadata `json:",omitempty"`
 }
 
-// ParseNetlinkMessage parses the NetlinkMessage into a ParsedMessage.  If skipLocal is true, it will return nil for
+// MakeArchivalRecord parses the NetlinkMessage into a ArchivalRecord.  If skipLocal is true, it will return nil for
 // loopback, local unicast, multicast, and unspecified connections.
 // Note that Parse does not populate the Timestamp field, so caller should do so.
-func ParseNetlinkMessage(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMessage, error) {
+func MakeArchivalRecord(msg *syscall.NetlinkMessage, skipLocal bool) (*ArchivalRecord, error) {
 	if msg.Header.Type != 20 {
 		return nil, ErrNotType20
 	}
@@ -100,7 +142,7 @@ func ParseNetlinkMessage(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMe
 		}
 	}
 
-	parsedMsg := ParsedMessage{RawIDM: raw}
+	record := ArchivalRecord{RawIDM: raw}
 	// parsedMsg.NLMsgHdr = &msg.Header
 
 	attrs, err := ParseRouteAttr(attrBytes)
@@ -117,20 +159,20 @@ func ParseNetlinkMessage(msg *syscall.NetlinkMessage, skipLocal bool) (*ParsedMe
 	if maxAttrType > 2*inetdiag.INET_DIAG_MAX {
 		maxAttrType = 2 * inetdiag.INET_DIAG_MAX
 	}
-	parsedMsg.Attributes = make([][]byte, maxAttrType+1, maxAttrType+1)
+	record.Attributes = make([][]byte, maxAttrType+1, maxAttrType+1)
 	for _, a := range attrs {
 		t := a.Attr.Type
 		if t > maxAttrType {
 			log.Println("Error!! Received RouteAttr with very large Type:", t)
 			continue
 		}
-		if parsedMsg.Attributes[t] != nil {
+		if record.Attributes[t] != nil {
 			// TODO - add metric so we can alert on these.
 			log.Println("Parse error - Attribute appears more than once:", t)
 		}
-		parsedMsg.Attributes[t] = a.Value
+		record.Attributes[t] = a.Value
 	}
-	return &parsedMsg, nil
+	return &record, nil
 }
 
 // ChangeType indicates why a new record is worthwhile saving.
@@ -175,7 +217,7 @@ func isLocal(addr net.IP) bool {
 // in the TCPInfo struct related to packets, bytes, and segments.  In addition to the TCPState
 // and CAState fields, these are probably adequate, but we also check for new or missing attributes
 // and any attribute difference outside of the TCPInfo (INET_DIAG_INFO) attribute.
-func (pm *ParsedMessage) Compare(previous *ParsedMessage) (ChangeType, error) {
+func (pm *ArchivalRecord) Compare(previous *ArchivalRecord) (ChangeType, error) {
 	if previous == nil {
 		return PreviousWasNil, nil
 	}
@@ -258,12 +300,90 @@ func (pm *ParsedMessage) Compare(previous *ParsedMessage) (ChangeType, error) {
 }
 
 /*********************************************************************************************/
-/*             Utility function to load test data
+/*                            Utilities for loading data                                     */
 /*********************************************************************************************/
 
-// LoadNext is a simple utility to read the next NetlinkMessage from a source reader,
-// e.g. from a file of saved netlink messages.
-func LoadNext(rdr io.Reader) (*syscall.NetlinkMessage, error) {
+// ArchiveReader produces ArchivedRecord structs from some source.
+type ArchiveReader interface {
+	// Next returns the next ArchivalRecord.  Returns nil, EOF if no more records, or other error if there is a problem.
+	Next() (*ArchivalRecord, error)
+}
+
+type rawReader struct {
+	rdr io.Reader
+}
+
+// NewRawReader wraps an io.Reader to create and ArchiveReader
+func NewRawReader(rdr io.Reader) ArchiveReader {
+	return &rawReader{rdr: rdr}
+}
+
+// Next decodes and returns the next ArchivalRecord.
+func (raw *rawReader) Next() (*ArchivalRecord, error) {
+	var header syscall.NlMsghdr
+	// TODO - should we pass in LittleEndian as a parameter?
+	err := binary.Read(raw.rdr, binary.LittleEndian, &header)
+	if err != nil {
+		// Note that this may be EOF
+		return nil, err
+	}
+	data := make([]byte, header.Len-uint32(binary.Size(header)))
+	err = binary.Read(raw.rdr, binary.LittleEndian, data)
+	if err != nil {
+		return nil, err
+	}
+
+	msg := syscall.NetlinkMessage{Header: header, Data: data}
+	return MakeArchivalRecord(&msg, false)
+}
+
+type archiveReader struct {
+	scanner *bufio.Scanner
+}
+
+// NewArchiveReader wraps a source of JSONL ArchiveRecords to create ArchiveReader
+func NewArchiveReader(rdr io.Reader) ArchiveReader {
+	sc := bufio.NewScanner(rdr)
+	return &archiveReader{scanner: sc}
+}
+
+// Next decodes and returns the next ArchivalRecord.
+func (ar *archiveReader) Next() (*ArchivalRecord, error) {
+	if !ar.scanner.Scan() {
+		return nil, io.EOF
+	}
+	buf := ar.scanner.Bytes()
+
+	record := ArchivalRecord{}
+	err := json.Unmarshal(buf, &record)
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
+// LoadAllArchivalRecords reads all PMs from a jsonl stream.
+func LoadAllArchivalRecords(rdr io.Reader) ([]*ArchivalRecord, error) {
+	msgs := make([]*ArchivalRecord, 0, 2000) // We typically read a large number of records
+
+	pmr := NewArchiveReader(rdr)
+
+	for {
+		pm, err := pmr.Next()
+		if err != nil {
+			if err == io.EOF {
+				return msgs, nil
+			}
+			return msgs, err
+		}
+		msgs = append(msgs, pm)
+	}
+}
+
+// LoadRawNetlinkMessage is a simple utility to read the next NetlinkMessage from a source reader,
+// e.g. from a file of naked binary netlink messages.
+// NOTE: This is a bit fragile if there are any bit errors in the message headers.
+func LoadRawNetlinkMessage(rdr io.Reader) (*syscall.NetlinkMessage, error) {
 	var header syscall.NlMsghdr
 	// TODO - should we pass in LittleEndian as a parameter?
 	err := binary.Read(rdr, binary.LittleEndian, &header)
@@ -271,7 +391,6 @@ func LoadNext(rdr io.Reader) (*syscall.NetlinkMessage, error) {
 		// Note that this may be EOF
 		return nil, err
 	}
-	//log.Printf("%+v\n", header)
 	data := make([]byte, header.Len-uint32(binary.Size(header)))
 	err = binary.Read(rdr, binary.LittleEndian, data)
 	if err != nil {
@@ -279,36 +398,4 @@ func LoadNext(rdr io.Reader) (*syscall.NetlinkMessage, error) {
 	}
 
 	return &syscall.NetlinkMessage{Header: header, Data: data}, nil
-}
-
-/*********************************************************************************************/
-/*             Copied from "github.com/vishvananda/netlink/nl/nl_linux.go"                   */
-/*********************************************************************************************/
-
-// ParseRouteAttr parses a byte array into a NetlinkRouteAttr struct.
-func ParseRouteAttr(b []byte) ([]syscall.NetlinkRouteAttr, error) {
-	var attrs []syscall.NetlinkRouteAttr
-	for len(b) >= unix.SizeofRtAttr {
-		a, vbuf, alen, err := netlinkRouteAttrAndValue(b)
-		if err != nil {
-			return nil, err
-		}
-		ra := syscall.NetlinkRouteAttr{Attr: syscall.RtAttr(*a), Value: vbuf[:int(a.Len)-unix.SizeofRtAttr]}
-		attrs = append(attrs, ra)
-		b = b[alen:]
-	}
-	return attrs, nil
-}
-
-// rtaAlignOf rounds the length of a netlink route attribute up to align it properly.
-func rtaAlignOf(attrlen int) int {
-	return (attrlen + unix.RTA_ALIGNTO - 1) & ^(unix.RTA_ALIGNTO - 1)
-}
-
-func netlinkRouteAttrAndValue(b []byte) (*unix.RtAttr, []byte, int, error) {
-	a := (*unix.RtAttr)(unsafe.Pointer(&b[0]))
-	if int(a.Len) < unix.SizeofRtAttr || int(a.Len) > len(b) {
-		return nil, nil, 0, unix.EINVAL
-	}
-	return a, b[unix.SizeofRtAttr:], rtaAlignOf(int(a.Len)), nil
 }

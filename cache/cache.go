@@ -18,21 +18,21 @@ var (
 
 // Cache is a cache of all connection status.
 type Cache struct {
-	// Map from inode to ParsedMessage
-	current  map[uint64]*netlink.ParsedMessage // Cache of most recent messages.
-	previous map[uint64]*netlink.ParsedMessage // Cache of previous round of messages.
+	// Map from inode to ArchivalRecord
+	current  map[uint64]*netlink.ArchivalRecord // Cache of most recent messages.
+	previous map[uint64]*netlink.ArchivalRecord // Cache of previous round of messages.
 	cycles   int64
 }
 
 // NewCache creates a cache object with capacity of 1000.
 // The map size is adjusted on every sampling round, but we have to start somewhere.
 func NewCache() *Cache {
-	return &Cache{current: make(map[uint64]*netlink.ParsedMessage, 1000),
-		previous: make(map[uint64]*netlink.ParsedMessage, 0)}
+	return &Cache{current: make(map[uint64]*netlink.ArchivalRecord, 1000),
+		previous: make(map[uint64]*netlink.ArchivalRecord, 0)}
 }
 
 // Update swaps msg with the cache contents, and returns the evicted value.
-func (c *Cache) Update(msg *netlink.ParsedMessage) (*netlink.ParsedMessage, error) {
+func (c *Cache) Update(msg *netlink.ArchivalRecord) (*netlink.ArchivalRecord, error) {
 	idm, err := msg.RawIDM.Parse()
 	if err != nil {
 		return nil, err
@@ -49,14 +49,14 @@ func (c *Cache) Update(msg *netlink.ParsedMessage) (*netlink.ParsedMessage, erro
 // EndCycle marks the completion of updates from one set of netlink messages.
 // It returns all messages that did not have corresponding inodes in the most recent
 // batch of messages.
-func (c *Cache) EndCycle() map[uint64]*netlink.ParsedMessage {
+func (c *Cache) EndCycle() map[uint64]*netlink.ArchivalRecord {
 	metrics.CacheSizeHistogram.Observe(float64(len(c.current)))
 	tmp := c.previous
 	c.previous = c.current
 	// Allocate a bit more than previous size, to accommodate new connections.
 	// This will grow and shrink with the number of active connections, but
 	// minimize reallocation.
-	c.current = make(map[uint64]*netlink.ParsedMessage, len(c.previous)+len(c.previous)/10+10)
+	c.current = make(map[uint64]*netlink.ArchivalRecord, len(c.previous)+len(c.previous)/10+10)
 	c.cycles++
 	return tmp
 }

@@ -1,4 +1,6 @@
-package parse
+// Package snapshot contains code to generate Snapshots from ArchiveRecords, and utilities to
+// load them from files.
+package snapshot
 
 import (
 	"errors"
@@ -11,35 +13,36 @@ import (
 	"github.com/m-lab/tcp-info/tcp"
 )
 
-var ErrEmptyMessage = errors.New("Message should contain Metadata or RawIDM")
+// ErrEmptyRecord is returned if an ArchivalRecord is empty.
+var ErrEmptyRecord = errors.New("Message should contain Metadata or RawIDM")
 
-// TODO - better names for ParsedMessage and Wrapper.
-func DecodeNetlink(pm *netlink.ParsedMessage) (*Wrapper, error) {
+// Decode decodes a netlink.ArchivalRecord into a single Snapshot
+func Decode(ar *netlink.ArchivalRecord) (*Snapshot, error) {
 	var err error
-	result := Wrapper{}
-	result.Timestamp = pm.Timestamp
-	if pm.Metadata == nil && pm.RawIDM == nil {
-		return nil, ErrEmptyMessage
+	result := Snapshot{}
+	result.Timestamp = ar.Timestamp
+	if ar.Metadata == nil && ar.RawIDM == nil {
+		return nil, ErrEmptyRecord
 	}
-	result.Metadata = pm.Metadata
-	if pm.RawIDM != nil {
-		result.InetDiagMsg, err = pm.RawIDM.Parse()
+	result.Metadata = ar.Metadata
+	if ar.RawIDM != nil {
+		result.InetDiagMsg, err = ar.RawIDM.Parse()
 		if err != nil {
 			log.Println("Error decoding RawIDM:", err)
 			return nil, err
 		}
 	}
-	for i, raw := range pm.Attributes {
+	for i, raw := range ar.Attributes {
 		if raw == nil {
 			continue
 		}
 		rta := RouteAttrValue(raw)
-		result.FieldMask |= 1 << uint8(i-1)
+		result.Observed |= 1 << uint8(i-1)
 		switch i {
 		case inetdiag.INET_DIAG_MEMINFO:
 			result.MemInfo = rta.ToMemInfo()
 		case inetdiag.INET_DIAG_INFO:
-			result.TcpInfo = rta.ToLinuxTCPInfo()
+			result.TCPInfo = rta.ToLinuxTCPInfo()
 		case inetdiag.INET_DIAG_VEGASINFO:
 			result.VegasInfo = rta.ToVegasInfo()
 		case inetdiag.INET_DIAG_CONG:
@@ -134,10 +137,12 @@ func (raw RouteAttrValue) toUint8() uint8 {
 	return uint8(raw[0])
 }
 
+// ToTOS marshals the TCP Type Of Service field.  See https://tools.ietf.org/html/rfc3168
 func (raw RouteAttrValue) ToTOS() uint8 {
 	return raw.toUint8()
 }
 
+// ToTCLASS marshals the TCP Traffic Class octet.  See https://tools.ietf.org/html/rfc3168
 func (raw RouteAttrValue) ToTCLASS() uint8 {
 	return raw.toUint8()
 }
@@ -178,8 +183,8 @@ func (raw RouteAttrValue) ToBBRInfo() *inetdiag.BBRInfo {
 	return (*inetdiag.BBRInfo)(maybeCopy(raw, structSize))
 }
 
-// Parent containing all info gathered through netlink library.
-type Wrapper struct {
+// Snapshot contains all info gathered through netlink library.
+type Snapshot struct {
 	// Timestamp of batch of messages containing this message.
 	Timestamp time.Time
 
@@ -187,7 +192,11 @@ type Wrapper struct {
 	Metadata *netlink.Metadata
 
 	// Bit field indicating whether each message type was observed.
-	FieldMask uint32
+	Observed uint32
+
+	// Bit field indicating whether any message type was NOT fully parsed.
+	// TODO - populate this field if any message is ignored, or not fully parsed.
+	NotFullyParsed uint32
 
 	// Info from struct inet_diag_msg, including socket_id;
 	InetDiagMsg *inetdiag.InetDiagMsg
@@ -195,28 +204,66 @@ type Wrapper struct {
 	// Data obtained from INET_DIAG_MEMINFO.
 	MemInfo *inetdiag.MemInfo
 
-	// Data obtained from struct tcp_info.
-	TcpInfo *tcp.LinuxTCPInfo
+	// TCPInfo contains data from struct tcp_info.
+	TCPInfo *tcp.LinuxTCPInfo
 
 	VegasInfo *inetdiag.VegasInfo
 
 	// From INET_DIAG_CONG message.
 	CongestionAlgorithm string
 
+	// See https://tools.ietf.org/html/rfc3168
+	// TODO Do we need to record whether these are present and zero, vs absent?
 	TOS    uint8
 	TClass uint8
 
 	// Data obtained from INET_DIAG_SKMEMINFO.
 	SocketMem *inetdiag.SocketMemInfo
 
-	Shutdown uint8 // TODO do we need an indicator if this is present?
+	// TODO Do we need to record present and zero, vs absent?
+	Shutdown uint8
 
 	DCTCPInfo *inetdiag.DCTCPInfo
 
 	// From INET_DIAG_PROTOCOL message.
+	// TODO Do we need to record present and zero, vs absent?
 	Protocol inetdiag.Protocol
 
 	BBRInfo *inetdiag.BBRInfo
 
 	Mark uint32
+}
+
+// ConnectionLog contains a Metadata and slice of Snapshots.
+type ConnectionLog struct {
+	Metadata  netlink.Metadata
+	Snapshots []Snapshot
+}
+
+// Reader wraps an ArchiveReader to provide a Snapshot reader.
+type Reader struct {
+	archiveReader netlink.ArchiveReader
+}
+
+// NewReader wraps an ArchiveReader and provides Next()
+func NewReader(ar netlink.ArchiveReader) *Reader {
+	return &Reader{archiveReader: ar}
+}
+
+var zeroTime = time.Time{}
+
+// Next reads, parses and returns the next Snapshot
+func (rdr Reader) Next() (*Snapshot, error) {
+	ar, err := rdr.archiveReader.Next()
+	if err != nil {
+		return nil, err
+	}
+
+	// HACK
+	// Parse doesn't fill the Timestamp, so for now, populate it with something...
+	if ar.Timestamp == zeroTime {
+		ar.Timestamp = time.Date(2009, time.May, 29, 23, 59, 59, 0, time.UTC)
+	}
+
+	return Decode(ar)
 }

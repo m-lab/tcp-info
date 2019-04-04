@@ -21,14 +21,14 @@ func testFatal(t *testing.T, err error) {
 	}
 }
 
-func fakeMsg(t *testing.T, cookie uint64, dport uint16) netlink.ParsedMessage {
+func fakeMsg(t *testing.T, cookie uint64, dport uint16) netlink.ArchivalRecord {
 	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
 	nm := syscall.NetlinkMessage{}
 	err := json.Unmarshal([]byte(json1), &nm)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mp, err := netlink.ParseNetlinkMessage(&nm, true)
+	mp, err := netlink.MakeArchivalRecord(&nm, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestUpdateWithBadData(t *testing.T) {
-	var m netlink.ParsedMessage
+	var m netlink.ArchivalRecord
 	c := cache.NewCache()
 	_, err := c.Update(&m)
 	if err == nil {

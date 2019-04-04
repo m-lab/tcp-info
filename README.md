@@ -2,7 +2,7 @@
 
 [![GoDoc](https://godoc.org/github.com/m-lab/tcp-info?status.svg)](https://godoc.org/github.com/m-lab/tcp-info) [![Build Status](https://travis-ci.org/m-lab/tcp-info.svg?branch=master)](https://travis-ci.org/m-lab/tcp-info) [![Go Report Card](https://goreportcard.com/badge/github.com/m-lab/tcp-info)](https://goreportcard.com/report/github.com/m-lab/tcp-info) [![Coverage Status](https://coveralls.io/repos/m-lab/tcp-info/badge.svg?branch=master)](https://coveralls.io/github/m-lab/tcp-info?branch=master)
 
-The `tcp-info` tool executes a polling loop that tracks the measurement statistics of every open TCP socket on a system.  Data is written, in `jsonl` format, to files compressed using `zstd`.  This tool forms the basis of a lot of measurements on the Kubernetes-based [Measurement Lab](https://measurementlab.net) platform.
+The `tcp-info` tool executes a polling loop that tracks the measurement statistics of every open TCP socket on a system.  Data is written, in `JSONL` format (refered to internally as *ArchivedRecord*), to files compressed using `zstd`.  This tool forms the basis of a lot of measurements on the Kubernetes-based [Measurement Lab](https://measurementlab.net) platform.
 
 We expect most people will run this tool using a
 docker container.  To invoke, with data written to ~/data, and prometheus
@@ -19,6 +19,7 @@ It then detects differences from one scan to the next, and queues connections th
 It logs the intermediate representation through external zstd processes to one file per connection.
 
 The previous version uses protobufs, but we have discontinued that largely because of the increased maintenance overhead, and risk of losing unparsed data.
+Instead, we are now using *ArchivedRecord* which is partially parsed netlink messages, mostly in base64 encoded blobs, marshaled to JSONL format, with one JSON object per line.
 
 To run the tests or the collection tool, you will also require zstd, which can be installed with:
 
@@ -31,6 +32,17 @@ OR
 ```bash
 sudo apt-get update && sudo apt-get install -y zstd
 ```
+
+# Parse library and command line tools
+
+## The *parse* package
+
+This package is intended to be used as a library for command line tools and other applications that need to parse the ArchivedRecord messages.
+
+## CSV tool
+
+The cmd/csvtool directory contains a tool for parsing ArchivedRecord and producing CSV files.  Currently reads netlink-jSONL from stdin and writes CSV to stdout.
+
 
 # Code Layout
 

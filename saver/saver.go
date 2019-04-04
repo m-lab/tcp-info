@@ -1,5 +1,5 @@
 // Package saver contains all logic for writing records to files.
-//  1. Sets up a channel that accepts slices of *netlink.ParsedMessage
+//  1. Sets up a channel that accepts slices of *netlink.ArchivalRecord
 //  2. Maintains a map of Connections, one for each connection.
 //  3. Uses several marshallers goroutines to serialize data and and write to
 //     zstd files.
@@ -27,7 +27,7 @@ import (
 	"github.com/m-lab/uuid"
 )
 
-// We will send an entire batch of prefiltered ParsedMessages through a channel from
+// We will send an entire batch of prefiltered ArchivalRecords through a channel from
 // the collection loop to the top level saver.  The saver will detect new connections
 // and significant diffs, maintain the connection cache, determine
 // how frequently to save deltas for each connection.
@@ -43,7 +43,7 @@ var (
 // Task represents a single marshalling task, specifying the message and the writer.
 type Task struct {
 	// nil message means close the writer.
-	Message *netlink.ParsedMessage
+	Message *netlink.ArchivalRecord
 	Writer  io.WriteCloser
 }
 
@@ -121,7 +121,7 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 }
 
 func (conn *Connection) writeHeader() {
-	msg := netlink.ParsedMessage{
+	msg := netlink.ArchivalRecord{
 		Metadata: &netlink.Metadata{
 			UUID:      uuid.FromCookie(conn.ID.Cookie()),
 			Sequence:  conn.Sequence,
@@ -191,9 +191,9 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 	}
 }
 
-// queue queues a single ParsedMessage to the appropriate marshalling queue, based on the
+// queue queues a single ArchivalRecord to the appropriate marshalling queue, based on the
 // connection Cookie.
-func (svr *Saver) queue(msg *netlink.ParsedMessage) error {
+func (svr *Saver) queue(msg *netlink.ArchivalRecord) error {
 	idm, err := msg.RawIDM.Parse()
 	if err != nil {
 		log.Println(err)
@@ -247,8 +247,8 @@ func (svr *Saver) endConn(cookie uint64) {
 	}
 }
 
-// MessageSaverLoop runs a loop to receive batches of ParsedMessages.  Local connections
-func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*netlink.ParsedMessage) {
+// MessageSaverLoop runs a loop to receive batches of ArchivalRecords.  Local connections
+func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*netlink.ArchivalRecord) {
 	log.Println("Starting Saver")
 	for {
 		msgs, ok := <-readerChannel
@@ -275,7 +275,7 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*netlink.ParsedMessage
 	svr.Close()
 }
 
-func (svr *Saver) swapAndQueue(pm *netlink.ParsedMessage) {
+func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
 	svr.stats.TotalCount++
 	old, err := svr.cache.Update(pm)
 	if err != nil {

@@ -22,6 +22,7 @@ var (
 //
 // Users of this function should read from the returned pipe and close it when
 // done.
+// TODO return errors
 func NewReader(filename string) io.ReadCloser {
 	pipeR, pipeW, err := osPipe()
 	rtx.Must(err, "Could not call os.Pipe. Something is very wrong.")

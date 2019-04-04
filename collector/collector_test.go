@@ -29,10 +29,10 @@ type testCacheLogger struct{}
 
 func (t *testCacheLogger) LogCacheStats(_, _ int) {}
 
-func runTest(ctx context.Context, port int) {
+func runTest(t *testing.T, ctx context.Context, port int) {
 	// Open a server socket, connect to it, send data to it until the context is canceled.
 	address := fmt.Sprintf("localhost:%d", port)
-	log.Println("Listening on", address)
+	t.Log("Listening on", address)
 	localAddr, err := net.ResolveTCPAddr("tcp", address)
 	rtx.Must(err, "No localhost")
 	listener, err := net.ListenTCP("tcp", localAddr)
@@ -68,7 +68,7 @@ func TestRun(t *testing.T) {
 	port := findPort()
 
 	// A nice big buffer on the channel
-	msgChan := make(chan []*netlink.ParsedMessage, 10000)
+	msgChan := make(chan []*netlink.ArchivalRecord, 10000)
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -78,7 +78,7 @@ func TestRun(t *testing.T) {
 	}()
 
 	go func() {
-		runTest(ctx, port)
+		runTest(t, ctx, port)
 		wg.Done()
 	}()
 
@@ -96,7 +96,7 @@ func TestRun(t *testing.T) {
 
 	// Make sure we receive multiple different messages regarding the open port
 	count := 0
-	var prev *netlink.ParsedMessage
+	var prev *netlink.ArchivalRecord
 	for msgs := range msgChan {
 		changed := false
 		for _, m := range msgs {
@@ -108,7 +108,7 @@ func TestRun(t *testing.T) {
 			if idm != nil && idm.ID.SPort() == uint16(port) {
 				change, err := m.Compare(prev)
 				if err != nil {
-					log.Println(err)
+					t.Log(err)
 				} else if change > netlink.NoMajorChange {
 					prev = m
 					changed = true
@@ -124,6 +124,6 @@ func TestRun(t *testing.T) {
 		}
 	}
 
-	log.Println("Waiting for goroutines to exit")
+	t.Log("Waiting for goroutines to exit")
 	wg.Wait()
 }

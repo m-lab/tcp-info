@@ -33,7 +33,7 @@ flat  flat%   sum%        cum   cum%
 0.06s  1.20% 86.45%      0.06s  1.20%  runtime.memclrNoHeapPointers
 0.06s  1.20% 87.65%      0.08s  1.59%  runtime.scanobject
 0.06s  1.20% 88.84%      0.06s  1.20%  syscall.RawSyscall
-0.04s   0.8% 89.64%      0.07s  1.39%  github.com/m-lab/tcp-info/delta.(*ParsedMessage).IsSame
+0.04s   0.8% 89.64%      0.07s  1.39%  github.com/m-lab/tcp-info/delta.(*ArchivalRecord).IsSame
 0.04s   0.8% 90.44%      0.12s  2.39%  runtime.(*mcentral).cacheSpan
 0.04s   0.8% 91.24%      0.04s   0.8%  runtime.duffcopy
 0.04s   0.8% 92.03%      0.04s   0.8%  runtime.memmove
@@ -93,7 +93,7 @@ func main() {
 	// Make the saver and construct the message channel, buffering up to 2 batches
 	// of messages without stalling producer. We may want to increase the buffer if
 	// we observe main() stalling.
-	svrChan := make(chan []*netlink.ParsedMessage, 2)
+	svrChan := make(chan []*netlink.ArchivalRecord, 2)
 	svr := saver.NewSaver("host", "pod", 3)
 	go svr.MessageSaverLoop(svrChan)
 
