@@ -18,7 +18,7 @@ import (
 func makeReq(inetType uint8) *nl.NetlinkRequest {
 	req := nl.NewNetlinkRequest(inetdiag.SOCK_DIAG_BY_FAMILY, syscall.NLM_F_DUMP|syscall.NLM_F_REQUEST)
 	msg := inetdiag.NewReqV2(inetType, syscall.IPPROTO_TCP,
-		inetdiag.TCPF_ALL & ^((1<<uint(tcp.SYN_RECV))|(1<<uint(tcp.TIME_WAIT))|(1<<uint(tcp.CLOSE))))
+		tcp.AllFlags & ^((1<<uint(tcp.SYN_RECV))|(1<<uint(tcp.TIME_WAIT))|(1<<uint(tcp.CLOSE))))
 	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_MEMINFO - 1))
 	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_INFO - 1))
 	msg.IDiagExt |= (1 << (inetdiag.INET_DIAG_VEGASINFO - 1))

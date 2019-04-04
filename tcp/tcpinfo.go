@@ -26,6 +26,9 @@ const (
 	CLOSING     State = 11
 )
 
+// AllFlags includes flag bits for all TCP connection states. It corresponds to TCPF_ALL in some linux code.
+const AllFlags = 0xFFF
+
 var stateName = map[State]string{
 	0:  "INVALID",
 	1:  "ESTABLISHED",

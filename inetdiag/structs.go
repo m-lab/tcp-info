@@ -36,8 +36,6 @@ const (
 	SOCK_DIAG_BY_FAMILY = 20 // uapi/linux/sock_diag.h
 )
 
-const TCPF_ALL = 0xFFF
-
 var (
 	// ErrBadPid is used when the PID is mismatched between the netlink socket and the calling process.
 	ErrBadPid = errors.New("bad PID, can't listen to NL socket")
