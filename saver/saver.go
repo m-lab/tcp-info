@@ -87,7 +87,7 @@ func newMarshaller(wg *sync.WaitGroup) MarshalChan {
 // Connection objects handle all output associated with a single connection.
 type Connection struct {
 	Inode      uint32 // TODO - also use the UID???
-	ID         inetdiag.InetDiagSockID
+	ID         inetdiag.SockID
 	UID        uint32
 	Slice      string    // 4 hex, indicating which machine segment this is on.
 	StartTime  time.Time // Time the connection was initiated.
