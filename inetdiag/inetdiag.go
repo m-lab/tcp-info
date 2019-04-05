@@ -59,6 +59,7 @@ const (
 	INET_DIAG_MAX
 )
 
+// InetDiagType provides human readable strings for decoding attribute types.
 var InetDiagType = map[int32]string{
 	INET_DIAG_MEMINFO:   "MemInfo",
 	INET_DIAG_INFO:      "TCPInfo",
@@ -85,27 +86,24 @@ var diagFamilyMap = map[uint8]string{
 	syscall.AF_INET6: "tcp6",
 }
 
-//	if (tb[INET_DIAG_PROTOCOL])
-//		s->raw_prot = rta_getattr_u8(tb[INET_DIAG_PROTOCOL]);
+// Protocol defines the type corresponding to INET_DIAG_PROTOCOL 8 bit field.
 type Protocol uint8
 
 const (
+	// Protocol_IPPROTO_UNUSED ...
 	Protocol_IPPROTO_UNUSED Protocol = 0
-	Protocol_IPPROTO_TCP    Protocol = 6
-	Protocol_IPPROTO_UDP    Protocol = 17
-	Protocol_IPPROTO_DCCP   Protocol = 33
+	// Protocol_IPPROTO_TCP    indicates TCP traffic.
+	Protocol_IPPROTO_TCP Protocol = 6
+	// Protocol_IPPROTO_UDP   indicates UDP traffic.
+	Protocol_IPPROTO_UDP Protocol = 17
+	// Protocol_IPPROTO_DCCP indicates DCCP traffic.
+	Protocol_IPPROTO_DCCP Protocol = 33
 )
 
-var Protocol_name = map[int32]string{
+// ProtocolName is used to convert Protocol values to strings.
+var ProtocolName = map[int32]string{
 	0:  "IPPROTO_UNUSED",
 	6:  "IPPROTO_TCP",
 	17: "IPPROTO_UDP",
 	33: "IPPROTO_DCCP",
-}
-
-var Protocol_value = map[string]int32{
-	"IPPROTO_UNUSED": 0,
-	"IPPROTO_TCP":    6,
-	"IPPROTO_UDP":    17,
-	"IPPROTO_DCCP":   33,
 }

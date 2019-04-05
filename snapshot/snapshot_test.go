@@ -123,3 +123,21 @@ func TestBCNFile(t *testing.T) {
 	}
 
 }
+
+func TestLoadAll(t *testing.T) {
+	src := "testdata/ndt-jdczh_1553815964_00000000000003E8.00185.jsonl.zst"
+
+	log.Println("Reading messages from", src)
+	rdr := zstd.NewReader(src)
+	defer rdr.Close()
+	arReader := netlink.NewArchiveReader(rdr)
+
+	all, err := snapshot.LoadAll(arReader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(all) != 151 {
+		t.Error("Wrong count:", len(all))
+	}
+}
