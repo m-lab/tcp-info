@@ -59,6 +59,27 @@ const (
 	INET_DIAG_MAX
 )
 
+var InetDiagType = map[int32]string{
+	INET_DIAG_MEMINFO:   "MemInfo",
+	INET_DIAG_INFO:      "TCPInfo",
+	INET_DIAG_VEGASINFO: "Vegas",
+	INET_DIAG_CONG:      "Congestion",
+	INET_DIAG_TOS:       "TOS",
+	INET_DIAG_TCLASS:    "TClass",
+	INET_DIAG_SKMEMINFO: "SKMemInfo",
+	INET_DIAG_SHUTDOWN:  "Shutdown",
+	INET_DIAG_DCTCPINFO: "DCTCPInfo",
+	INET_DIAG_PROTOCOL:  "Protocol",
+	INET_DIAG_SKV6ONLY:  "SKV6Only",
+	INET_DIAG_LOCALS:    "Locals",
+	INET_DIAG_PEERS:     "Peers",
+	INET_DIAG_PAD:       "Pad",
+	INET_DIAG_MARK:      "Mark",
+	INET_DIAG_BBRINFO:   "BBRInfo",
+	INET_DIAG_CLASS_ID:  "ClassID",
+	INET_DIAG_MD5SIG:    "MD5Sig",
+}
+
 var diagFamilyMap = map[uint8]string{
 	syscall.AF_INET:  "tcp",
 	syscall.AF_INET6: "tcp6",

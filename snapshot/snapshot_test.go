@@ -83,3 +83,43 @@ func TestDecodeArchiveRecords(t *testing.T) {
 		t.Error("Wrong count:", parsed)
 	}
 }
+
+func TestBCNFile(t *testing.T) {
+	src := "testdata/ndt-jdczh_1553815964_00000000000003E8.00185.jsonl.zst"
+
+	log.Println("Reading messages from", src)
+	rdr := zstd.NewReader(src)
+	defer rdr.Close()
+	arReader := netlink.NewArchiveReader(rdr)
+	snapReader := snapshot.NewReader(arReader)
+
+	parsed := int64(0)
+	var observed uint32
+	var problems uint32
+
+	for {
+		snap, err := snapReader.Next()
+		if err == io.EOF {
+			break
+		}
+		rtx.Must(err, "Could not parse record")
+
+		observed |= snap.Observed
+		problems |= snap.NotFullyParsed
+
+		parsed++
+	}
+
+	if observed != (1<<inetdiag.INET_DIAG_MAX)-1 {
+		// Uncomment to see which fields are untested.
+		// t.Errorf("Observed %0X\n", observed)
+	}
+	if parsed != 151 {
+		t.Error("Wrong count:", parsed)
+	}
+	// Check if any fields were incompletely parsed.
+	if problems != 0 {
+		t.Errorf("Problems %0X\n", problems)
+	}
+
+}

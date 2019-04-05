@@ -2,6 +2,7 @@ package netlink_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -29,6 +30,10 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
+func toString(id inetdiag.InetDiagSockID) string {
+	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort())
+}
+
 func TestParseInetDiagMsg(t *testing.T) {
 	var data [100]byte
 	for i := range data {
@@ -38,7 +43,7 @@ func TestParseInetDiagMsg(t *testing.T) {
 	hdr, err := raw.Parse()
 	rtx.Must(err, "")
 
-	if hdr.ID.Interface() == 0 || hdr.ID.Cookie() == 0 || hdr.ID.DPort() == 0 || hdr.ID.String() == "" {
+	if hdr.ID.Interface() == 0 || hdr.ID.Cookie() == 0 || hdr.ID.DPort() == 0 || toString(hdr.ID) == "" {
 		t.Errorf("None of the accessed values should be zero")
 	}
 	if hdr.IDiagFamily != syscall.AF_INET {
@@ -471,9 +476,6 @@ func Test_rawReader_Next(t *testing.T) {
 	rdr := zstd.NewReader(source)
 	defer rdr.Close()
 	raw := netlink.NewRawReader(rdr)
-	wtr, err := zstd.NewWriter("archiveRecords.zstd")
-	rtx.Must(err, "Failed creating zstd writer")
-	defer wtr.Close()
 
 	parsed := 0
 	for {
@@ -492,5 +494,38 @@ func Test_rawReader_Next(t *testing.T) {
 }
 
 func Test_archiveReader_Next(t *testing.T) {
-	// TODO
+	source := "testdata/archiveRecords.jsonl.zst"
+	log.Println("Reading messages from", source)
+	rdr := zstd.NewReader(source)
+	defer rdr.Close()
+	msgs, err := netlink.LoadAllArchivalRecords(rdr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 420 {
+		t.Error("Wrong count:", len(msgs))
+	}
+}
+
+func TestLoadAllArchivalRecords(t *testing.T) {
+	source := "testdata/testdata.zst"
+	log.Println("Reading messages from", source)
+	rdr := zstd.NewReader(source)
+	defer rdr.Close()
+	raw := netlink.NewRawReader(rdr)
+
+	parsed := 0
+	for {
+		_, err := raw.Next()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatal(err)
+		}
+		parsed++
+	}
+	if parsed != 420 {
+		t.Error("Wrong count:", parsed)
+	}
 }

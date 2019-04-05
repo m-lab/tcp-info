@@ -27,7 +27,6 @@ defined in uapi/linux/inet_diag.h
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"net"
 	"unsafe"
 )
@@ -155,10 +154,6 @@ func ipv4(original [16]byte) net.IP {
 
 func ipv6(original [16]byte) net.IP {
 	return original[:]
-}
-
-func (id *InetDiagSockID) String() string {
-	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort())
 }
 
 // These are related to filters.  We don't currently use filters, so we ignore this type.
