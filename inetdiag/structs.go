@@ -36,8 +36,6 @@ const (
 	SOCK_DIAG_BY_FAMILY = 20 // uapi/linux/sock_diag.h
 )
 
-const TCPF_ALL = 0xFFF
-
 var (
 	// ErrBadPid is used when the PID is mismatched between the netlink socket and the calling process.
 	ErrBadPid = errors.New("bad PID, can't listen to NL socket")
@@ -49,44 +47,44 @@ var (
 	ErrBadMsgData = errors.New("bad message data from netlink message")
 )
 
-// InetDiagReqV2 is the Netlink request struct, as in linux/inet_diag.h
+// ReqV2 is the Netlink request struct, as in linux/inet_diag.h
 // Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
-type InetDiagReqV2 struct {
+type ReqV2 struct {
 	SDiagFamily   uint8
 	SDiagProtocol uint8
 	IDiagExt      uint8
 	Pad           uint8
 	IDiagStates   uint32
-	ID            InetDiagSockID
+	ID            SockID
 }
 
-// SizeofInetDiagReqV2 is the size of the struct.
+// SizeofReqV2 is the size of the struct.
 // TODO should we just make this explicit in the code?
-const SizeofInetDiagReqV2 = int(unsafe.Sizeof(InetDiagReqV2{})) // Should be 0x38
+const SizeofReqV2 = int(unsafe.Sizeof(ReqV2{})) // Should be 0x38
 
 // Serialize is provided for json serialization?
 // TODO - should use binary functions instead?
-func (req *InetDiagReqV2) Serialize() []byte {
-	return (*(*[SizeofInetDiagReqV2]byte)(unsafe.Pointer(req)))[:]
+func (req *ReqV2) Serialize() []byte {
+	return (*(*[SizeofReqV2]byte)(unsafe.Pointer(req)))[:]
 }
 
 // Len is provided for json serialization?
-func (req *InetDiagReqV2) Len() int {
-	return SizeofInetDiagReqV2
+func (req *ReqV2) Len() int {
+	return SizeofReqV2
 }
 
-// NewInetDiagReqV2 creates a new request.
-func NewInetDiagReqV2(family, protocol uint8, states uint32) *InetDiagReqV2 {
-	return &InetDiagReqV2{
+// NewReqV2 creates a new request.
+func NewReqV2(family, protocol uint8, states uint32) *ReqV2 {
+	return &ReqV2{
 		SDiagFamily:   family,
 		SDiagProtocol: protocol,
 		IDiagStates:   states,
 	}
 }
 
-// InetDiagSockID is the binary linux representation of a socket, as in linux/inet_diag.h
+// SockID is the binary linux representation of a socket, as in linux/inet_diag.h
 // Linux code comments indicate this struct uses the network byte order!!!
-type InetDiagSockID struct {
+type SockID struct {
 	IDiagSPort [2]byte
 	IDiagDPort [2]byte
 	IDiagSrc   [16]byte
@@ -97,36 +95,36 @@ type InetDiagSockID struct {
 }
 
 // Interface returns the interface number.
-func (id *InetDiagSockID) Interface() uint32 {
+func (id *SockID) Interface() uint32 {
 	return binary.BigEndian.Uint32(id.IDiagIf[:])
 }
 
 // SrcIP returns a golang net encoding of source address.
-func (id *InetDiagSockID) SrcIP() net.IP {
+func (id *SockID) SrcIP() net.IP {
 	return ip(id.IDiagSrc)
 }
 
 // DstIP returns a golang net encoding of destination address.
-func (id *InetDiagSockID) DstIP() net.IP {
+func (id *SockID) DstIP() net.IP {
 	return ip(id.IDiagDst)
 }
 
 // SPort returns the host byte ordered port.
 // In general, Netlink is supposed to use host byte order, but this seems to be an exception.
 // Perhaps Netlink is reading a tcp stack structure that holds the port in network byte order.
-func (id *InetDiagSockID) SPort() uint16 {
+func (id *SockID) SPort() uint16 {
 	return binary.BigEndian.Uint16(id.IDiagSPort[:])
 }
 
 // DPort returns the host byte ordered port.
 // In general, Netlink is supposed to use host byte order, but this seems to be an exception.
 // Perhaps Netlink is reading a tcp stack structure that holds the port in network byte order.
-func (id *InetDiagSockID) DPort() uint16 {
+func (id *SockID) DPort() uint16 {
 	return binary.BigEndian.Uint16(id.IDiagDPort[:])
 }
 
 // Cookie returns the SockID's 64 bit unsigned cookie.
-func (id *InetDiagSockID) Cookie() uint64 {
+func (id *SockID) Cookie() uint64 {
 	// This is a socket UUID generated within the kernel, and is therefore in host byte order.
 	return binary.LittleEndian.Uint64(id.IDiagCookie[:])
 }
@@ -156,13 +154,15 @@ func ipv6(original [16]byte) net.IP {
 	return original[:]
 }
 
-// These are related to filters.  We don't currently use filters, so we ignore this type.
+// HostCond is related to filters.  We don't currently use filters, so we don't actually use this type.
 type HostCond struct { // inet_diag_hostcond
 	Family    uint8  // __u8 family
 	PrefixLen uint8  // __u8 prefix_len
 	Port      uint16 // int port
 	Addr      uint32 // __be32	addr[0];
 }
+
+// MarkCond is related to filters.  We don't currently use filters, so we don't actually use this type.
 type MarkCond struct { // inet_diag_markcond
 	Mark uint32
 	Mask uint32
@@ -170,13 +170,12 @@ type MarkCond struct { // inet_diag_markcond
 
 // InetDiagMsg is the linux binary representation of a InetDiag message header, as in linux/inet_diag.h
 // Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
-// INET_DIAG_INFO
 type InetDiagMsg struct {
 	IDiagFamily  uint8
 	IDiagState   uint8
 	IDiagTimer   uint8
 	IDiagRetrans uint8
-	ID           InetDiagSockID
+	ID           SockID
 	IDiagExpires uint32
 	IDiagRqueue  uint32
 	IDiagWqueue  uint32
@@ -184,9 +183,9 @@ type InetDiagMsg struct {
 	IDiagInode   uint32
 }
 
+// SocketMemInfo implements the struct associated with INET_DIAG_SKMEMINFO
 // Haven't found a corresponding linux struct, but the message is described
 // in https://manpages.debian.org/stretch/manpages/sock_diag.7.en.html
-// INET_DIAG_SKMEMINFO
 type SocketMemInfo struct {
 	RmemAlloc  uint32
 	Rcvbuf     uint32
@@ -199,8 +198,8 @@ type SocketMemInfo struct {
 	Drops      uint32
 }
 
-// MemInfo corresponds to the linux struct inet_diag_meminfo.
-// In is used to decode attribute Type INET_DIAG_MEMINFO
+// MemInfo implements the struct associated with INET_DIAG_MEMINFO, corresponding with
+// linux struct inet_diag_meminfo in uapi/linux/inet_diag.h.
 type MemInfo struct {
 	Rmem uint32
 	Wmem uint32
@@ -208,7 +207,8 @@ type MemInfo struct {
 	Tmem uint32
 }
 
-// INET_DIAG_VEGASINFO
+// VegasInfo implements the struct associated with INET_DIAG_VEGASINFO, corresponding with
+// linux struct tcpvegas_info in uapi/linux/inet_diag.h.
 type VegasInfo struct {
 	Enabled  uint32
 	RTTCount uint32
@@ -216,7 +216,8 @@ type VegasInfo struct {
 	MinRTT   uint32
 }
 
-// INET_DIAG_DCTCPINFO
+// DCTCPInfo implements the struct associated with INET_DIAG_DCTCPINFO attribute, corresponding with
+// linux struct tcp_dctcp_info in uapi/linux/inet_diag.h.
 type DCTCPInfo struct {
 	Enabled uint16
 	CEState uint16
@@ -225,8 +226,8 @@ type DCTCPInfo struct {
 	ABTot   uint32
 }
 
-// BBRInfo corresponds to linux struct tcp_bbr_info.
-// Used for decoding attribute Type:INET_DIAG_BBRINFO
+// BBRInfo implements the struct associated with INET_DIAG_BBRINFO attribute, corresponding with
+// linux struct tcp_bbr_info in uapi/linux/inet_diag.h.
 type BBRInfo struct {
 	Bw         int64  // Max-filtered BW (app throughput) estimate in bytes/second
 	MinRtt     uint32 // Min-filtered RTT in uSec
@@ -273,22 +274,3 @@ if (tb[INET_DIAG_PEERS]) {
 		printf(",%s", format_host_sa(sa));
 }
 */
-
-/*
-
-//	INET_DIAG_SKV6ONLY
-			v6only = rta_getattr_u8(tb[INET_DIAG_SKV6ONLY]);
-
-//	INET_DIAG_SHUTDOWN
-			mask = rta_getattr_u8(tb[INET_DIAG_SHUTDOWN]);
-
-
-
-
-*/
-
-//	INET_DIAG_TOS
-//	INET_DIAG_TCLASS
-//	INET_DIAG_PAD
-//	INET_DIAG_CLASS_ID
-//	INET_DIAG_MD5SIG
