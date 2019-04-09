@@ -215,7 +215,7 @@ type Snapshot struct {
 
 	// Bit field indicating whether any message type was NOT fully parsed.
 	// TODO - populate this field if any message is ignored, or not fully parsed.
-	NotFullyParsed uint32
+	NotFullyParsed uint32 `csv:",omitempty"`
 
 	// Info from struct inet_diag_msg, including socket_id;
 	InetDiagMsg *inetdiag.InetDiagMsg `csv:"-"`
@@ -229,28 +229,28 @@ type Snapshot struct {
 	VegasInfo *inetdiag.VegasInfo `csv:"-"`
 
 	// From INET_DIAG_CONG message.
-	CongestionAlgorithm string
+	CongestionAlgorithm string `csv:",omitempty"`
 
 	// See https://tools.ietf.org/html/rfc3168
 	// TODO Do we need to record whether these are present and zero, vs absent?
-	TOS    uint8
-	TClass uint8
+	TOS    uint8 `csv:",omitempty"`
+	TClass uint8 `csv:",omitempty"`
 
 	// Data obtained from INET_DIAG_SKMEMINFO.
 	SocketMem *inetdiag.SocketMemInfo `csv:"-"`
 
 	// TODO Do we need to record present and zero, vs absent?
-	Shutdown uint8
+	Shutdown uint8 `csv:",omitempty"`
 
 	DCTCPInfo *inetdiag.DCTCPInfo `csv:"-"`
 
 	// From INET_DIAG_PROTOCOL message.
 	// TODO Do we need to record present and zero, vs absent?
-	Protocol inetdiag.Protocol
+	Protocol inetdiag.Protocol `csv:",omitempty"`
 
 	BBRInfo *inetdiag.BBRInfo `csv:"-"`
 
-	Mark uint32
+	Mark uint32 `csv:",omitempty"`
 }
 
 // ConnectionLog contains a Metadata and slice of Snapshots.
