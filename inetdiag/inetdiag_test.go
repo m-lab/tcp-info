@@ -9,6 +9,21 @@ import (
 )
 
 func TestSizes(t *testing.T) {
+	if unsafe.Offsetof(inetdiag.SockID{}.IDiagDPort) != 2 {
+		t.Error("Incorrect DPort offset")
+	}
+	if unsafe.Offsetof(inetdiag.SockID{}.IDiagSrc) != 4 {
+		t.Error("Incorrect Src offset")
+	}
+	if unsafe.Offsetof(inetdiag.SockID{}.IDiagDst) != 20 {
+		t.Error("Incorrect Dest offset")
+	}
+	if unsafe.Offsetof(inetdiag.SockID{}.IDiagIf) != 36 {
+		t.Error("Incorrect Interface offset")
+	}
+	if unsafe.Offsetof(inetdiag.SockID{}.IDiagCookie) != 40 {
+		t.Error("Incorrect Cookie offset")
+	}
 	if unsafe.Sizeof(inetdiag.SockID{}) != 48 {
 		t.Error("SockID wrong size", unsafe.Sizeof(inetdiag.SockID{}))
 	}

@@ -27,6 +27,7 @@ defined in uapi/linux/inet_diag.h
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net"
 	"unsafe"
 )
@@ -82,16 +83,45 @@ func NewReqV2(family, protocol uint8, states uint32) *ReqV2 {
 	}
 }
 
+// Types for SockID fields.
+type cookieType [8]byte
+
+func (c *cookieType) MarshalCSV() (string, error) {
+	value := binary.LittleEndian.Uint64(c[:])
+	return fmt.Sprintf("%X", value), nil
+}
+
+type ipType [16]byte
+
+type Port [2]byte
+
+func (p *Port) MarshalCSV() (string, error) {
+	value := binary.BigEndian.Uint16(p[:])
+	return fmt.Sprintf("%d", value), nil
+}
+
+type Interface [4]byte
+
+func (i *Interface) MarshalCSV() (string, error) {
+	value := binary.BigEndian.Uint32(i[:])
+	return fmt.Sprintf("%d", value), nil
+}
+
+func (ip *ipType) MarshalCSV() (string, error) {
+	netIP := (net.IP)(ip[0:16])
+	return netIP.String(), nil
+}
+
 // SockID is the binary linux representation of a socket, as in linux/inet_diag.h
 // Linux code comments indicate this struct uses the network byte order!!!
 type SockID struct {
-	IDiagSPort [2]byte
-	IDiagDPort [2]byte
-	IDiagSrc   [16]byte
-	IDiagDst   [16]byte
-	IDiagIf    [4]byte
+	IDiagSPort Port
+	IDiagDPort Port
+	IDiagSrc   ipType
+	IDiagDst   ipType
+	IDiagIf    Interface
 	// TODO - change this to [2]uint32 ?
-	IDiagCookie [8]byte
+	IDiagCookie cookieType
 }
 
 // Interface returns the interface number.

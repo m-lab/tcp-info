@@ -73,6 +73,10 @@ func TestDecodeArchiveRecords(t *testing.T) {
 
 		observed |= snap.Observed
 		parsed++
+
+		if parsed > 0 && snap.InetDiagMsg == nil {
+			t.Fatal("Missing IDM", snap)
+		}
 	}
 
 	if observed != (1<<inetdiag.INET_DIAG_MAX)-1 {
