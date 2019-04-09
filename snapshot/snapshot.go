@@ -208,7 +208,7 @@ type Snapshot struct {
 	Timestamp time.Time
 
 	// Metadata for the connection.  Usually empty.
-	Metadata *netlink.Metadata
+	Metadata *netlink.Metadata `csv:"-"`
 
 	// Bit field indicating whether each message type was observed.
 	Observed uint32
@@ -218,15 +218,15 @@ type Snapshot struct {
 	NotFullyParsed uint32
 
 	// Info from struct inet_diag_msg, including socket_id;
-	InetDiagMsg *inetdiag.InetDiagMsg
+	InetDiagMsg *inetdiag.InetDiagMsg `csv:"-"`
 
 	// Data obtained from INET_DIAG_MEMINFO.
-	MemInfo *inetdiag.MemInfo
+	MemInfo *inetdiag.MemInfo `csv:"-"`
 
 	// TCPInfo contains data from struct tcp_info.
-	TCPInfo *tcp.LinuxTCPInfo
+	TCPInfo *tcp.LinuxTCPInfo `csv:"-"`
 
-	VegasInfo *inetdiag.VegasInfo
+	VegasInfo *inetdiag.VegasInfo `csv:"-"`
 
 	// From INET_DIAG_CONG message.
 	CongestionAlgorithm string
@@ -237,18 +237,18 @@ type Snapshot struct {
 	TClass uint8
 
 	// Data obtained from INET_DIAG_SKMEMINFO.
-	SocketMem *inetdiag.SocketMemInfo
+	SocketMem *inetdiag.SocketMemInfo `csv:"-"`
 
 	// TODO Do we need to record present and zero, vs absent?
 	Shutdown uint8
 
-	DCTCPInfo *inetdiag.DCTCPInfo
+	DCTCPInfo *inetdiag.DCTCPInfo `csv:"-"`
 
 	// From INET_DIAG_PROTOCOL message.
 	// TODO Do we need to record present and zero, vs absent?
 	Protocol inetdiag.Protocol
 
-	BBRInfo *inetdiag.BBRInfo
+	BBRInfo *inetdiag.BBRInfo `csv:"-"`
 
 	Mark uint32
 }
