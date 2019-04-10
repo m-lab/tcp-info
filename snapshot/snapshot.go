@@ -73,7 +73,7 @@ func Decode(ar *netlink.ArchivalRecord) (*Snapshot, error) {
 		case inetdiag.INET_DIAG_BBRINFO:
 			result.BBRInfo, ok = rta.toBBRInfo()
 		case inetdiag.INET_DIAG_CLASS_ID:
-			log.Println("CLASS_ID not handled", len(rta))
+			result.ClassID, ok = rta.toClassID()
 		case inetdiag.INET_DIAG_MD5SIG:
 			log.Println("MD5SIGnot handled", len(rta))
 		default:
@@ -162,6 +162,11 @@ func (raw RouteAttrValue) toTCLASS() (uint8, bool) {
 	return raw.toUint8()
 }
 
+// toTCLASS marshals the TCP Traffic Class octet.  See https://tools.ietf.org/html/rfc3168
+func (raw RouteAttrValue) toClassID() (uint8, bool) {
+	return raw.toUint8()
+}
+
 // toSockMemInfo maps the raw RouteAttrValue onto a SockMemInfo.
 // For older data, it may have to copy the bytes.
 func (raw RouteAttrValue) toSockMemInfo() (*inetdiag.SocketMemInfo, bool) {
@@ -233,8 +238,9 @@ type Snapshot struct {
 
 	// See https://tools.ietf.org/html/rfc3168
 	// TODO Do we need to record whether these are present and zero, vs absent?
-	TOS    uint8 `csv:",omitempty"`
-	TClass uint8 `csv:",omitempty"`
+	TOS     uint8 `csv:",omitempty"`
+	TClass  uint8 `csv:",omitempty"`
+	ClassID uint8 `csv:",omitempty"`
 
 	// Data obtained from INET_DIAG_SKMEMINFO.
 	SocketMem *inetdiag.SocketMemInfo `csv:"-"`
