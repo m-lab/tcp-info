@@ -225,14 +225,6 @@ type Snapshot struct {
 	// Info from struct inet_diag_msg, including socket_id;
 	InetDiagMsg *inetdiag.InetDiagMsg `csv:"-"`
 
-	// Data obtained from INET_DIAG_MEMINFO.
-	MemInfo *inetdiag.MemInfo `csv:"-"`
-
-	// TCPInfo contains data from struct tcp_info.
-	TCPInfo *tcp.LinuxTCPInfo `csv:"-"`
-
-	VegasInfo *inetdiag.VegasInfo `csv:"-"`
-
 	// From INET_DIAG_CONG message.
 	CongestionAlgorithm string `csv:",omitempty"`
 
@@ -242,21 +234,27 @@ type Snapshot struct {
 	TClass  uint8 `csv:",omitempty"`
 	ClassID uint8 `csv:",omitempty"`
 
-	// Data obtained from INET_DIAG_SKMEMINFO.
-	SocketMem *inetdiag.SocketMemInfo `csv:"-"`
-
 	// TODO Do we need to record present and zero, vs absent?
 	Shutdown uint8 `csv:",omitempty"`
-
-	DCTCPInfo *inetdiag.DCTCPInfo `csv:"-"`
 
 	// From INET_DIAG_PROTOCOL message.
 	// TODO Do we need to record present and zero, vs absent?
 	Protocol inetdiag.Protocol `csv:",omitempty"`
 
-	BBRInfo *inetdiag.BBRInfo `csv:"-"`
-
 	Mark uint32 `csv:",omitempty"`
+
+	// Data obtained from INET_DIAG_MEMINFO.
+	MemInfo *inetdiag.MemInfo `csv:"-"`
+
+	// TCPInfo contains data from struct tcp_info.
+	TCPInfo *tcp.LinuxTCPInfo `csv:"-"`
+
+	// Data obtained from INET_DIAG_SKMEMINFO.
+	SocketMem *inetdiag.SocketMemInfo `csv:"-"`
+
+	VegasInfo *inetdiag.VegasInfo `csv:"-"`
+	DCTCPInfo *inetdiag.DCTCPInfo `csv:"-"`
+	BBRInfo   *inetdiag.BBRInfo   `csv:"-"`
 }
 
 // ConnectionLog contains a Metadata and slice of Snapshots.
