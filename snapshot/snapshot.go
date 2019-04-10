@@ -243,11 +243,11 @@ type Snapshot struct {
 
 	Mark uint32 `csv:",omitempty"`
 
-	// Data obtained from INET_DIAG_MEMINFO.
-	MemInfo *inetdiag.MemInfo `csv:"-"`
-
 	// TCPInfo contains data from struct tcp_info.
 	TCPInfo *tcp.LinuxTCPInfo `csv:"-"`
+
+	// Data obtained from INET_DIAG_MEMINFO.
+	MemInfo *inetdiag.MemInfo `csv:"-"`
 
 	// Data obtained from INET_DIAG_SKMEMINFO.
 	SocketMem *inetdiag.SocketMemInfo `csv:"-"`
