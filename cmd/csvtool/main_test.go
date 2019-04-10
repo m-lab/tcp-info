@@ -23,23 +23,26 @@ func TestFileToCSV(t *testing.T) {
 	}
 
 	header := strings.Split(lines[0], ",")
-	if header[7] != "IDiagFamily" {
-		t.Fatal("Incorrect header", header[7])
-	}
-	if header[11] != "IDiagSPort" {
-		t.Fatal("Incorrect header", header[11])
+	if header[6] != "IDM.Family" {
+		t.Error("Incorrect header", header[6])
 	}
 	record := strings.Split(lines[2], ",")
 	// SrcPort
-	if record[11] != "9091" {
-		t.Error(record[11])
+	if header[10] != "IDM.SockID.SPort" {
+		t.Error("Incorrect header", header[10])
+	}
+	if record[10] != "9091" {
+		t.Error(record[10])
 	}
 	// SrcIP
-	if record[13] != "192.168.14.134" {
-		t.Error(record[13])
+	if record[12] != "192.168.14.134" {
+		t.Error(record[12])
 	}
 	// Cookie
-	if record[16] != "3E8" {
+	if header[15] != "IDM.SockID.Cookie" {
+		t.Error("Incorrect header", header[15])
+	}
+	if record[15] != "3E8" {
 		t.Error(record[15])
 	}
 }

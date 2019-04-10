@@ -39,7 +39,7 @@ func fakeMsg(t *testing.T, cookie uint64, dport uint16) netlink.ArchivalRecord {
 	}
 	for i := 0; i < 2; i++ {
 		idm.ID.IDiagDPort[i] = byte(dport & 0x0FF)
-		cookie >>= 8
+		dport >>= 8
 	}
 	return *mp
 }

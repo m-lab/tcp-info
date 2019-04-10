@@ -109,11 +109,11 @@ func (p *Port) MarshalCSV() (string, error) {
 }
 
 // Interface encodes the SockID Interface field.
-type Interface [4]byte
+type netIF [4]byte
 
 // MarshalCSV marshals Interface to CSV
-func (i *Interface) MarshalCSV() (string, error) {
-	value := binary.BigEndian.Uint32(i[:])
+func (nif *netIF) MarshalCSV() (string, error) {
+	value := binary.BigEndian.Uint32(nif[:])
 	return fmt.Sprintf("%d", value), nil
 }
 
@@ -124,7 +124,7 @@ type SockID struct {
 	IDiagDPort  Port       `csv:"IDM.SockID.DPort"`
 	IDiagSrc    ipType     `csv:"IDM.SockID.Src"`
 	IDiagDst    ipType     `csv:"IDM.SockID.Dst"`
-	IDiagIf     Interface  `csv:"IDM.SockID.Interface"`
+	IDiagIf     netIF      `csv:"IDM.SockID.Interface"`
 	IDiagCookie cookieType `csv:"IDM.SockID.Cookie"`
 }
 
