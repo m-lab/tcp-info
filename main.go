@@ -79,7 +79,7 @@ func main() {
 	runtime.SetMutexProfileFraction(1000)
 
 	// Expose prometheus and pprof metrics on a separate port.
-	promSrv := prometheusx.MustStartPrometheus(*prometheusx.ListenAddress)
+	promSrv := prometheusx.MustServeMetrics()
 	defer promSrv.Shutdown(ctx)
 
 	if *enableTrace {
