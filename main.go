@@ -61,7 +61,6 @@ func init() {
 var (
 	reps        = flag.Int("reps", 0, "How many cycles should be recorded, 0 means continuous")
 	enableTrace = flag.Bool("trace", false, "Enable trace")
-	promPort    = flag.String("prom", ":9090", "Prometheus metrics export address and port. Default is ':9090'")
 	outputDir   = flag.String("output", "", "Directory in which to put the resulting tree of data.  Default is the current directory.")
 
 	ctx, cancel = context.WithCancel(context.Background())
@@ -80,7 +79,7 @@ func main() {
 	runtime.SetMutexProfileFraction(1000)
 
 	// Expose prometheus and pprof metrics on a separate port.
-	promSrv := prometheusx.MustStartPrometheus(*promPort)
+	promSrv := prometheusx.MustServeMetrics()
 	defer promSrv.Shutdown(ctx)
 
 	if *enableTrace {

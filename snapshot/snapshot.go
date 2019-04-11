@@ -73,7 +73,7 @@ func Decode(ar *netlink.ArchivalRecord) (*Snapshot, error) {
 		case inetdiag.INET_DIAG_BBRINFO:
 			result.BBRInfo, ok = rta.toBBRInfo()
 		case inetdiag.INET_DIAG_CLASS_ID:
-			log.Println("CLASS_ID not handled", len(rta))
+			result.ClassID, ok = rta.toClassID()
 		case inetdiag.INET_DIAG_MD5SIG:
 			log.Println("MD5SIGnot handled", len(rta))
 		default:
@@ -162,6 +162,11 @@ func (raw RouteAttrValue) toTCLASS() (uint8, bool) {
 	return raw.toUint8()
 }
 
+// toTCLASS marshals the TCP Traffic Class octet.  See https://tools.ietf.org/html/rfc3168
+func (raw RouteAttrValue) toClassID() (uint8, bool) {
+	return raw.toUint8()
+}
+
 // toSockMemInfo maps the raw RouteAttrValue onto a SockMemInfo.
 // For older data, it may have to copy the bytes.
 func (raw RouteAttrValue) toSockMemInfo() (*inetdiag.SocketMemInfo, bool) {
@@ -208,49 +213,48 @@ type Snapshot struct {
 	Timestamp time.Time
 
 	// Metadata for the connection.  Usually empty.
-	Metadata *netlink.Metadata
+	Metadata *netlink.Metadata `csv:"-"`
 
 	// Bit field indicating whether each message type was observed.
 	Observed uint32
 
 	// Bit field indicating whether any message type was NOT fully parsed.
 	// TODO - populate this field if any message is ignored, or not fully parsed.
-	NotFullyParsed uint32
+	NotFullyParsed uint32 `csv:",omitempty"`
 
 	// Info from struct inet_diag_msg, including socket_id;
-	InetDiagMsg *inetdiag.InetDiagMsg
-
-	// Data obtained from INET_DIAG_MEMINFO.
-	MemInfo *inetdiag.MemInfo
-
-	// TCPInfo contains data from struct tcp_info.
-	TCPInfo *tcp.LinuxTCPInfo
-
-	VegasInfo *inetdiag.VegasInfo
+	InetDiagMsg *inetdiag.InetDiagMsg `csv:"-"`
 
 	// From INET_DIAG_CONG message.
-	CongestionAlgorithm string
+	CongestionAlgorithm string `csv:",omitempty"`
 
 	// See https://tools.ietf.org/html/rfc3168
 	// TODO Do we need to record whether these are present and zero, vs absent?
-	TOS    uint8
-	TClass uint8
-
-	// Data obtained from INET_DIAG_SKMEMINFO.
-	SocketMem *inetdiag.SocketMemInfo
+	TOS     uint8 `csv:",omitempty"`
+	TClass  uint8 `csv:",omitempty"`
+	ClassID uint8 `csv:",omitempty"`
 
 	// TODO Do we need to record present and zero, vs absent?
-	Shutdown uint8
-
-	DCTCPInfo *inetdiag.DCTCPInfo
+	Shutdown uint8 `csv:",omitempty"`
 
 	// From INET_DIAG_PROTOCOL message.
 	// TODO Do we need to record present and zero, vs absent?
-	Protocol inetdiag.Protocol
+	Protocol inetdiag.Protocol `csv:",omitempty"`
 
-	BBRInfo *inetdiag.BBRInfo
+	Mark uint32 `csv:",omitempty"`
 
-	Mark uint32
+	// TCPInfo contains data from struct tcp_info.
+	TCPInfo *tcp.LinuxTCPInfo `csv:"-"`
+
+	// Data obtained from INET_DIAG_MEMINFO.
+	MemInfo *inetdiag.MemInfo `csv:"-"`
+
+	// Data obtained from INET_DIAG_SKMEMINFO.
+	SocketMem *inetdiag.SocketMemInfo `csv:"-"`
+
+	VegasInfo *inetdiag.VegasInfo `csv:"-"`
+	DCTCPInfo *inetdiag.DCTCPInfo `csv:"-"`
+	BBRInfo   *inetdiag.BBRInfo   `csv:"-"`
 }
 
 // ConnectionLog contains a Metadata and slice of Snapshots.

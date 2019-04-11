@@ -14,6 +14,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/m-lab/tcp-info/tcp"
+
 	"github.com/m-lab/tcp-info/inetdiag"
 	"golang.org/x/sys/unix"
 )
@@ -184,6 +186,7 @@ const (
 const (
 	lastDataSentOffset = unsafe.Offsetof(syscall.TCPInfo{}.Last_data_sent)
 	pmtuOffset         = unsafe.Offsetof(syscall.TCPInfo{}.Pmtu)
+	busytimeOffset     = unsafe.Offsetof(tcp.LinuxTCPInfo{}.BusyTime)
 )
 
 func isLocal(addr net.IP) bool {
@@ -236,7 +239,8 @@ func (pm *ArchivalRecord) Compare(previous *ArchivalRecord) (ChangeType, error) 
 
 	// If any of the byte/segment/package counters have changed, that is what we are most
 	// interested in.
-	if 0 != bytes.Compare(a[pmtuOffset:], b[pmtuOffset:]) {
+	// NOTE: There are more fields beyond BusyTime, but for now we are ignoring them for diffing purposes.
+	if 0 != bytes.Compare(a[pmtuOffset:busytimeOffset], b[pmtuOffset:busytimeOffset]) {
 		return StateOrCounterChange, nil
 	}
 

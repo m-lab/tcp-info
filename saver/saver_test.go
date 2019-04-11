@@ -56,9 +56,8 @@ func msg(t *testing.T, cookie uint64, dport uint16) *netlink.ArchivalRecord {
 	}
 	for i := 0; i < 2; i++ {
 		idm.ID.IDiagDPort[i] = byte(dport & 0x0FF)
-		dport >>= 8
+		cookie >>= 8
 	}
-	//pm.SetIDM(idm)
 	t.Logf("%+v\n", mp.RawIDM)
 	return mp
 }
