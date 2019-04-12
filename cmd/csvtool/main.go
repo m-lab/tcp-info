@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gocarina/gocsv"
+	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/snapshot"
 	"github.com/m-lab/tcp-info/zstd"
@@ -19,54 +20,51 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-// TODO handle gs: filenames.
-// TODO filter a single file from a tar file.
-func main() {
-	args := os.Args[1:]
-	if len(args) != 1 {
-		log.Fatal("Must specify filename")
-	}
+var (
+	// A variable to enable mocking for testing.
+	logFatal = log.Fatal
+)
 
-	fn := args[0]
-
-	err := fileToCSV(fn, os.Stdout)
-	if err != nil {
-		log.Fatal(err)
-	}
+// parses ArchiveRecords from the reader and writes CSV to the writer
+func readSnapshots(rdr io.Reader) ([]*snapshot.Snapshot, error) {
+	// Read input from provided reader.
+	arReader := netlink.NewArchiveReader(rdr)
+	return snapshot.LoadAll(arReader)
 }
 
-func toCSV(rdr io.Reader, wtr io.Writer) error {
-	// Read input from provided filename.
-	arReader := netlink.NewArchiveReader(rdr)
-	snapshots, err := snapshot.LoadAll(arReader)
-	if err != nil {
-		return err
-	}
-
+func toCSV(snapshots []*snapshot.Snapshot, wtr io.Writer) error {
 	if len(snapshots) > 0 && snapshots[0].Metadata == nil {
 		// Add empty Metadata.
 		snapshots[0].Metadata = &netlink.Metadata{}
 	}
-
-	err = gocsv.Marshal(snapshots, wtr)
-	return err
+	return gocsv.Marshal(snapshots, wtr)
 }
 
-// fileToCSV parses ArchiveRecords from file (or "-" for stdin), and write CSV to stdout
-func fileToCSV(fn string, wtr io.Writer) error {
-	var raw io.ReadCloser
+// openFile either opens a file, or opens and unzips a file that ends with .zst
+func openFile(fn string) (io.ReadCloser, error) {
 	if strings.HasSuffix(fn, ".zst") {
-		raw = zstd.NewReader(fn)
-		defer raw.Close()
-	} else if fn == "-" {
-		raw = os.Stdin
-	} else {
-		raw, err := os.Open(fn)
-		if err != nil {
-			return err
-		}
-		defer raw.Close()
+		return zstd.NewReader(fn), nil
 	}
+	return os.Open(fn)
+}
 
-	return toCSV(raw, wtr)
+// TODO handle gs: filenames.
+// TODO filter a single file from a tar file.
+func main() {
+	args := os.Args[1:]
+
+	var source io.ReadCloser
+	var err error
+	source = os.Stdin
+	if len(args) == 1 {
+		source, err = openFile(args[0])
+		rtx.Must(err, "Could not open file %q", args[0])
+	} else if len(args) > 1 {
+		logFatal("Too many command-line arguments.")
+	}
+	defer source.Close()
+
+	snaps, err := readSnapshots(source)
+	rtx.Must(err, "Could not read snapshots")
+	rtx.Must(toCSV(snaps, os.Stdout), "Could not convert input to CSV")
 }
