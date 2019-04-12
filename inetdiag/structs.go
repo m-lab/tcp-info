@@ -94,8 +94,8 @@ func (c *cookieType) MarshalCSV() (string, error) {
 type ipType [16]byte
 
 // MarshalCSV marshals ipType to CSV
-func (ip *ipType) MarshalCSV() (string, error) {
-	netIP := (net.IP)(ip[0:16])
+func (ipAddr *ipType) MarshalCSV() (string, error) {
+	netIP := ip(*ipAddr)
 	return netIP.String(), nil
 }
 
@@ -164,6 +164,7 @@ func (id *SockID) Cookie() uint64 {
 }
 
 // TODO should use more net.IP code instead of custom code.
+// TODO: reconcile this encoding of v4-in-v6 with the encoding used in https://golang.org/src/net/ip.go?s=1216:1245#L35
 func ip(bytes [16]byte) net.IP {
 	if isIpv6(bytes) {
 		return ipv6(bytes)
