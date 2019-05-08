@@ -98,19 +98,22 @@ type LinuxTCPInfo struct {
 
 	TotalRetrans uint32 `csv:"TCP.TotalRetrans"`
 
-	PacingRate    int64  `csv:"TCP.PacingRate"`    // This is often -1, so better for it to be signed
-	MaxPacingRate int64  `csv:"TCP.MaxPacingRate"` // This is often -1, so better to be signed.
-	BytesAcked    uint64 `csv:"TCP.BytesAcked"`    /* RFC4898 tcpEStatsAppHCThruOctetsAcked */
-	BytesReceived uint64 `csv:"TCP.BytesReceived"` /* RFC4898 tcpEStatsAppHCThruOctetsReceived */
-	SegsOut       uint32 `csv:"TCP.SegsOut"`       /* RFC4898 tcpEStatsPerfSegsOut */
-	SegsIn        uint32 `csv:"TCP.SegsIn"`        /* RFC4898 tcpEStatsPerfSegsIn */
+	PacingRate    int64 `csv:"TCP.PacingRate"`    // This is often -1, so better for it to be signed
+	MaxPacingRate int64 `csv:"TCP.MaxPacingRate"` // This is often -1, so better to be signed.
+
+	// NOTE: In linux, these are uint64, but we make them int64 here for compatibility with BigQuery
+	BytesAcked    int64 `csv:"TCP.BytesAcked"`    /* RFC4898 tcpEStatsAppHCThruOctetsAcked */
+	BytesReceived int64 `csv:"TCP.BytesReceived"` /* RFC4898 tcpEStatsAppHCThruOctetsReceived */
+	SegsOut       int32 `csv:"TCP.SegsOut"`       /* RFC4898 tcpEStatsPerfSegsOut */
+	SegsIn        int32 `csv:"TCP.SegsIn"`        /* RFC4898 tcpEStatsPerfSegsIn */
 
 	NotsentBytes uint32 `csv:"TCP.NotsentBytes"`
 	MinRTT       uint32 `csv:"TCP.MinRTT"`
 	DataSegsIn   uint32 `csv:"TCP.DataSegsIn"`  /* RFC4898 tcpEStatsDataSegsIn */
 	DataSegsOut  uint32 `csv:"TCP.DataSegsOut"` /* RFC4898 tcpEStatsDataSegsOut */
 
-	DeliveryRate uint64 `csv:"TCP.DeliveryRate"`
+	// NOTE: In linux, this is uint64, but we make it int64 here for compatibility with BigQuery
+	DeliveryRate int64 `csv:"TCP.DeliveryRate"`
 
 	BusyTime      int64 `csv:"TCP.BusyTime"`      /* Time (usec) busy sending data */
 	RWndLimited   int64 `csv:"TCP.RWndLimited"`   /* Time (usec) limited by receive window */
@@ -119,8 +122,10 @@ type LinuxTCPInfo struct {
 	Delivered   uint32 `csv:"TCP.Delivered"`
 	DeliveredCE uint32 `csv:"TCP.DeliveredCE"`
 
-	BytesSent    uint64 `csv:"TCP.BytesSent"`    /* RFC4898 tcpEStatsPerfHCDataOctetsOut */
-	BytesRetrans uint64 `csv:"TCP.BytesRetrans"` /* RFC4898 tcpEStatsPerfOctetsRetrans */
-	DSackDups    uint32 `csv:"TCP.DSackDups"`    /* RFC4898 tcpEStatsStackDSACKDups */
-	ReordSeen    uint32 `csv:"TCP.ReordSeen"`    /* reordering events seen */
+	// NOTE: In linux, these are uint64, but we make them int64 here for compatibility with BigQuery
+	BytesSent    int64 `csv:"TCP.BytesSent"`    /* RFC4898 tcpEStatsPerfHCDataOctetsOut */
+	BytesRetrans int64 `csv:"TCP.BytesRetrans"` /* RFC4898 tcpEStatsPerfOctetsRetrans */
+
+	DSackDups uint32 `csv:"TCP.DSackDups"` /* RFC4898 tcpEStatsStackDSACKDups */
+	ReordSeen uint32 `csv:"TCP.ReordSeen"` /* reordering events seen */
 }
