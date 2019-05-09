@@ -51,7 +51,7 @@ func runTest(t *testing.T, ctx context.Context, port int) {
 	buff := make([]byte, 1024)
 	for ctx.Err() == nil {
 		local.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
-		local.Read(buff) // Test is here when travis kills the test.
+		local.Read(buff)
 	}
 }
 
