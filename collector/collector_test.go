@@ -29,6 +29,7 @@ type testCacheLogger struct{}
 
 func (t *testCacheLogger) LogCacheStats(_, _ int) {}
 
+// This opens a local connection and streams data through it.
 func runTest(t *testing.T, ctx context.Context, port int) {
 	// Open a server socket, connect to it, send data to it until the context is canceled.
 	address := fmt.Sprintf("localhost:%d", port)
@@ -49,7 +50,8 @@ func runTest(t *testing.T, ctx context.Context, port int) {
 	}()
 	buff := make([]byte, 1024)
 	for ctx.Err() == nil {
-		local.Read(buff)
+		local.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
+		local.Read(buff) // Test is here when travis kills the test.
 	}
 }
 
@@ -70,23 +72,28 @@ func TestRun(t *testing.T) {
 	// A nice big buffer on the channel
 	msgChan := make(chan []*netlink.ArchivalRecord, 10000)
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 
 	go func() {
+		defer wg.Done()
 		collector.Run(ctx, 0, msgChan, &testCacheLogger{}, false)
-		wg.Done()
+		t.Log("Run done.")
 	}()
 
 	go func() {
+		defer wg.Done()
 		runTest(t, ctx, port)
-		wg.Done()
+		t.Log("runTest done.")
 	}()
 
 	go func() {
+		defer wg.Done()
 		select {
 		case <-ctx.Done():
+			t.Log("ctx.Done")
 			return
 		case <-time.NewTimer(10 * time.Second).C:
+			t.Log("Time out")
 			cancel()
 			close(msgChan)
 			t.Error("It should not take 10 seconds to get enough messages. Something is wrong.")
