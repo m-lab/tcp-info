@@ -1,8 +1,8 @@
-//go:generate ffjson $GOFILE
-
 // Package inetdiag provides basic structs and utilities for INET_DIAG messaages.
 // Based on uapi/linux/inet_diag.h.
 package inetdiag
+
+import "golang.org/x/sys/unix"
 
 // Pretty basic code slightly adapted from code copied from
 // https://gist.github.com/gwind/05f5f649d93e6015cf47ffa2b2fd9713
@@ -29,10 +29,6 @@ https://pdfs.semanticscholar.org/6efd/e161a2582ba5846e4b8fea5a53bc305a64f3.pdf
 "Netlink messages are aligned to 32 bits and, generally speaking, they contain data that is
 expressed in host-byte order"
 */
-
-import (
-	"syscall"
-)
 
 // inet_diag.h
 const (
@@ -82,8 +78,8 @@ var InetDiagType = map[int32]string{
 }
 
 var diagFamilyMap = map[uint8]string{
-	syscall.AF_INET:  "tcp",
-	syscall.AF_INET6: "tcp6",
+	unix.AF_INET:  "tcp",
+	unix.AF_INET6: "tcp6",
 }
 
 // Protocol defines the type corresponding to INET_DIAG_PROTOCOL 8 bit field.
