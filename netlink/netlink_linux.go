@@ -26,6 +26,9 @@ var (
 	ErrParseFailed = errors.New("Unable to parse InetDiagMsg")
 )
 
+type NetlinkMessage = syscall.NetlinkMessage
+type TCPInfo = syscall.TCPInfo
+
 /*********************************************************************************************
 *                         Low level netlink message stuff
 *********************************************************************************************/
@@ -108,61 +111,6 @@ type ArchivalRecord struct {
 	// Metadata contains connection level metadata.  It is typically included in the very first record
 	// in a file.
 	Metadata *Metadata `json:",omitempty"`
-}
-
-// MakeArchivalRecord parses the NetlinkMessage into a ArchivalRecord.  If skipLocal is true, it will return nil for
-// loopback, local unicast, multicast, and unspecified connections.
-// Note that Parse does not populate the Timestamp field, so caller should do so.
-func MakeArchivalRecord(msg *syscall.NetlinkMessage, skipLocal bool) (*ArchivalRecord, error) {
-	if msg.Header.Type != 20 {
-		return nil, ErrNotType20
-	}
-	raw, attrBytes := splitInetDiagMsg(msg.Data)
-	if raw == nil {
-		return nil, ErrParseFailed
-	}
-	if skipLocal {
-		idm, err := raw.Parse()
-		if err != nil {
-			return nil, err
-		}
-
-		if isLocal(idm.ID.SrcIP()) || isLocal(idm.ID.DstIP()) {
-			return nil, nil
-		}
-	}
-
-	record := ArchivalRecord{RawIDM: raw}
-	// parsedMsg.NLMsgHdr = &msg.Header
-
-	attrs, err := ParseRouteAttr(attrBytes)
-	if err != nil {
-		return nil, err
-	}
-	maxAttrType := uint16(0)
-	for _, a := range attrs {
-		t := a.Attr.Type
-		if t > maxAttrType {
-			maxAttrType = t
-		}
-	}
-	if maxAttrType > 2*inetdiag.INET_DIAG_MAX {
-		maxAttrType = 2 * inetdiag.INET_DIAG_MAX
-	}
-	record.Attributes = make([][]byte, maxAttrType+1, maxAttrType+1)
-	for _, a := range attrs {
-		t := a.Attr.Type
-		if t > maxAttrType {
-			log.Println("Error!! Received RouteAttr with very large Type:", t)
-			continue
-		}
-		if record.Attributes[t] != nil {
-			// TODO - add metric so we can alert on these.
-			log.Println("Parse error - Attribute appears more than once:", t)
-		}
-		record.Attributes[t] = a.Value
-	}
-	return &record, nil
 }
 
 // ChangeType indicates why a new record is worthwhile saving.
