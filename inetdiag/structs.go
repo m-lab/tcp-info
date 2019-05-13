@@ -231,7 +231,7 @@ func rtaAlignOf(attrlen int) int {
 // RawInetDiagMsg holds the []byte representation of an InetDiagMsg
 type RawInetDiagMsg []byte
 
-func splitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
+func SplitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
 	// TODO - why using rtaAlign on InetDiagMsg ???
 	align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
 	if len(data) < align {

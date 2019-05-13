@@ -73,7 +73,7 @@ func TestParseInetDiagMsg(t *testing.T) {
 	for i := range data {
 		data[i] = byte(i + 2)
 	}
-	raw, value := splitInetDiagMsg(data[:])
+	raw, value := SplitInetDiagMsg(data[:])
 	hdr, err := raw.Parse()
 	rtx.Must(err, "")
 
@@ -91,7 +91,7 @@ func TestParseInetDiagMsg(t *testing.T) {
 		t.Error("Len", len(value))
 	}
 
-	raw, value = splitInetDiagMsg(data[:1])
+	raw, value = SplitInetDiagMsg(data[:1])
 	if raw != nil || value != nil {
 		t.Error("This should fail, the data is too small.")
 	}
