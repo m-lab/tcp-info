@@ -69,7 +69,6 @@ func MakeArchivalRecord(msg *syscall.NetlinkMessage, skipLocal bool) (*ArchivalR
 	}
 
 	record := ArchivalRecord{RawIDM: raw}
-	// parsedMsg.NLMsgHdr = &msg.Header
 
 	attrs, err := ParseRouteAttr(attrBytes)
 	if err != nil {
