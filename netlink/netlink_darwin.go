@@ -36,9 +36,6 @@ type NetlinkRouteAttr struct {
 	Value []byte
 }
 
-type TCPInfo struct {
-}
-
 const (
 	RTA_ALIGNTO    = 4
 	SizeofNlMsghdr = 0x10

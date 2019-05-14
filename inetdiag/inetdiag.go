@@ -31,6 +31,9 @@ expressed in host-byte order"
 */
 
 // inet_diag.h
+
+const AF_INET6 = 0x0a
+
 const (
 	INET_DIAG_NONE = iota
 	INET_DIAG_MEMINFO
@@ -78,8 +81,9 @@ var InetDiagType = map[int32]string{
 }
 
 var diagFamilyMap = map[uint8]string{
-	unix.AF_INET:  "tcp",
-	unix.AF_INET6: "tcp6",
+	// NOTE: darwin values for AF_INET6 are incorrect.
+	unix.AF_INET: "tcp",
+	AF_INET6:     "tcp6",
 }
 
 // Protocol defines the type corresponding to INET_DIAG_PROTOCOL 8 bit field.

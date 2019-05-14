@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime"
 	"unsafe"
 )
 
@@ -236,7 +237,8 @@ func SplitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
 	align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
 	if len(data) < align {
 		log.Println("Wrong length", len(data), "<", align)
-		log.Println(data)
+		_, file, line, _ := runtime.Caller(2)
+		log.Println(file, line, data)
 		return nil, nil
 	}
 	return RawInetDiagMsg(data[:align]), data[align:]

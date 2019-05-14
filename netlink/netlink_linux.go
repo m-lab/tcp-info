@@ -30,7 +30,6 @@ type NlMsghdr = syscall.NlMsghdr
 type NetlinkMessage = syscall.NetlinkMessage
 type RtAttr = syscall.RtAttr
 type NetlinkRouteAttr = syscall.NetlinkRouteAttr
-type TCPInfo = syscall.TCPInfo
 
 /*********************************************************************************************
 *                         Low level netlink message stuff

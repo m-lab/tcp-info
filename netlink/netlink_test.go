@@ -17,7 +17,6 @@ import (
 	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/tcp"
 	"github.com/m-lab/tcp-info/zstd"
-	"golang.org/x/sys/unix"
 )
 
 // This is not exhaustive, but covers the basics.  Integration tests will expose any more subtle
@@ -32,13 +31,15 @@ func TestParse(t *testing.T) {
 	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
 	nm := netlink.NetlinkMessage{}
 	err := json.Unmarshal([]byte(json1), &nm)
+	t.Log("Data len = ", len(nm.Data))
 	rtx.Must(err, "")
 	mp, err := netlink.MakeArchivalRecord(&nm, true)
 	rtx.Must(err, "")
 	idm, err := mp.RawIDM.Parse()
 	rtx.Must(err, "")
-	if idm.IDiagFamily != unix.AF_INET6 {
-		t.Error("Should not be IPv6")
+	// NOTE: darwin unix.AF_INET6 and syscall.AF_INET6 are incorrect (0x1e)!!
+	if idm.IDiagFamily != inetdiag.AF_INET6 {
+		t.Errorf("IDiagFamily should be IPv6: %d\n %+v\n", idm.IDiagFamily, idm)
 	}
 
 	nonNil := 0
