@@ -242,15 +242,17 @@ func SplitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
 	return RawInetDiagMsg(data[:align]), data[align:]
 }
 
+var ErrParseFailed = errors.New("Unable to parse InetDiagMsg")
+
 // Parse returns the InetDiagMsg itself
 // Modified from original to also return attribute data array.
 func (raw RawInetDiagMsg) Parse() (*InetDiagMsg, error) {
 	// TODO - why using rtaAlign on InetDiagMsg ???
-	/*
-		align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
-		if len(raw) < align {
-			return nil, ErrParseFailed
-		}*/
+
+	align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
+	if len(raw) < align {
+		return nil, ErrParseFailed
+	}
 	return (*InetDiagMsg)(unsafe.Pointer(&raw[0])), nil
 }
 
