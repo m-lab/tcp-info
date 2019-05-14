@@ -8,6 +8,7 @@ import (
 	"unsafe"
 
 	"github.com/m-lab/tcp-info/inetdiag"
+	"golang.org/x/sys/unix"
 )
 
 // Error types.
