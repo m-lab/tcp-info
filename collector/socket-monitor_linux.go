@@ -1,5 +1,7 @@
 package collector
 
+// This package is only meaningful in Linux.
+
 import (
 	"log"
 	"syscall"
