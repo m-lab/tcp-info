@@ -9,13 +9,11 @@ import (
 	"io"
 	"log"
 	"net"
-	"syscall"
 	"time"
 	"unsafe"
 
-	"github.com/m-lab/tcp-info/tcp"
-
 	"github.com/m-lab/tcp-info/inetdiag"
+	"github.com/m-lab/tcp-info/tcp"
 )
 
 /*********************************************************************************************
@@ -37,7 +35,7 @@ type ArchivalRecord struct {
 
 	// Storing the RawIDM instead of the parsed InetDiagMsg reduces Marshalling by 2.6 usec, and
 	// typical compressed size by 3-4 bytes/record
-	RawIDM RawInetDiagMsg `json:",omitempty"` // RawInetDiagMsg within NLMsg
+	RawIDM inetdiag.RawInetDiagMsg `json:",omitempty"` // RawInetDiagMsg within NLMsg
 	// Saving just the .Value fields reduces Marshalling by 1.9 usec.
 	Attributes [][]byte `json:",omitempty"` // byte slices from RouteAttr.Value, backed by NLMsg
 
@@ -46,14 +44,30 @@ type ArchivalRecord struct {
 	Metadata *Metadata `json:",omitempty"`
 }
 
+// ParseRouteAttr parses a byte array into slice of NetlinkRouteAttr struct.
+// Derived from "github.com/vishvananda/netlink/nl/nl_linux.go"
+func ParseRouteAttr(b []byte) ([]NetlinkRouteAttr, error) {
+	var attrs []NetlinkRouteAttr
+	for len(b) >= SizeofRtAttr {
+		a, vbuf, alen, err := netlinkRouteAttrAndValue(b)
+		if err != nil {
+			return nil, err
+		}
+		ra := NetlinkRouteAttr{Attr: RtAttr(*a), Value: vbuf[:int(a.Len)-SizeofRtAttr]}
+		attrs = append(attrs, ra)
+		b = b[alen:]
+	}
+	return attrs, nil
+}
+
 // MakeArchivalRecord parses the NetlinkMessage into a ArchivalRecord.  If skipLocal is true, it will return nil for
 // loopback, local unicast, multicast, and unspecified connections.
 // Note that Parse does not populate the Timestamp field, so caller should do so.
-func MakeArchivalRecord(msg *syscall.NetlinkMessage, skipLocal bool) (*ArchivalRecord, error) {
+func MakeArchivalRecord(msg *NetlinkMessage, skipLocal bool) (*ArchivalRecord, error) {
 	if msg.Header.Type != 20 {
 		return nil, ErrNotType20
 	}
-	raw, attrBytes := splitInetDiagMsg(msg.Data)
+	raw, attrBytes := inetdiag.SplitInetDiagMsg(msg.Data)
 	if raw == nil {
 		return nil, ErrParseFailed
 	}
@@ -119,8 +133,8 @@ const (
 
 // Useful offsets for Compare
 const (
-	lastDataSentOffset = unsafe.Offsetof(syscall.TCPInfo{}.Last_data_sent)
-	pmtuOffset         = unsafe.Offsetof(syscall.TCPInfo{}.Pmtu)
+	lastDataSentOffset = unsafe.Offsetof(tcp.LinuxTCPInfo{}.LastDataSent)
+	pmtuOffset         = unsafe.Offsetof(tcp.LinuxTCPInfo{}.PMTU)
 	busytimeOffset     = unsafe.Offsetof(tcp.LinuxTCPInfo{}.BusyTime)
 )
 
@@ -233,8 +247,8 @@ func (pm *ArchivalRecord) Compare(previous *ArchivalRecord) (ChangeType, error) 
 // LoadRawNetlinkMessage is a simple utility to read the next NetlinkMessage from a source reader,
 // e.g. from a file of naked binary netlink messages.
 // NOTE: This is a bit fragile if there are any bit errors in the message headers.
-func LoadRawNetlinkMessage(rdr io.Reader) (*syscall.NetlinkMessage, error) {
-	var header syscall.NlMsghdr
+func LoadRawNetlinkMessage(rdr io.Reader) (*NetlinkMessage, error) {
+	var header NlMsghdr
 	// TODO - should we pass in LittleEndian as a parameter?
 	err := binary.Read(rdr, binary.LittleEndian, &header)
 	if err != nil {
@@ -247,7 +261,7 @@ func LoadRawNetlinkMessage(rdr io.Reader) (*syscall.NetlinkMessage, error) {
 		return nil, err
 	}
 
-	return &syscall.NetlinkMessage{Header: header, Data: data}, nil
+	return &NetlinkMessage{Header: header, Data: data}, nil
 }
 
 // ArchiveReader produces ArchivedRecord structs from some source.

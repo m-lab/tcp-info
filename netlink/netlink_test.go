@@ -2,13 +2,11 @@ package netlink_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 	"unsafe"
@@ -19,7 +17,6 @@ import (
 	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/tcp"
 	"github.com/m-lab/tcp-info/zstd"
-	"golang.org/x/sys/unix"
 )
 
 // This is not exhaustive, but covers the basics.  Integration tests will expose any more subtle
@@ -30,114 +27,19 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-func toString(id inetdiag.SockID) string {
-	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort())
-}
-
-func TestParseInetDiagMsg(t *testing.T) {
-	var data [100]byte
-	for i := range data {
-		data[i] = byte(i + 2)
-	}
-	raw, value := netlink.SplitInetDiagMsg(data[:])
-	hdr, err := raw.Parse()
-	rtx.Must(err, "")
-
-	if hdr.ID.Interface() == 0 || hdr.ID.Cookie() == 0 || hdr.ID.DPort() == 0 || toString(hdr.ID) == "" {
-		t.Errorf("None of the accessed values should be zero")
-	}
-	if hdr.IDiagFamily != syscall.AF_INET {
-		t.Errorf("Failed %+v\n", hdr)
-	}
-	if tcp.State(hdr.IDiagState) != tcp.SYN_RECV {
-		t.Errorf("Failed %+v\n", hdr)
-	}
-
-	if len(value) != 28 {
-		t.Error("Len", len(value))
-	}
-
-	raw, value = netlink.SplitInetDiagMsg(data[:1])
-	if raw != nil || value != nil {
-		t.Error("This should fail, the data is too small.")
-	}
-}
-
-func TestID4(t *testing.T) {
-	var data [unsafe.Sizeof(inetdiag.InetDiagMsg{})]byte
-	srcIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagSrc)
-	data[srcIPOffset] = 127
-	data[srcIPOffset+1] = 0
-	data[srcIPOffset+2] = 0
-	data[srcIPOffset+3] = 1
-
-	srcPortOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagSPort)
-	// netlink uses host byte ordering, which may or may not be network byte ordering.  So no swapping should be
-	// done.
-	*(*uint16)(unsafe.Pointer(&data[srcPortOffset])) = 0x1234
-
-	dstIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDst)
-	data[dstIPOffset] = 1
-	data[dstIPOffset+1] = 0
-	data[dstIPOffset+2] = 0
-	data[dstIPOffset+3] = 127 // Looks like localhost, but its reversed.
-
-	raw, _ := netlink.SplitInetDiagMsg(data[:])
-	hdr, err := raw.Parse()
-	rtx.Must(err, "")
-	if !hdr.ID.SrcIP().IsLoopback() {
-		t.Errorf("Should be loopback but isn't")
-	}
-	if hdr.ID.DstIP().IsLoopback() {
-		t.Errorf("Shouldn't be loopback but is")
-	}
-	if hdr.ID.SPort() != 0x3412 {
-		t.Errorf("SPort should be 0x3412 %+v\n", hdr.ID)
-	}
-
-	if !hdr.ID.SrcIP().IsLoopback() {
-		t.Errorf("Should be identified as loopback")
-	}
-	if hdr.ID.DstIP().IsLoopback() {
-		t.Errorf("Should not be identified as loopback") // Yeah I know this is not self-consistent. :P
-	}
-}
-
-func TestID6(t *testing.T) {
-	var data [unsafe.Sizeof(inetdiag.InetDiagMsg{})]byte
-	srcIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagSrc)
-	for i := 0; i < 8; i++ {
-		data[srcIPOffset] = byte(0x0A + i)
-	}
-
-	dstIPOffset := unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID) + unsafe.Offsetof(inetdiag.InetDiagMsg{}.ID.IDiagDst)
-	for i := 0; i < 8; i++ {
-		data[dstIPOffset] = byte(i + 1)
-	}
-
-	raw, _ := netlink.SplitInetDiagMsg(data[:])
-	hdr, err := raw.Parse()
-	rtx.Must(err, "")
-
-	if hdr.ID.SrcIP().IsLoopback() {
-		t.Errorf("Should not be identified as loopback")
-	}
-	if hdr.ID.DstIP().IsLoopback() {
-		t.Errorf("Should not be identified as loopback")
-	}
-}
-
 func TestParse(t *testing.T) {
 	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
-	nm := syscall.NetlinkMessage{}
+	nm := netlink.NetlinkMessage{}
 	err := json.Unmarshal([]byte(json1), &nm)
+	t.Log("Data len = ", len(nm.Data))
 	rtx.Must(err, "")
 	mp, err := netlink.MakeArchivalRecord(&nm, true)
 	rtx.Must(err, "")
 	idm, err := mp.RawIDM.Parse()
 	rtx.Must(err, "")
-	if idm.IDiagFamily != unix.AF_INET6 {
-		t.Error("Should not be IPv6")
+	// NOTE: darwin unix.AF_INET6 and syscall.AF_INET6 are incorrect (0x1e)!!
+	if idm.IDiagFamily != inetdiag.AF_INET6 {
+		t.Errorf("IDiagFamily should be IPv6: %d\n %+v\n", idm.IDiagFamily, idm)
 	}
 
 	nonNil := 0
@@ -160,7 +62,7 @@ func TestParse(t *testing.T) {
 func TestParseGarbage(t *testing.T) {
 	// Json encoding of a good netlink message containing inet diag info.
 	var good = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
-	nm := syscall.NetlinkMessage{}
+	nm := netlink.NetlinkMessage{}
 	err := json.Unmarshal([]byte(good), &nm)
 	if err != nil {
 		t.Fatal(err)
@@ -225,7 +127,7 @@ func TestReader(t *testing.T) {
 
 func TestCompare(t *testing.T) {
 	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
-	nm := syscall.NetlinkMessage{}
+	nm := netlink.NetlinkMessage{}
 	err := json.Unmarshal([]byte(json1), &nm)
 	if err != nil {
 		t.Fatal(err)
@@ -236,7 +138,7 @@ func TestCompare(t *testing.T) {
 	}
 
 	// Another independent copy.
-	nm2 := syscall.NetlinkMessage{}
+	nm2 := netlink.NetlinkMessage{}
 	err = json.Unmarshal([]byte(json1), &nm2)
 	if err != nil {
 		t.Fatal(err)
@@ -247,8 +149,8 @@ func TestCompare(t *testing.T) {
 	}
 
 	// INET_DIAG_INFO Last... fields should be ignored
-	lastDataSentOffset := unsafe.Offsetof(syscall.TCPInfo{}.Last_data_sent)
-	pmtuOffset := unsafe.Offsetof(syscall.TCPInfo{}.Pmtu)
+	lastDataSentOffset := unsafe.Offsetof(tcp.LinuxTCPInfo{}.LastDataSent)
+	pmtuOffset := unsafe.Offsetof(tcp.LinuxTCPInfo{}.PMTU)
 	for i := int(lastDataSentOffset); i < int(pmtuOffset); i++ {
 		mp2.Attributes[inetdiag.INET_DIAG_INFO][i] += 1
 	}
@@ -427,7 +329,7 @@ func BenchmarkNLMsgParseSerializeCompress(b *testing.B) {
 	source := "testdata/testdata.zst"
 	b.Log("Reading messages from", source)
 	rdr := zstd.NewReader(source)
-	raw := make([]*syscall.NetlinkMessage, 0, 200)
+	raw := make([]*netlink.NetlinkMessage, 0, 200)
 	msgs := make([]*netlink.ArchivalRecord, 0, 200)
 
 	for {
