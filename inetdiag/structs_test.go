@@ -161,3 +161,14 @@ func TestID6(t *testing.T) {
 		t.Errorf("Should not be identified as loopback")
 	}
 }
+
+// Very simple test to check that Save() is functional
+func TestSockIDSave(t *testing.T) {
+	id := SockID{IDiagSPort: Port{0, 123}}
+
+	idMap, _, _ := id.Save()
+
+	if idMap["IDiagSPort"] != int64(123) {
+		t.Error(id)
+	}
+}
