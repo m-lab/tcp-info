@@ -1,5 +1,3 @@
-//go:generate ffjson $GOFILE
-
 // Package inetdiag provides basic structs and utilities for INET_DIAG messaages.
 // Based on uapi/linux/inet_diag.h.
 package inetdiag
@@ -31,10 +29,15 @@ expressed in host-byte order"
 */
 
 import (
-	"syscall"
+        "golang.org/x/sys/unix"
 )
 
 // inet_diag.h
+
+// NOTE: darwin unix.AF_INET6 and syscall.AF_INET6 are incorrect for
+// our purposes (0x1e), so, we set this explicitly.
+const AF_INET6 = 0x0a
+
 const (
 	INET_DIAG_NONE = iota
 	INET_DIAG_MEMINFO
@@ -82,8 +85,8 @@ var InetDiagType = map[int32]string{
 }
 
 var diagFamilyMap = map[uint8]string{
-	syscall.AF_INET:  "tcp",
-	syscall.AF_INET6: "tcp6",
+	unix.AF_INET: "tcp",
+	AF_INET6:     "tcp6", 	// because darwin values for AF_INET6 are incorrect.
 }
 
 // Protocol defines the type corresponding to INET_DIAG_PROTOCOL 8 bit field.

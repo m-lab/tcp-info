@@ -18,7 +18,7 @@ var (
 	localCount = 0
 )
 
-func appendAll(all []*netlink.ArchivalRecord, msgs []*syscall.NetlinkMessage, skipLocal bool) []*netlink.ArchivalRecord {
+func appendAll(all []*netlink.ArchivalRecord, msgs []*netlink.NetlinkMessage, skipLocal bool) []*netlink.ArchivalRecord {
 	// We use UTC, and truncate to millisecond to improve compression.
 	// Since the syscall to collect the data takes multiple milliseconds, this truncation seems reasonable.
 	ts := time.Now().UTC().Truncate(time.Millisecond)

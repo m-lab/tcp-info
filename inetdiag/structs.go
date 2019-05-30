@@ -28,7 +28,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"net"
+	"runtime"
 	"unsafe"
 )
 
@@ -216,6 +218,45 @@ type InetDiagMsg struct {
 	IDiagWqueue  uint32 `csv:"IDM.Wqueue"`
 	IDiagUID     uint32 `csv:"IDM.UID"`
 	IDiagInode   uint32 `csv:"IDM.Inode"`
+}
+
+const (
+	// This previously came from syscall, but explicit here to work on Darwin.
+	RTA_ALIGNTO = 4
+)
+
+// rtaAlignOf rounds the length of a netlink route attribute up to align it properly.
+func rtaAlignOf(attrlen int) int {
+	return (attrlen + RTA_ALIGNTO - 1) & ^(RTA_ALIGNTO - 1)
+}
+
+// RawInetDiagMsg holds the []byte representation of an InetDiagMsg
+type RawInetDiagMsg []byte
+
+func SplitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
+	// TODO - why using rtaAlign on InetDiagMsg ???
+	align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
+	if len(data) < align {
+		log.Println("Wrong length", len(data), "<", align)
+		_, file, line, _ := runtime.Caller(2)
+		log.Println(file, line, data)
+		return nil, nil
+	}
+	return RawInetDiagMsg(data[:align]), data[align:]
+}
+
+var ErrParseFailed = errors.New("Unable to parse InetDiagMsg")
+
+// Parse returns the InetDiagMsg itself
+// Modified from original to also return attribute data array.
+func (raw RawInetDiagMsg) Parse() (*InetDiagMsg, error) {
+	// TODO - why using rtaAlign on InetDiagMsg ???
+
+	align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
+	if len(raw) < align {
+		return nil, ErrParseFailed
+	}
+	return (*InetDiagMsg)(unsafe.Pointer(&raw[0])), nil
 }
 
 // SocketMemInfo implements the struct associated with INET_DIAG_SKMEMINFO
