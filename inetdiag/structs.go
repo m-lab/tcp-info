@@ -32,6 +32,8 @@ import (
 	"net"
 	"runtime"
 	"unsafe"
+
+	"cloud.google.com/go/bigquery"
 )
 
 // Constants from linux.
@@ -128,6 +130,21 @@ type SockID struct {
 	IDiagDst    ipType     `csv:"IDM.SockID.Dst"`
 	IDiagIf     netIF      `csv:"IDM.SockID.Interface"`
 	IDiagCookie cookieType `csv:"IDM.SockID.Cookie"`
+}
+
+// Save implements bigquery.ValueSaver.  However, it does not seem to be invoked
+// for nested structs, so isn't that useful.
+// This is likely temporary.  Leaning now toward substituting the struct we want in BQ,
+// and copying the contents during ArchivalRecord parsing.
+func (id *SockID) Save() (map[string]bigquery.Value, string, error) {
+	out := make(map[string]bigquery.Value, 6)
+	out["IDiagSPort"] = int64(id.SPort())
+	out["IDiagDPort"] = int64(id.DPort())
+	out["IDiagCookie"] = int64(id.Cookie())
+	out["IDiagDst"] = id.DstIP().String()
+	out["IDiagSrc"] = id.SrcIP().String()
+	out["IDiagIf"] = int64(id.Interface())
+	return out, "", nil
 }
 
 // Interface returns the interface number.
