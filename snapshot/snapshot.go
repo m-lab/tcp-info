@@ -18,19 +18,19 @@ import (
 var ErrEmptyRecord = errors.New("Message should contain Metadata or RawIDM")
 
 // Decode decodes a netlink.ArchivalRecord into a single Snapshot
-func Decode(ar *netlink.ArchivalRecord) (*Snapshot, error) {
+// Initial ArchivalRecord may have just a Snapshot, just Metadata, or both.
+func Decode(ar *netlink.ArchivalRecord) (*netlink.Metadata, *Snapshot, error) {
 	var err error
 	result := Snapshot{}
 	result.Timestamp = ar.Timestamp
 	if ar.Metadata == nil && ar.RawIDM == nil {
-		return nil, ErrEmptyRecord
+		return nil, nil, ErrEmptyRecord
 	}
-	result.Metadata = ar.Metadata
 	if ar.RawIDM != nil {
 		result.InetDiagMsg, err = ar.RawIDM.Parse()
 		if err != nil {
 			log.Println("Error decoding RawIDM:", err)
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	for t, raw := range ar.Attributes {
@@ -86,7 +86,7 @@ func Decode(ar *netlink.ArchivalRecord) (*Snapshot, error) {
 			result.NotFullyParsed |= bit
 		}
 	}
-	return &result, nil
+	return ar.Metadata, &result, nil
 }
 
 /*********************************************************************************************/
@@ -212,9 +212,6 @@ type Snapshot struct {
 	// Timestamp of batch of messages containing this message.
 	Timestamp time.Time
 
-	// Metadata for the connection.  Usually empty.
-	Metadata *netlink.Metadata `csv:"-"`
-
 	// Bit field indicating whether each message type was observed.
 	Observed uint32
 
@@ -276,10 +273,10 @@ func NewReader(ar netlink.ArchiveReader) *Reader {
 var zeroTime = time.Time{}
 
 // Next reads, parses and returns the next Snapshot
-func (rdr Reader) Next() (*Snapshot, error) {
+func (rdr Reader) Next() (*netlink.Metadata, *Snapshot, error) {
 	ar, err := rdr.archiveReader.Next()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// HACK
@@ -291,22 +288,28 @@ func (rdr Reader) Next() (*Snapshot, error) {
 	return Decode(ar)
 }
 
-// LoadAll loads all snapshots from an ArchiveReader, and returns the slice.
-func LoadAll(ar netlink.ArchiveReader) ([]*Snapshot, error) {
+// LoadAll loads all snapshots from an ArchiveReader, and returns the
+// metadata and slice of snapshots.  Metadata may be nil, or the last non-nil metadata record.
+func LoadAll(ar netlink.ArchiveReader) (*netlink.Metadata, []*Snapshot, error) {
 	snapReader := NewReader(ar)
 
 	// Read all the ParsedMessage and convert to Wrappers.
+	var metadata *netlink.Metadata
 	snapshots := make([]*Snapshot, 0, 3000)
 	for {
-		snap, err := snapReader.Next()
+		meta, snap, err := snapReader.Next()
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
-			return nil, err
+			return nil, nil, err
+		}
+		if meta != nil {
+			metadata = meta
+
 		}
 		snapshots = append(snapshots, snap)
 	}
 
-	return snapshots, nil
+	return metadata, snapshots, nil
 }

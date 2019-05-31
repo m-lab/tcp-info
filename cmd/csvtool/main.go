@@ -25,18 +25,7 @@ var (
 	logFatal = log.Fatal
 )
 
-// parses ArchiveRecords from the reader and writes CSV to the writer
-func readSnapshots(rdr io.Reader) ([]*snapshot.Snapshot, error) {
-	// Read input from provided reader.
-	arReader := netlink.NewArchiveReader(rdr)
-	return snapshot.LoadAll(arReader)
-}
-
 func toCSV(snapshots []*snapshot.Snapshot, wtr io.Writer) error {
-	if len(snapshots) > 0 && snapshots[0].Metadata == nil {
-		// Add empty Metadata.
-		snapshots[0].Metadata = &netlink.Metadata{}
-	}
 	return gocsv.Marshal(snapshots, wtr)
 }
 
@@ -64,7 +53,9 @@ func main() {
 	}
 	defer source.Close()
 
-	snaps, err := readSnapshots(source)
+	arReader := netlink.NewArchiveReader(source)
+	meta, snaps, err := snapshot.LoadAll(arReader)
+	log.Println("Metadata:", meta)
 	rtx.Must(err, "Could not read snapshots")
 	rtx.Must(toCSV(snaps, os.Stdout), "Could not convert input to CSV")
 }
