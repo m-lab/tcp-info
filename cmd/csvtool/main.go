@@ -54,8 +54,8 @@ func main() {
 	defer source.Close()
 
 	arReader := netlink.NewArchiveReader(source)
-	meta, snaps, err := snapshot.LoadAll(arReader)
-	log.Println("Metadata:", meta)
+	// Ignore the metadata for now.
+	_, snaps, err := snapshot.LoadAll(arReader)
 	rtx.Must(err, "Could not read snapshots")
 	rtx.Must(toCSV(snaps, os.Stdout), "Could not convert input to CSV")
 }
