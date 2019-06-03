@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/m-lab/go/rtx"
+	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/snapshot"
 )
 
@@ -61,7 +62,7 @@ func TestFileToCSV(t *testing.T) {
 	src, err := openFile("testdata/ndt-jdczh_1553815964_00000000000003E8.00183.jsonl.zst")
 	rtx.Must(err, "Could not open file")
 	buf := bytes.NewBuffer(nil)
-	snaps, err := readSnapshots(src)
+	_, snaps, err := snapshot.LoadAll(netlink.NewArchiveReader(src))
 	rtx.Must(err, "Could not read test data")
 
 	err = toCSV(snaps, buf)
@@ -78,35 +79,28 @@ func TestFileToCSV(t *testing.T) {
 	}
 
 	header := strings.Split(lines[0], ",")
-	if header[6] != "IDM.Family" {
-		t.Error("Incorrect header", header[6])
+	if header[3] != "IDM.Family" {
+		t.Error("Incorrect header", header[3])
 	}
 	record := strings.Split(lines[2], ",")
 	// SrcPort
-	if header[10] != "IDM.SockID.SPort" {
-		t.Error("Incorrect header", header[10])
+	if header[7] != "IDM.SockID.SPort" {
+		t.Error("Incorrect header", header[7])
 	}
-	if record[10] != "9091" {
-		t.Error(record[10])
+	if record[7] != "9091" {
+		t.Error(record[7])
 	}
 	// SrcIP
-	if record[12] != "192.168.14.134" {
-		t.Error(record[12])
+	if record[9] != "192.168.14.134" {
+		t.Error(record[9])
 	}
 	// Cookie
-	if header[15] != "IDM.SockID.Cookie" {
-		t.Error("Incorrect header", header[15])
+	if header[12] != "IDM.SockID.Cookie" {
+		t.Error("Incorrect header", header[12])
 	}
-	if record[15] != "3E8" {
-		t.Error(record[15])
+	if record[12] != "3E8" {
+		t.Error(record[12])
 	}
 }
 
-func TestToCSVFillsInEmptyMetadata(t *testing.T) {
-	snap := snapshot.Snapshot{}
-	buf := bytes.NewBuffer(nil)
-	rtx.Must(toCSV([]*snapshot.Snapshot{&snap}, buf), "Could not convert")
-	if snap.Metadata == nil {
-		t.Error("Failed to fill in empty metadata")
-	}
-}
+

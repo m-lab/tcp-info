@@ -34,7 +34,7 @@ func TestRawReader(t *testing.T) {
 	var observed uint32
 
 	for {
-		s, err := snReader.Next()
+		_, s, err := snReader.Next()
 		if err == io.EOF {
 			break
 		}
@@ -65,7 +65,7 @@ func TestDecodeArchiveRecords(t *testing.T) {
 	var observed uint32
 
 	for {
-		snap, err := snapReader.Next()
+		_, snap, err := snapReader.Next()
 		if err == io.EOF {
 			break
 		}
@@ -102,7 +102,7 @@ func TestBCNFile(t *testing.T) {
 	var problems uint32
 
 	for {
-		snap, err := snapReader.Next()
+		_, snap, err := snapReader.Next()
 		if err == io.EOF {
 			break
 		}
@@ -136,7 +136,7 @@ func TestLoadAll(t *testing.T) {
 	defer rdr.Close()
 	arReader := netlink.NewArchiveReader(rdr)
 
-	all, err := snapshot.LoadAll(arReader)
+	meta, all, err := snapshot.LoadAll(arReader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,4 +144,8 @@ func TestLoadAll(t *testing.T) {
 	if len(all) != 151 {
 		t.Error("Wrong count:", len(all))
 	}
+	if meta == nil {
+		t.Error("No metadata")
+	}
+
 }
