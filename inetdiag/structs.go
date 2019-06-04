@@ -32,8 +32,6 @@ import (
 	"net"
 	"runtime"
 	"unsafe"
-
-	"cloud.google.com/go/bigquery"
 )
 
 // Constants from linux.
@@ -60,7 +58,7 @@ type ReqV2 struct {
 	IDiagExt      uint8
 	Pad           uint8
 	IDiagStates   uint32
-	ID            SockID
+	ID            LinuxSockID
 }
 
 // SizeofReqV2 is the size of the struct.
@@ -87,9 +85,10 @@ func NewReqV2(family, protocol uint8, states uint32) *ReqV2 {
 	}
 }
 
-// Types for SockID fields.
+// Types for LinuxSockID fields.
 type cookieType [8]byte
 
+// TODO - remove all these.
 func (c *cookieType) MarshalCSV() (string, error) {
 	value := binary.LittleEndian.Uint64(c[:])
 	return fmt.Sprintf("%X", value), nil
@@ -103,7 +102,7 @@ func (ipAddr *ipType) MarshalCSV() (string, error) {
 	return netIP.String(), nil
 }
 
-// Port encodes a SockID Port
+// Port encodes a LinuxSockID Port
 type Port [2]byte
 
 // MarshalCSV marshals a Port to CSV
@@ -112,7 +111,7 @@ func (p *Port) MarshalCSV() (string, error) {
 	return fmt.Sprintf("%d", value), nil
 }
 
-// Interface encodes the SockID Interface field.
+// Interface encodes the LinuxSockID Interface field.
 type netIF [4]byte
 
 // MarshalCSV marshals Interface to CSV
@@ -121,63 +120,79 @@ func (nif *netIF) MarshalCSV() (string, error) {
 	return fmt.Sprintf("%d", value), nil
 }
 
-// SockID is the binary linux representation of a socket, as in linux/inet_diag.h
+// LinuxSockID is the binary linux representation of a socket, as in linux/inet_diag.h
 // Linux code comments indicate this struct uses the network byte order!!!
-type SockID struct {
-	IDiagSPort  Port       `csv:"IDM.SockID.SPort"`
-	IDiagDPort  Port       `csv:"IDM.SockID.DPort"`
-	IDiagSrc    ipType     `csv:"IDM.SockID.Src"`
-	IDiagDst    ipType     `csv:"IDM.SockID.Dst"`
-	IDiagIf     netIF      `csv:"IDM.SockID.Interface"`
-	IDiagCookie cookieType `csv:"IDM.SockID.Cookie"`
+// All fields are ignored for bigquery, and handled in code.
+// TODO make this unexported
+type LinuxSockID struct {
+	IDiagSPort  Port       `csv:"IDM.SockID.SPort" bigquery:"-"`
+	IDiagDPort  Port       `csv:"IDM.SockID.DPort" bigquery:"-"`
+	IDiagSrc    ipType     `csv:"IDM.SockID.Src" bigquery:"-"`
+	IDiagDst    ipType     `csv:"IDM.SockID.Dst" bigquery:"-"`
+	IDiagIf     netIF      `csv:"IDM.SockID.Interface" bigquery:"-"`
+	IDiagCookie cookieType `csv:"IDM.SockID.Cookie" bigquery:"-"`
 }
 
-// Save implements bigquery.ValueSaver.  However, it does not seem to be invoked
-// for nested structs, so isn't that useful.
-// This is likely temporary.  Leaning now toward substituting the struct we want in BQ,
-// and copying the contents during ArchivalRecord parsing.
-func (id *SockID) Save() (map[string]bigquery.Value, string, error) {
-	out := make(map[string]bigquery.Value, 6)
-	out["IDiagSPort"] = int64(id.SPort())
-	out["IDiagDPort"] = int64(id.DPort())
-	out["IDiagCookie"] = int64(id.Cookie())
-	out["IDiagDst"] = id.DstIP().String()
-	out["IDiagSrc"] = id.SrcIP().String()
-	out["IDiagIf"] = int64(id.Interface())
-	return out, "", nil
+// AltLinuxSockID is the natural golang struct.
+type SockID struct {
+	SPort     uint16
+	DPort     uint16
+	SrcIP     string
+	DstIP     string
+	Interface uint32
+	Cookie    int64 // Actually a uint64, but using int64 for compatibility with BigQuery
+}
+
+// CookieUint64 returns the original uint64 cookie value.
+func (sid *SockID) CookieUint64() uint64 {
+	return *(*uint64)(unsafe.Pointer(&sid.Cookie))
+}
+
+// GetSockID extracts the SockID from the LinuxSockID.
+func (lsid *LinuxSockID) GetSockID() SockID {
+	cookie := lsid.Cookie()
+	sid := SockID{
+		SrcIP:     lsid.SrcIP().String(),
+		SPort:     lsid.SPort(),
+		DstIP:     lsid.DstIP().String(),
+		DPort:     lsid.DPort(),
+		Interface: lsid.Interface(),
+		Cookie:    *(*int64)(unsafe.Pointer(&cookie)),
+	}
+	return sid
 }
 
 // Interface returns the interface number.
-func (id *SockID) Interface() uint32 {
+func (id *LinuxSockID) Interface() uint32 {
 	return binary.BigEndian.Uint32(id.IDiagIf[:])
 }
 
 // SrcIP returns a golang net encoding of source address.
-func (id *SockID) SrcIP() net.IP {
+func (id *LinuxSockID) SrcIP() net.IP {
 	return ip(id.IDiagSrc)
 }
 
 // DstIP returns a golang net encoding of destination address.
-func (id *SockID) DstIP() net.IP {
+func (id *LinuxSockID) DstIP() net.IP {
 	return ip(id.IDiagDst)
 }
 
 // SPort returns the host byte ordered port.
 // In general, Netlink is supposed to use host byte order, but this seems to be an exception.
 // Perhaps Netlink is reading a tcp stack structure that holds the port in network byte order.
-func (id *SockID) SPort() uint16 {
+func (id *LinuxSockID) SPort() uint16 {
 	return binary.BigEndian.Uint16(id.IDiagSPort[:])
 }
 
 // DPort returns the host byte ordered port.
 // In general, Netlink is supposed to use host byte order, but this seems to be an exception.
 // Perhaps Netlink is reading a tcp stack structure that holds the port in network byte order.
-func (id *SockID) DPort() uint16 {
+func (id *LinuxSockID) DPort() uint16 {
 	return binary.BigEndian.Uint16(id.IDiagDPort[:])
 }
 
-// Cookie returns the SockID's 64 bit unsigned cookie.
-func (id *SockID) Cookie() uint64 {
+// Cookie returns the LinuxSockID's 64 bit unsigned cookie.
+func (id *LinuxSockID) Cookie() uint64 {
 	// This is a socket UUID generated within the kernel, and is therefore in host byte order.
 	return binary.LittleEndian.Uint64(id.IDiagCookie[:])
 }
@@ -225,16 +240,17 @@ type MarkCond struct { // inet_diag_markcond
 // InetDiagMsg is the linux binary representation of a InetDiag message header, as in linux/inet_diag.h
 // Note that netlink messages use host byte ordering, unless NLA_F_NET_BYTEORDER flag is present.
 type InetDiagMsg struct {
-	IDiagFamily  uint8  `csv:"IDM.Family"`
-	IDiagState   uint8  `csv:"IDM.State"`
-	IDiagTimer   uint8  `csv:"IDM.Timer"`
-	IDiagRetrans uint8  `csv:"IDM.Retrans"`
-	ID           SockID `csv:"-"`
-	IDiagExpires uint32 `csv:"IDM.Expires"`
-	IDiagRqueue  uint32 `csv:"IDM.Rqueue"`
-	IDiagWqueue  uint32 `csv:"IDM.Wqueue"`
-	IDiagUID     uint32 `csv:"IDM.UID"`
-	IDiagInode   uint32 `csv:"IDM.Inode"`
+	IDiagFamily  uint8 `csv:"IDM.Family"`
+	IDiagState   uint8 `csv:"IDM.State"`
+	IDiagTimer   uint8 `csv:"IDM.Timer"`
+	IDiagRetrans uint8 `csv:"IDM.Retrans"`
+	// The ID is handled separately for both CSV and BigQuery, so they are tagged with "-"
+	ID           LinuxSockID `csv:"-" bigquery:"-"`
+	IDiagExpires uint32      `csv:"IDM.Expires"`
+	IDiagRqueue  uint32      `csv:"IDM.Rqueue"`
+	IDiagWqueue  uint32      `csv:"IDM.Wqueue"`
+	IDiagUID     uint32      `csv:"IDM.UID"`
+	IDiagInode   uint32      `csv:"IDM.Inode"`
 }
 
 const (

@@ -9,27 +9,27 @@ import (
 )
 
 func TestSizes(t *testing.T) {
-	if unsafe.Offsetof(inetdiag.SockID{}.IDiagDPort) != 2 {
+	if unsafe.Offsetof(inetdiag.LinuxSockID{}.IDiagDPort) != 2 {
 		t.Error("Incorrect DPort offset")
 	}
-	if unsafe.Offsetof(inetdiag.SockID{}.IDiagSrc) != 4 {
+	if unsafe.Offsetof(inetdiag.LinuxSockID{}.IDiagSrc) != 4 {
 		t.Error("Incorrect Src offset")
 	}
-	if unsafe.Offsetof(inetdiag.SockID{}.IDiagDst) != 20 {
+	if unsafe.Offsetof(inetdiag.LinuxSockID{}.IDiagDst) != 20 {
 		t.Error("Incorrect Dest offset")
 	}
-	if unsafe.Offsetof(inetdiag.SockID{}.IDiagIf) != 36 {
+	if unsafe.Offsetof(inetdiag.LinuxSockID{}.IDiagIf) != 36 {
 		t.Error("Incorrect Interface offset")
 	}
-	if unsafe.Offsetof(inetdiag.SockID{}.IDiagCookie) != 40 {
+	if unsafe.Offsetof(inetdiag.LinuxSockID{}.IDiagCookie) != 40 {
 		t.Error("Incorrect Cookie offset")
 	}
-	if unsafe.Sizeof(inetdiag.SockID{}) != 48 {
-		t.Error("SockID wrong size", unsafe.Sizeof(inetdiag.SockID{}))
+	if unsafe.Sizeof(inetdiag.LinuxSockID{}) != 48 {
+		t.Error("LinuxSockID wrong size", unsafe.Sizeof(inetdiag.LinuxSockID{}))
 	}
 
 	hdr := inetdiag.InetDiagMsg{}
-	if unsafe.Sizeof(hdr) != 4*6+unsafe.Sizeof(inetdiag.SockID{}) {
+	if unsafe.Sizeof(hdr) != 4*6+unsafe.Sizeof(inetdiag.LinuxSockID{}) {
 		t.Error("Header is wrong size", unsafe.Sizeof(hdr))
 	}
 }

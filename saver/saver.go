@@ -97,7 +97,7 @@ type Connection struct {
 }
 
 func newConnection(info *inetdiag.InetDiagMsg, timestamp time.Time) *Connection {
-	conn := Connection{Inode: info.IDiagInode, ID: info.ID, UID: info.IDiagUID, Slice: "", StartTime: timestamp, Sequence: 0,
+	conn := Connection{Inode: info.IDiagInode, ID: info.ID.GetSockID(), UID: info.IDiagUID, Slice: "", StartTime: timestamp, Sequence: 0,
 		Expiration: time.Now()}
 	return &conn
 }
@@ -109,7 +109,7 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 	if err != nil {
 		return err
 	}
-	id := uuid.FromCookie(conn.ID.Cookie())
+	id := uuid.FromCookie(conn.ID.CookieUint64())
 	conn.Writer, err = zstd.NewWriter(fmt.Sprintf("%s/%s.%05d.jsonl.zst", datePath, id, conn.Sequence))
 	if err != nil {
 		return err
@@ -124,7 +124,7 @@ func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Durati
 func (conn *Connection) writeHeader() {
 	msg := netlink.ArchivalRecord{
 		Metadata: &netlink.Metadata{
-			UUID:      uuid.FromCookie(conn.ID.Cookie()),
+			UUID:      uuid.FromCookie(conn.ID.CookieUint64()),
 			Sequence:  conn.Sequence,
 			StartTime: conn.StartTime,
 		},

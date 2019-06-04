@@ -14,7 +14,7 @@ import (
 
 // This needs to be a whitebox test because it tests unexported types.
 func TestStructAndCSVExport(t *testing.T) {
-	sid := SockID{
+	sid := LinuxSockID{
 		IDiagSPort:  Port{2, 1},
 		IDiagDPort:  Port{1, 2},
 		IDiagSrc:    ipType{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2},
@@ -43,7 +43,7 @@ func TestStructAndCSVExport(t *testing.T) {
 
 	// Verify that nothing crashes when the complete struct gets written out.
 	buff := bytes.NewBuffer([]byte{})
-	rtx.Must(gocsv.Marshal([]SockID{sid}, buff), "Could not marshal SockID into a CSV")
+	rtx.Must(gocsv.Marshal([]LinuxSockID{sid}, buff), "Could not marshal LinuxSockID into a CSV")
 
 	if sid.Interface() != 513 {
 		t.Error(sid.Interface(), "!= 513")
@@ -65,7 +65,7 @@ func TestStructAndCSVExport(t *testing.T) {
 	}
 }
 
-func toString(id SockID) string {
+func toString(id LinuxSockID) string {
 	return fmt.Sprintf("%s:%d -> %s:%d", id.SrcIP().String(), id.SPort(), id.DstIP().String(), id.DPort())
 }
 
@@ -159,16 +159,5 @@ func TestID6(t *testing.T) {
 	}
 	if hdr.ID.DstIP().IsLoopback() {
 		t.Errorf("Should not be identified as loopback")
-	}
-}
-
-// Very simple test to check that Save() is functional
-func TestSockIDSave(t *testing.T) {
-	id := SockID{IDiagSPort: Port{0, 123}}
-
-	idMap, _, _ := id.Save()
-
-	if idMap["IDiagSPort"] != int64(123) {
-		t.Error(id)
 	}
 }
