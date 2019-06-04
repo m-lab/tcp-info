@@ -133,7 +133,7 @@ type LinuxSockID struct {
 	IDiagCookie cookieType `csv:"IDM.SockID.Cookie" bigquery:"-"`
 }
 
-// AltLinuxSockID is the natural golang struct.
+// SockID is the natural golang struct equivalent of LinuxSockID
 type SockID struct {
 	SPort     uint16
 	DPort     uint16
@@ -149,15 +149,14 @@ func (sid *SockID) CookieUint64() uint64 {
 }
 
 // GetSockID extracts the SockID from the LinuxSockID.
-func (lsid *LinuxSockID) GetSockID() SockID {
-	cookie := lsid.Cookie()
+func (id *LinuxSockID) GetSockID() SockID {
 	sid := SockID{
-		SrcIP:     lsid.SrcIP().String(),
-		SPort:     lsid.SPort(),
-		DstIP:     lsid.DstIP().String(),
-		DPort:     lsid.DPort(),
-		Interface: lsid.Interface(),
-		Cookie:    *(*int64)(unsafe.Pointer(&cookie)),
+		SrcIP:     id.SrcIP().String(),
+		SPort:     id.SPort(),
+		DstIP:     id.DstIP().String(),
+		DPort:     id.DPort(),
+		Interface: id.Interface(),
+		Cookie:    int64(id.Cookie()),
 	}
 	return sid
 }

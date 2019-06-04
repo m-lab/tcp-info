@@ -3,6 +3,7 @@ package inetdiag
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"syscall"
 	"testing"
 	"unsafe"
@@ -20,7 +21,7 @@ func TestStructAndCSVExport(t *testing.T) {
 		IDiagSrc:    ipType{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2},
 		IDiagDst:    ipType{1, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		IDiagIf:     netIF{0, 0, 2, 1},
-		IDiagCookie: cookieType{0xff, 0, 0, 0, 0, 0, 0, 0},
+		IDiagCookie: cookieType{0xff, 0, 0, 0, 0, 0, 0, 0xff},
 	}
 
 	// Verify that each element marshals correctly
@@ -33,7 +34,7 @@ func TestStructAndCSVExport(t *testing.T) {
 		{&sid.IDiagSrc, "100::2"},
 		{&sid.IDiagDst, "1.1.1.2"},
 		{&sid.IDiagIf, "513"},
-		{&sid.IDiagCookie, "FF"},
+		{&sid.IDiagCookie, "FF000000000000FF"},
 	}
 	for _, tc := range testCases {
 		if s, err := tc.in.MarshalCSV(); err != nil || s != tc.out {
@@ -60,8 +61,14 @@ func TestStructAndCSVExport(t *testing.T) {
 	if sid.DPort() != 258 {
 		t.Error(sid.DPort(), "!= 258")
 	}
-	if sid.Cookie() != 255 {
-		t.Error(sid.Cookie(), "!= 255")
+	if sid.Cookie() != 0xFF000000000000FF {
+		t.Error(sid.Cookie(), " wrong value")
+	}
+
+	// This tests that the int64 cast works properly.
+	if sid.GetSockID().Cookie != -0xFFFFFFFFFFFF01 {
+		t.Error("Bad cookie", sid.GetSockID())
+		log.Printf("%X\n", sid.GetSockID().Cookie)
 	}
 }
 
