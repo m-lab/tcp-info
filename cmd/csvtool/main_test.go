@@ -102,5 +102,3 @@ func TestFileToCSV(t *testing.T) {
 		t.Error(record[12])
 	}
 }
-
-
