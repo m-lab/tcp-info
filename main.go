@@ -71,6 +71,7 @@ func main() {
 	flagx.ArgsFromEnv(flag.CommandLine)
 
 	if *outputDir != "" {
+		rtx.PanicOnError(os.MkdirAll(*outputDir, 0755), "Could not create the output dir %s", *outputDir)
 		rtx.Must(os.Chdir(*outputDir), "Could not change to the directory %s", *outputDir)
 	}
 
