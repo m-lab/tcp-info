@@ -112,7 +112,7 @@ func OneType(inetType uint8) ([]*syscall.NetlinkMessage, error) {
 
 	// Adapted this from req.Execute in nl_linux.go
 	for {
-		msgs, err := s.Receive()
+		msgs, _, err := s.Receive()
 		if err != nil {
 			log.Println(err)
 			return nil, err
