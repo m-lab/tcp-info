@@ -9,6 +9,7 @@ package metrics
 
 import (
 	"log"
+	"math"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -87,6 +88,43 @@ var (
 			Help: "Number of files created.",
 		},
 	)
+
+	// SendRateHistogram tracks the 1 second average TCP send rate from a namespace.
+	// The count field should increment at 60 counts per minute.
+	// The sum field will show the total bits sent over time from this namespace.
+	// NOTE: The total may be slightly less than actual, since polling may miss some bytes at the end
+	// of a connection.
+	SendRateHistogram = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name: "tcpinfo_send_rate_histogram",
+			Help: "send rate histogram",
+			Buckets: []float64{
+				0, // We don't really care about small rates, so we use course measurement below 10Kbps.
+				1, 10, 100, 1000,
+				10000, 12600, 15800, 20000, 25100, 31600, 39800, 50100, 63100, 79400,
+				100000, 126000, 158000, 200000, 251000, 316000, 398000, 501000, 631000, 794000,
+				1000000, 1260000, 1580000, 2000000, 2510000, 3160000, 3980000, 5010000, 6310000, 7940000,
+				10000000, math.Inf(+1),
+			},
+		})
+	// ReceiveRateHistogram tracks the 1 second average TCP send rate from a namespace.
+	// The count field should increment at 60 counts per minute.
+	// The sum field will show the total bits received over time in this namespace.
+	// NOTE: The total may be slightly less than actual, since polling may miss some bytes at the end
+	// of a connection.
+	ReceiveRateHistogram = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name: "tcpinfo_receive_rate_histogram",
+			Help: "receive rate histogram",
+			Buckets: []float64{
+				0, // We don't really care about small rates, so we use course measurement below 10Kbps.
+				1, 10, 100, 1000,
+				10000, 12600, 15800, 20000, 25100, 31600, 39800, 50100, 63100, 79400,
+				100000, 126000, 158000, 200000, 251000, 316000, 398000, 501000, 631000, 794000,
+				1000000, 1260000, 1580000, 2000000, 2510000, 3160000, 3980000, 5010000, 6310000, 7940000,
+				10000000, math.Inf(+1),
+			},
+		})
 )
 
 // init() prints a log message to let the user know that the package has been
