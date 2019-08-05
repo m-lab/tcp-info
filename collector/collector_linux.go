@@ -18,32 +18,12 @@ var (
 	localCount = 0
 )
 
-func appendAll(all []*netlink.ArchivalRecord, msgs []*netlink.NetlinkMessage, skipLocal bool) []*netlink.ArchivalRecord {
-	// We use UTC, and truncate to millisecond to improve compression.
-	// Since the syscall to collect the data takes multiple milliseconds, this truncation seems reasonable.
-	ts := time.Now().UTC().Truncate(time.Millisecond)
-	for i := range msgs {
-		pm, err := netlink.MakeArchivalRecord(msgs[i], skipLocal)
-		if err != nil {
-			log.Println(err)
-			errCount++
-		} else if pm == nil {
-			localCount++
-		} else {
-			pm.Timestamp = ts
-			all = append(all, pm)
-		}
-	}
-	return all
-}
-
 // collectDefaultNamespace collects all AF_INET6 and AF_INET connection stats, and sends them
 // to svr.
-func collectDefaultNamespace(svr chan<- netlink.CollectionCycle, skipLocal bool) (int, int) {
+func collectDefaultNamespace(svr chan<- netlink.MessageBlock, skipLocal bool) (int, int) {
 	// Preallocate space for up to 500 connections.  We may want to adjust this upwards if profiling
 	// indicates a lot of reallocation.
-	all := make([]*netlink.ArchivalRecord, 0, 500)
-	buffer := netlink.CollectionCycle{}
+	buffer := netlink.MessageBlock{}
 
 	remoteCount := 0
 	res6, err := OneType(syscall.AF_INET6)
@@ -52,8 +32,8 @@ func collectDefaultNamespace(svr chan<- netlink.CollectionCycle, skipLocal bool)
 		// TODO add metric
 		log.Println(err)
 	} else {
-		buffer.V6Messages := res6
-		buffer.V6Time := time.Now()
+		buffer.V6Messages = res6
+		buffer.V6Time = time.Now()
 	}
 	res4, err := OneType(syscall.AF_INET)
 	if err != nil {
@@ -61,8 +41,8 @@ func collectDefaultNamespace(svr chan<- netlink.CollectionCycle, skipLocal bool)
 		// TODO add metric
 		log.Println(err)
 	} else {
-		buffer.V4Messages := res4
-		buffer.V4Time := time.Now()
+		buffer.V4Messages = res4
+		buffer.V4Time = time.Now()
 	}
 
 	// Submit full set of message to the marshalling service.
@@ -73,7 +53,7 @@ func collectDefaultNamespace(svr chan<- netlink.CollectionCycle, skipLocal bool)
 
 // Run the collector, either for the specified number of loops, or, if the
 // number specified is infinite, run forever.
-func Run(ctx context.Context, reps int, svrChan chan<- netlink.CollectionCycle, cl saver.CacheLogger, skipLocal bool) (localCount, errCount int) {
+func Run(ctx context.Context, reps int, svrChan chan<- netlink.MessageBlock, cl saver.CacheLogger, skipLocal bool) (localCount, errCount int) {
 	totalCount := 0
 	remoteCount := 0
 	loops := 0

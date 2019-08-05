@@ -93,7 +93,7 @@ func main() {
 	// Make the saver and construct the message channel, buffering up to 2 batches
 	// of messages without stalling producer. We may want to increase the buffer if
 	// we observe main() stalling.
-	svrChan := make(chan []*netlink.ArchivalRecord, 2)
+	svrChan := make(chan netlink.MessageBlock, 2)
 	svr := saver.NewSaver("host", "pod", 3)
 	go svr.MessageSaverLoop(svrChan)
 
