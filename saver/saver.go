@@ -330,33 +330,27 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 		for cookie := range residual {
 			// residual is the list of all keys that were not updated.
 			s, r := residual[cookie].GetStats()
-			if s > 0 || r > 0 {
-				log.Println(cookie, "sent:", s, "received:", r)
-			}
 			closedSent += s
 			closedReceived += r
 			svr.endConn(cookie)
 			svr.stats.IncExpiredCount()
 		}
-		log.Println("closed sent:", closedSent, "received:", closedReceived)
 
 		// Every second, update the total throughput for the past second.
 		if msgs.V4Time.Unix() > lastReportTime {
-			log.Println()
-			log.Println("live sent:", s4+s6, "received:", r4+r6)
+			// This is the total bytes since program start.
 			totalSent := closedSent + s4 + s6
 			totalReceived := closedReceived + r4 + r6
 
-			log.Println("observed bits sent:", 8*(totalSent-reportedSent), "received:", 8*(totalReceived-reportedReceived))
 			metrics.SendRateHistogram.Observe(8 * float64(totalSent-reportedSent))
 			metrics.ReceiveRateHistogram.Observe(8 * float64(totalReceived-reportedReceived))
 
+			// These are the total bytes reported to prometheus.
 			reportedSent = totalSent
 			reportedReceived = totalReceived
 
 			lastReportTime = msgs.V4Time.Unix()
 		}
-		log.Println("reported sent:", reportedSent, "received:", reportedReceived)
 	}
 	svr.Close()
 }
