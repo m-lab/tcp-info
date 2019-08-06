@@ -21,7 +21,7 @@ var (
 	SyscallTimeHistogram = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "tcpinfo_syscall_time_histogram",
-			Help: "netlink syscall latency distribution",
+			Help: "netlink syscall latency distribution (seconds)",
 			Buckets: []float64{
 				0.001, 0.00125, 0.0016, 0.002, 0.0025, 0.0032, 0.004, 0.005, 0.0063, 0.0079,
 				0.01, 0.0125, 0.016, 0.02, 0.025, 0.032, 0.04, 0.05, 0.063, 0.079,
@@ -29,6 +29,15 @@ var (
 			},
 		},
 		[]string{"af"})
+
+	// PollingHistogram tracks the interval between polling cycles.
+	PollingHistogram = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "tcpinfo_polling_interval_histogram",
+			Help:    "netlink polling interval distribution (seconds)",
+			Buckets: prometheus.LinearBuckets(0, .001, 20),
+		},
+	)
 
 	// ConnectionCountHistogram tracks the number of connections returned by
 	// each syscall.  This ??? includes local connections that are NOT recorded
@@ -125,6 +134,14 @@ var (
 				10000000, math.Inf(+1),
 			},
 		})
+
+	// SnapshotCount counts the total number of snapshots collected across all connections.
+	SnapshotCount = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "tcpinfo_snapshot_total",
+			Help: "Number of snapshots taken.",
+		},
+	)
 )
 
 // init() prints a log message to let the user know that the package has been

@@ -417,7 +417,7 @@ func TestGetStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var s, r int64
+	var s, r uint64
 	for i := range msgs {
 		ss, rr := msgs[i].GetStats()
 		if ss < s || rr < r {

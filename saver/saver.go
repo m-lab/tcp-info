@@ -371,6 +371,7 @@ func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
 	}
 	if old == nil {
 		svr.stats.IncNewCount()
+		metrics.SnapshotCount.Inc()
 		err := svr.queue(pm)
 		if err != nil {
 			log.Println(err)
@@ -400,6 +401,7 @@ func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
 		}
 		if change > netlink.NoMajorChange {
 			svr.stats.IncDiffCount()
+			metrics.SnapshotCount.Inc()
 			err := svr.queue(pm)
 			if err != nil {
 				// TODO metric
