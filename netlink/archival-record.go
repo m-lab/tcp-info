@@ -136,8 +136,8 @@ const (
 	lastDataSentOffset  = unsafe.Offsetof(tcp.LinuxTCPInfo{}.LastDataSent)
 	pmtuOffset          = unsafe.Offsetof(tcp.LinuxTCPInfo{}.PMTU)
 	busytimeOffset      = unsafe.Offsetof(tcp.LinuxTCPInfo{}.BusyTime)
-	bytesSentOffset     = unsafe.Offsetof(tcp.LinuxTCPInfo{}.BytesSent)
-	bytesReceivedOffset = unsafe.Offsetof(tcp.LinuxTCPInfo{}.BytesReceived)
+	bytesReceivedOffset = unsafe.Offsetof(tcp.LinuxTCPInfo{}.BytesReceived) // 128
+	bytesSentOffset     = unsafe.Offsetof(tcp.LinuxTCPInfo{}.BytesSent)     // 200
 )
 
 func isLocal(addr net.IP) bool {
@@ -339,7 +339,8 @@ func (pm *ArchivalRecord) GetStats() (int64, int64) {
 		return 0, 0
 	}
 	raw := pm.Attributes[inetdiag.INET_DIAG_INFO]
-	if len(raw) < int(bytesSentOffset+4) {
+	// Ensure the array contains both uint64 fields.
+	if len(raw) < int(bytesSentOffset+8) || len(raw) < int(bytesReceivedOffset+8) {
 		return 0, 0
 	}
 	s := *(*int64)(unsafe.Pointer(&raw[bytesSentOffset]))

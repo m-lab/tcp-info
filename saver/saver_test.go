@@ -176,18 +176,17 @@ func TestBasic(t *testing.T) {
 	mb := netlink.MessageBlock{V4Time: date, V6Time: date}
 	// This round just initializes the cache.
 	mb.V4Messages = []*netlink.NetlinkMessage{&msg(t, 11234, 11234).NetlinkMessage, &msg(t, 235, 235).NetlinkMessage}
-	//dump(t, m1[0])
 	svrChan <- mb
 
-	// // This should NOT write to file, because nothing changed
+	// This should NOT write to file, because nothing changed
 	mb.V4Messages = []*netlink.NetlinkMessage{&msg(t, 1234, 1234).NetlinkMessage, &msg(t, 234, 234).NetlinkMessage}
 	svrChan <- mb
 
-	// // This changes the first connection, and ends the second connection.
+	// This changes the first connection, and ends the second connection.
 	mb.V4Messages = []*netlink.NetlinkMessage{&msg(t, 1234, 1234).setByte(20, 127).NetlinkMessage}
 	svrChan <- mb
 
-	// // This changes the first connecti:on again.
+	// This changes the first connection again.
 	mb.V4Messages = []*netlink.NetlinkMessage{&msg(t, 1234, 1234).setByte(20, 127).setByte(105, 127).NetlinkMessage}
 	svrChan <- mb
 
