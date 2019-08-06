@@ -265,7 +265,7 @@ func TestHistograms(t *testing.T) {
 	if !histContains(m, "sample_count:3") {
 		t.Error("Wrong sample count")
 	}
-	if !histContains(m, "sample_sum:816000") { // 2000 bytes + 10000 bytes
+	if !histContains(m, "sample_sum:816000") { // 2000 bytes + 100000 bytes
 		t.Error("Wrong sample sum")
 	}
 
@@ -275,7 +275,7 @@ func TestHistograms(t *testing.T) {
 	if !histContains(m, "sample_count:3") {
 		t.Error("Wrong sample count")
 	}
-	if !histContains(m, "sample_sum:168000") {
+	if !histContains(m, "sample_sum:168000") { // 1000 bytes + 20000 bytes
 		t.Error("Wrong sample sum")
 	}
 
