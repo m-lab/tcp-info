@@ -171,6 +171,14 @@ func histContains(m prometheus.Metric, s string) bool {
 	return false
 }
 
+func checkCounter(t *testing.T, c chan prometheus.Metric, expected float64) {
+	m := <-c
+	v := counterValue(m)
+	if v != expected {
+		t.Error("For", m.Desc(), "expected:", expected, "got:", v)
+	}
+}
+
 func counterValue(m prometheus.Metric) float64 {
 	var mm dto.Metric
 	m.Write(&mm)
@@ -206,7 +214,8 @@ func TestHistograms(t *testing.T) {
 	m2 := msg(t, 235, 2).setBytesReceived(1000).setBytesSent(2000)
 
 	// This round just initializes the cache, and causes the first set of rate histogram observations.
-	// Sent = 8*2000 = 16000.  Received = 2*1000 = 2000
+	// Received = 1000, Sent = 2000
+	// Results in 2 snapshots, 1 stats observation, (8000 bits received, 16000 bits sent)
 	mb.V4Messages = []*netlink.NetlinkMessage{&m1.NetlinkMessage, &m2.NetlinkMessage}
 	svrChan <- mb
 
@@ -216,7 +225,7 @@ func TestHistograms(t *testing.T) {
 	svrChan <- mb
 
 	// This modifies the SndMSS field in the first connection.  This causes write to the file, but no stats.
-	// TODO - add a snapshot metric?
+	// 1 snapshot
 	m1a := m1.copy().setByte(20, 127)
 	mb.V4Messages = []*netlink.NetlinkMessage{&m1a.NetlinkMessage}
 	mb.V4Time = mb.V4Time.Add(401 * time.Millisecond)
@@ -224,31 +233,33 @@ func TestHistograms(t *testing.T) {
 
 	// This changes the first connection again, increasing the BytesReceived (20000) and BytesSent (10000) fields.
 	// This also causes the time to roll over a second boundary, and generate stats histogram observations.
+	// 1 snapshot, 1 stats observation (160000 bits received, 80000 bits sent)
 	m1b := m1a.copy().setBytesReceived(20000).setBytesSent(10000)
 	mb.V4Messages = []*netlink.NetlinkMessage{&m1b.NetlinkMessage}
 	mb.V4Time = mb.V4Time.Add(401 * time.Millisecond)
 	svrChan <- mb
 
-	m1c := m1b.copy().setBytesSent(100000) // This will be seen only at close channel.
+	// 1 snapshot, no additional stats
+	m1c := m1b.copy().setBytesSent(100000)
 	mb.V4Messages = []*netlink.NetlinkMessage{&m1c.NetlinkMessage}
 	mb.V4Time = mb.V4Time.Add(401 * time.Millisecond)
 	svrChan <- mb
 
 	// This closes the first connection and rolls over another observation boundary.
 	// We should see an observation of 0 Received and 800000 bits Sent.
+	// 0 snapshots, 1 stats observation.
 	mb.V4Messages = []*netlink.NetlinkMessage{}
 	mb.V4Time = mb.V4Time.Add(401 * time.Millisecond)
 	svrChan <- mb
 
-	// Force close all the files.
+	// Close the channel and wait until all MessageBlocks are finished processing.
 	close(svrChan)
 	svr.Done.Wait()
 
 	// This section checks that prom metrics are updated appropriately.
 	c := make(chan prometheus.Metric, 10)
 
-	// There should have been two updates.  The first update should have been 212944 bits, and
-	// the second should have been 0 bits.
+	// There should have been three observations, totalling 816000 bits.
 	metrics.SendRateHistogram.Collect(c)
 	m := <-c
 	if !histContains(m, "sample_count:3") {
@@ -258,9 +269,7 @@ func TestHistograms(t *testing.T) {
 		t.Error("Wrong sample sum")
 	}
 
-	// The first observation should have 8*2*4110 = 65760 bits.
-	// With our tinkering with the setByte(128, 116), we expect the second update to have 25600*8 = 204800 bits.
-	// Total then should be 270560
+	// There should have been three observations, totalling 168000 bits.
 	metrics.ReceiveRateHistogram.Collect(c)
 	m = <-c
 	if !histContains(m, "sample_count:3") {
@@ -283,10 +292,11 @@ func TestHistograms(t *testing.T) {
 
 	// We should have seen 2 different connections.
 	metrics.NewFileCount.Collect(c)
-	fc := <-c
-	if counterValue(fc) != 2 {
-		t.Error("Expected 2, saw ", counterValue(fc))
-	}
+	checkCounter(t, c, 2)
+	// We should have seen total of 4 snapshots.
+	metrics.SnapshotCount.Collect(c)
+	checkCounter(t, c, 4)
+
 	close(c)
 
 	// We have to use a range-based size verification because different versions of
@@ -299,6 +309,5 @@ func TestHistograms(t *testing.T) {
 
 // If this compiles, the "test" passes
 func assertSaverIsACacheLogger(s *saver.Saver) {
-	f := func(csl saver.CacheLogger) {}
-	f(s)
+	func(csl saver.CacheLogger) {}(s)
 }
