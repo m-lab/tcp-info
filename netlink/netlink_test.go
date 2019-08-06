@@ -409,6 +409,30 @@ func Test_archiveReader_Next(t *testing.T) {
 	}
 }
 
+func TestGetStats(t *testing.T) {
+	source := "testdata/ndt-7hhhv_1559749627_0000000000062D84.00000.jsonl.zst"
+	rdr := zstd.NewReader(source)
+	defer rdr.Close()
+	msgs, err := netlink.LoadAllArchivalRecords(rdr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s, r uint64
+	for i := range msgs {
+		ss, rr := msgs[i].GetStats()
+		if ss < s || rr < r {
+			t.Error(s, ss, r, rr)
+		}
+		s, r = ss, rr
+	}
+	// These values can be verified by using the csv tool to dump the ndt-7hhhv_... file, and awking the first and last lines.
+	// go run cmd/csvtool/main.go netlink/testdata/ndt-7hhhv_1559749627_0000000000062D84.00000.jsonl.zst | tail -1 | awk -F "," '{print $61, $74}'
+	// Confirm the column labels in row 1.
+	if s != 3939771 || r != 1245 {
+		t.Error(s, r)
+	}
+}
+
 func TestLoadAllArchivalRecords(t *testing.T) {
 	source := "testdata/testdata.zst"
 	log.Println("Reading messages from", source)

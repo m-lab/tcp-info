@@ -274,8 +274,12 @@ func (svr *Saver) endConn(cookie uint64) {
 }
 
 // Handle a bundle of messages.
-func (svr *Saver) handleType(t time.Time, msgs []*netlink.NetlinkMessage) {
+// Returns the bytes sent and received on all non-local connections.
+func (svr *Saver) handleType(t time.Time, msgs []*netlink.NetlinkMessage) (uint64, uint64) {
+	var liveSent, liveReceived uint64
 	for _, msg := range msgs {
+		// In swap and queue, we want to track the total speed of all connections
+		// every second.
 		if msg == nil {
 			log.Println("Nil message")
 			continue
@@ -289,33 +293,64 @@ func (svr *Saver) handleType(t time.Time, msgs []*netlink.NetlinkMessage) {
 		}
 		ar.Timestamp = t
 
+		// Note: If GetStats shows up in profiling, might want to move to once/second code.
+		s, r := ar.GetStats()
+		liveSent += s
+		liveReceived += r
 		svr.swapAndQueue(ar)
 	}
 
+	return liveSent, liveReceived
 }
 
 // MessageSaverLoop runs a loop to receive batches of ArchivalRecords.  Local connections
 func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 	log.Println("Starting Saver")
+
+	var closedSent, closedReceived uint64
+	var reportedSent, reportedReceived uint64
+	lastReportTime := time.Time{}.Unix()
+
 	for {
 		msgs, ok := <-readerChannel
 		if !ok {
 			break
 		}
 
-		// Handle v4 and v6 message.
-		svr.handleType(msgs.V4Time, msgs.V4Messages)
-		svr.handleType(msgs.V6Time, msgs.V6Messages)
+		// Handle v4 and v6 messages, and return the total bytes sent and received.
+		// TODO - we only need to collect these stats if this is a reporting cycle.
+		s4, r4 := svr.handleType(msgs.V4Time, msgs.V4Messages)
+		s6, r6 := svr.handleType(msgs.V6Time, msgs.V6Messages)
 
 		// Note that the connections that have closed may have had traffic that
 		// we never see, and therefore can't account for in metrics.
 		residual := svr.cache.EndCycle()
 
 		// Remove all missing connections from the cache.
-		for i := range residual {
+		// Also keep a metric of the total cumulative send and receive bytes.
+		for cookie := range residual {
 			// residual is the list of all keys that were not updated.
-			svr.endConn(i)
+			s, r := residual[cookie].GetStats()
+			closedSent += s
+			closedReceived += r
+			svr.endConn(cookie)
 			svr.stats.IncExpiredCount()
+		}
+
+		// Every second, update the total throughput for the past second.
+		if msgs.V4Time.Unix() > lastReportTime {
+			// This is the total bytes since program start.
+			totalSent := closedSent + s4 + s6
+			totalReceived := closedReceived + r4 + r6
+
+			metrics.SendRateHistogram.Observe(8 * float64(totalSent-reportedSent))
+			metrics.ReceiveRateHistogram.Observe(8 * float64(totalReceived-reportedReceived))
+
+			// These are the total bytes reported to prometheus.
+			reportedSent = totalSent
+			reportedReceived = totalReceived
+
+			lastReportTime = msgs.V4Time.Unix()
 		}
 	}
 	svr.Close()
@@ -331,6 +366,7 @@ func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
 	}
 	if old == nil {
 		svr.stats.IncNewCount()
+		metrics.SnapshotCount.Inc()
 		err := svr.queue(pm)
 		if err != nil {
 			log.Println(err)
@@ -360,6 +396,7 @@ func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
 		}
 		if change > netlink.NoMajorChange {
 			svr.stats.IncDiffCount()
+			metrics.SnapshotCount.Inc()
 			err := svr.queue(pm)
 			if err != nil {
 				// TODO metric

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"flag"
 	"io"
 	"log"
 	"net"
@@ -334,7 +335,7 @@ func LoadAllArchivalRecords(rdr io.Reader) ([]*ArchivalRecord, error) {
 }
 
 // GetStats returns basic stats from the TCPInfo snapshot.
-func (pm *ArchivalRecord) GetStats() (int64, int64) {
+func (pm *ArchivalRecord) GetStats() (uint64, uint64) {
 	if len(pm.Attributes) <= inetdiag.INET_DIAG_INFO {
 		return 0, 0
 	}
@@ -343,8 +344,46 @@ func (pm *ArchivalRecord) GetStats() (int64, int64) {
 	if len(raw) < int(bytesSentOffset+8) || len(raw) < int(bytesReceivedOffset+8) {
 		return 0, 0
 	}
-	s := *(*int64)(unsafe.Pointer(&raw[bytesSentOffset]))
-	r := *(*int64)(unsafe.Pointer(&raw[bytesReceivedOffset]))
+	// The linux fields are actually uint64, though the LinuxTCPInfo struct uses int64 for bigquery compatibility.
+	s := *(*uint64)(unsafe.Pointer(&raw[bytesSentOffset]))
+	r := *(*uint64)(unsafe.Pointer(&raw[bytesReceivedOffset]))
 
 	return s, r
+}
+
+// SetBytesReceived sets the field for hacking unit tests.
+func (pm *ArchivalRecord) SetBytesReceived(value uint64) uint64 {
+	if flag.Lookup("test.v") == nil {
+		panic("Allowed only in tests.")
+	}
+	if len(pm.Attributes) <= inetdiag.INET_DIAG_INFO {
+		return 0
+	}
+	raw := pm.Attributes[inetdiag.INET_DIAG_INFO]
+	if len(raw) < int(bytesReceivedOffset+8) {
+		return 0
+	}
+	p := (*uint64)(unsafe.Pointer(&raw[bytesReceivedOffset]))
+	prev := *p
+	*p = value
+	return prev
+}
+
+// SetBytesSent sets the field for hacking unit tests.
+func (pm *ArchivalRecord) SetBytesSent(value uint64) uint64 {
+	if flag.Lookup("test.v") == nil {
+		panic("Allowed only in tests.")
+	}
+	if len(pm.Attributes) <= inetdiag.INET_DIAG_INFO {
+		return 0
+	}
+	raw := pm.Attributes[inetdiag.INET_DIAG_INFO]
+	// Ensure that the full field exists.
+	if len(raw) < int(bytesSentOffset+8) {
+		return 0
+	}
+	p := (*uint64)(unsafe.Pointer(&raw[bytesSentOffset]))
+	prev := *p
+	*p = value
+	return prev
 }

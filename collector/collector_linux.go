@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/m-lab/tcp-info/metrics"
+
 	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/saver"
 )
@@ -62,6 +64,8 @@ func Run(ctx context.Context, reps int, svrChan chan<- netlink.MessageBlock, cl 
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
+	lastCollectionTime := time.Now().Add(-10 * time.Millisecond)
+
 	for loops = 0; (reps == 0 || loops < reps) && (ctx.Err() == nil); loops++ {
 		total, remote := collectDefaultNamespace(svrChan, skipLocal)
 		totalCount += total
@@ -70,6 +74,11 @@ func Run(ctx context.Context, reps int, svrChan chan<- netlink.MessageBlock, cl 
 		if loops%6000 == 0 {
 			cl.LogCacheStats(localCount, errCount)
 		}
+
+		now := time.Now()
+		interval := now.Sub(lastCollectionTime)
+		lastCollectionTime = now
+		metrics.PollingHistogram.Observe(interval.Seconds())
 
 		// Wait for next tick.
 		<-ticker.C

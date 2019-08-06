@@ -49,6 +49,7 @@ type TestMsg struct {
 func (msg *TestMsg) copy() *TestMsg {
 	out := TestMsg{}
 	out.Header = msg.Header
+	out.Data = make([]byte, len(msg.Data))
 	copy(out.Data, msg.Data)
 	return &out
 }
@@ -86,24 +87,33 @@ func (msg *TestMsg) setDPort(dport uint16) *TestMsg {
 	return msg
 }
 
-func (msg *TestMsg) setByte(offset int, value byte) *TestMsg {
+func (msg *TestMsg) mustAR() *netlink.ArchivalRecord {
 	ar, err := netlink.MakeArchivalRecord(&msg.NetlinkMessage, true)
 	if err != nil {
-		panic("")
+		panic(err)
+	}
+	if ar == nil {
+		panic("nil ar - probably a local connection")
 	}
 
 	if len(ar.Attributes) <= inetdiag.INET_DIAG_INFO {
-		panic("")
+		panic("No INET_DIAG_INFO message")
 	}
 
+	return ar
+}
+
+func (msg *TestMsg) setByte(offset int, value byte) *TestMsg {
+	ar := msg.mustAR()
 	ar.Attributes[inetdiag.INET_DIAG_INFO][offset] = value
 
 	return msg
 }
 
 func msg(t *testing.T, cookie uint64, dport uint16) *TestMsg {
-	// TODO - this is an incomplete message and should be replaced with a full message.
-	var json1 = `{"Header":{"Len":356,"Type":20,"Flags":2,"Seq":1,"Pid":148940},"Data":"CgEAAOpWE6cmIAAAEAMEFbM+nWqBv4ehJgf4sEANDAoAAAAAAAAAgQAAAAAdWwAAAAAAAAAAAAAAAAAAAAAAAAAAAAC13zIBBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAArAACAAEAAAAAB3gBQIoDAECcAABEBQAAuAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUCEAAAAAAAAgIQAAQCEAANwFAACsywIAJW8AAIRKAAD///9/CgAAAJQFAAADAAAALMkAAIBwAAAAAAAALnUOAAAAAAD///////////ayBAAAAAAASfQPAAAAAADMEQAANRMAAAAAAABiNQAAxAsAAGMIAABX5AUAAAAAAAoABABjdWJpYwAAAA=="}`
+	// NOTE: If the INET_DIAG_INFO message gets larger, this may cause unit tests to fail, because
+	// the TestMsg assumes the message decoding is done in place.
+	var json1 = `{"Header":{"Len":420,"Type":20,"Flags":2,"Seq":1,"Pid":235855},"Data":"CgECAIaYE6cmIAAAEAMEFkrF0ry7OloFJgf4sEAMDAYAAAAAAAAAgQAAAABI6AcBAAAAAJgmAAAAAAAAAAAAAAAAAACsINMLBQAIAAAAAAAFAAUAIAAAAAUABgAgAAAAFAABAAAAAAAAAAAAAAAAAAAAAAAoAAcAAAAAAICiBQAAAAAAALQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA5AACAAEAAAAAB3gBYFsDAECcAAB2BQAAGAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2BEAAAAAAACEEQAAyBEAANwFAABAgQAAL0gAACEAAAAHAAAACgAAAJQFAAADAAAAAAAAAIBwAAAAAAAAQdoNAAAAAAD///////////4zAAAAAAAADhAAAAAAAADgAAAA4QAAAAAAAADYRgAAJgAAAC8AAACi4gYAAAAAAGArCwAAAAAAAAAAAAAAAAAAAAAAAAAAADAAAAAAAAAA/TMAAAAAAAAAAAAAAAAAAAAAAAAAAAAACgAEAGN1YmljAAAACAARAAAAAAA="}`
 	nm := netlink.NetlinkMessage{}
 	err := json.Unmarshal([]byte(json1), &nm)
 	if err != nil {
@@ -114,6 +124,18 @@ func msg(t *testing.T, cookie uint64, dport uint16) *TestMsg {
 	msg := &TestMsg{nm}
 
 	msg = msg.setCookie(cookie).setDPort(dport)
+	return msg
+}
+
+func (msg *TestMsg) setBytesSent(value uint64) *TestMsg {
+	ar := msg.mustAR()
+	ar.SetBytesSent(value)
+	return msg
+}
+
+func (msg *TestMsg) setBytesReceived(value uint64) *TestMsg {
+	ar := msg.mustAR()
+	ar.SetBytesReceived(value)
 	return msg
 }
 
@@ -142,7 +164,19 @@ func histContains(m prometheus.Metric, s string) bool {
 		log.Println(h)
 		return false
 	}
-	return strings.Contains(h.String(), s)
+	if strings.Contains(h.String(), s) {
+		return true
+	}
+	log.Println("Expected:", s, "Got:", h)
+	return false
+}
+
+func checkCounter(t *testing.T, c chan prometheus.Metric, expected float64) {
+	m := <-c
+	v := counterValue(m)
+	if v != expected {
+		t.Error("For", m.Desc(), "expected:", expected, "got:", v)
+	}
 }
 
 func counterValue(m prometheus.Metric) float64 {
@@ -157,7 +191,7 @@ func counterValue(m prometheus.Metric) float64 {
 	return *ctr.Value
 }
 
-func TestBasic(t *testing.T) {
+func TestHistograms(t *testing.T) {
 	dir, err := ioutil.TempDir("", "tcp-info_saver_TestBasic")
 	rtx.Must(err, "Could not create tempdir")
 	fmt.Println("Directory is:", dir)
@@ -174,49 +208,106 @@ func TestBasic(t *testing.T) {
 
 	date := time.Date(2018, 02, 06, 11, 12, 13, 0, time.UTC)
 	mb := netlink.MessageBlock{V4Time: date, V6Time: date}
-	// This round just initializes the cache.
-	mb.V4Messages = []*netlink.NetlinkMessage{&msg(t, 11234, 11234).NetlinkMessage, &msg(t, 235, 235).NetlinkMessage}
+
+	// Create basic messages.  These are not internally consistent!!
+	m1 := msg(t, 11234, 1).setBytesReceived(0).setBytesSent(0)
+	m2 := msg(t, 235, 2).setBytesReceived(1000).setBytesSent(2000)
+
+	// This round just initializes the cache, and causes the first set of rate histogram observations.
+	// Received = 1000, Sent = 2000
+	// Results in 2 snapshots, 1 stats observation, (8000 bits received, 16000 bits sent)
+	mb.V4Messages = []*netlink.NetlinkMessage{&m1.NetlinkMessage, &m2.NetlinkMessage}
 	svrChan <- mb
 
-	// This should NOT write to file, because nothing changed
-	mb.V4Messages = []*netlink.NetlinkMessage{&msg(t, 1234, 1234).NetlinkMessage, &msg(t, 234, 234).NetlinkMessage}
+	// This closes the second connection at 401 milliseconds.
+	mb.V4Messages = []*netlink.NetlinkMessage{&m1.NetlinkMessage}
+	mb.V4Time = mb.V4Time.Add(401 * time.Millisecond)
 	svrChan <- mb
 
-	// This changes the first connection, and ends the second connection.
-	mb.V4Messages = []*netlink.NetlinkMessage{&msg(t, 1234, 1234).setByte(20, 127).NetlinkMessage}
+	// This modifies the SndMSS field in the first connection.  This causes write to the file, but no stats.
+	// 1 snapshot
+	m1a := m1.copy().setByte(20, 127)
+	mb.V4Messages = []*netlink.NetlinkMessage{&m1a.NetlinkMessage}
+	mb.V4Time = mb.V4Time.Add(401 * time.Millisecond)
 	svrChan <- mb
 
-	// This changes the first connection again.
-	mb.V4Messages = []*netlink.NetlinkMessage{&msg(t, 1234, 1234).setByte(20, 127).setByte(105, 127).NetlinkMessage}
+	// This changes the first connection again, increasing the BytesReceived (20000) and BytesSent (10000) fields.
+	// This also causes the time to roll over a second boundary, and generate stats histogram observations.
+	// 1 snapshot, 1 stats observation (160,000 bits received, 80,000 bits sent)
+	m1b := m1a.copy().setBytesReceived(20000).setBytesSent(10000)
+	mb.V4Messages = []*netlink.NetlinkMessage{&m1b.NetlinkMessage}
+	mb.V4Time = mb.V4Time.Add(401 * time.Millisecond)
 	svrChan <- mb
 
-	mb.V4Messages = []*netlink.NetlinkMessage{&msg(t, 1234, 1234).NetlinkMessage}
+	// 1 snapshot, no additional stats
+	m1c := m1b.copy().setBytesSent(100000) // This increases BytesSent from 10K to 100K.
+	mb.V4Messages = []*netlink.NetlinkMessage{&m1c.NetlinkMessage}
+	mb.V4Time = mb.V4Time.Add(401 * time.Millisecond)
 	svrChan <- mb
 
-	// Force close all the files.
+	// This closes the first connection and rolls over another observation boundary.
+	// We should see an observation of 0 Received and 720,000 bits Sent.
+	// 0 snapshots, 1 stats observation.
+	mb.V4Messages = []*netlink.NetlinkMessage{}
+	mb.V4Time = mb.V4Time.Add(401 * time.Millisecond)
+	svrChan <- mb
+
+	// Close the channel and wait until all MessageBlocks are finished processing.
 	close(svrChan)
 	svr.Done.Wait()
 
+	// This section checks that prom metrics are updated appropriately.
 	c := make(chan prometheus.Metric, 10)
 
-	// We should have seen 4 different connections.
-	metrics.NewFileCount.Collect(c)
-	fc := <-c
-	if counterValue(fc) != 4 {
-		t.Error("Expected 4, saw ", counterValue(fc))
+	// There should have been three observations, (16,000, 80,000, 720,000) totalling 816000 bits.
+	metrics.SendRateHistogram.Collect(c)
+	m := <-c
+	if !histContains(m, "sample_count:3") {
+		t.Error("Wrong sample count")
 	}
+	if !histContains(m, "sample_sum:816000") { // 2000 bytes + 100000 bytes
+		t.Error("Wrong sample sum")
+	}
+
+	// There should have been three observations, totalling 168000 bits.
+	metrics.ReceiveRateHistogram.Collect(c)
+	m = <-c
+	if !histContains(m, "sample_count:3") {
+		t.Error("Wrong sample count")
+	}
+	if !histContains(m, "sample_sum:168000") { // 1000 bytes + 20000 bytes
+		t.Error("Wrong sample sum")
+	}
+
+	// For counts in Received, we expect
+	// 1 in bucket 0
+	// 2 in bucket 10000
+	// 3 in bucket 200000
+	if !histContains(m, "cumulative_count:2 upper_bound:10000") {
+		t.Error("Wrong count for 10000 bucket")
+	}
+	if !histContains(m, "cumulative_count:3 upper_bound:200000") {
+		t.Error("Wrong bucket count for 200000 bucket")
+	}
+
+	// We should have seen 2 different connections.
+	metrics.NewFileCount.Collect(c)
+	checkCounter(t, c, 2)
+	// We should have seen total of 4 snapshots.
+	metrics.SnapshotCount.Collect(c)
+	checkCounter(t, c, 4)
+
 	close(c)
 
 	// We have to use a range-based size verification because different versions of
 	// zstd have slightly different compression ratios.
 	// The min/max criteria are based on zstd 1.3.8.
 	// These may change with different zstd versions.
-	verifySizeBetween(t, 350, 450, "2018/02/06/*_0000000000002BE2.00000.jsonl.zst")
+	verifySizeBetween(t, 380, 500, "2018/02/06/*_0000000000002BE2.00000.jsonl.zst")
 	verifySizeBetween(t, 350, 450, "2018/02/06/*_00000000000000EB.00000.jsonl.zst")
 }
 
 // If this compiles, the "test" passes
 func assertSaverIsACacheLogger(s *saver.Saver) {
-	f := func(csl saver.CacheLogger) {}
-	f(s)
+	func(csl saver.CacheLogger) {}(s)
 }
