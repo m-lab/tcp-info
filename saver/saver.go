@@ -273,8 +273,29 @@ func (svr *Saver) endConn(cookie uint64) {
 	}
 }
 
+// Handle a bundle of messages.
+func (svr *Saver) handleType(t time.Time, msgs []*netlink.NetlinkMessage) {
+	for _, msg := range msgs {
+		if msg == nil {
+			log.Println("Nil message")
+			continue
+		}
+		ar, err := netlink.MakeArchivalRecord(msg, true)
+		if ar == nil {
+			if err != nil {
+				log.Println(err)
+			}
+			continue
+		}
+		ar.Timestamp = t
+
+		svr.swapAndQueue(ar)
+	}
+
+}
+
 // MessageSaverLoop runs a loop to receive batches of ArchivalRecords.  Local connections
-func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*netlink.ArchivalRecord) {
+func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 	log.Println("Starting Saver")
 	for {
 		msgs, ok := <-readerChannel
@@ -282,13 +303,12 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan []*netlink.ArchivalRecor
 			break
 		}
 
-		for i := range msgs {
-			if msgs[i] == nil {
-				log.Println("Error")
-				continue
-			}
-			svr.swapAndQueue(msgs[i])
-		}
+		// Handle v4 and v6 message.
+		svr.handleType(msgs.V4Time, msgs.V4Messages)
+		svr.handleType(msgs.V6Time, msgs.V6Messages)
+
+		// Note that the connections that have closed may have had traffic that
+		// we never see, and therefore can't account for in metrics.
 		residual := svr.cache.EndCycle()
 
 		// Remove all missing connections from the cache.

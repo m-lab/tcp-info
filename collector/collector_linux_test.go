@@ -70,7 +70,7 @@ func TestRun(t *testing.T) {
 	port := findPort()
 
 	// A nice big buffer on the channel
-	msgChan := make(chan []*netlink.ArchivalRecord, 10000)
+	msgChan := make(chan netlink.MessageBlock, 10000)
 	var wg sync.WaitGroup
 	wg.Add(3)
 
@@ -106,10 +106,30 @@ func TestRun(t *testing.T) {
 	var prev *netlink.ArchivalRecord
 	for msgs := range msgChan {
 		changed := false
-		for _, m := range msgs {
-			if m == nil {
+		for _, v4 := range msgs.V4Messages {
+			if v4 == nil {
 				continue
 			}
+			m, err := netlink.MakeArchivalRecord(v4, false)
+			testFatal(t, err)
+			idm, err := m.RawIDM.Parse()
+			testFatal(t, err)
+			if idm != nil && idm.ID.SPort() == uint16(port) {
+				change, err := m.Compare(prev)
+				if err != nil {
+					t.Log(err)
+				} else if change > netlink.NoMajorChange {
+					prev = m
+					changed = true
+				}
+			}
+		}
+		for _, v6 := range msgs.V6Messages {
+			if v6 == nil {
+				continue
+			}
+			m, err := netlink.MakeArchivalRecord(v6, false)
+			testFatal(t, err)
 			idm, err := m.RawIDM.Parse()
 			testFatal(t, err)
 			if idm != nil && idm.ID.SPort() == uint16(port) {
