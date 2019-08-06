@@ -293,6 +293,7 @@ func (svr *Saver) handleType(t time.Time, msgs []*netlink.NetlinkMessage) (uint6
 		}
 		ar.Timestamp = t
 
+		// Note: If GetStats shows up in profiling, might want to move to once/second code.
 		s, r := ar.GetStats()
 		liveSent += s
 		liveReceived += r

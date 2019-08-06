@@ -425,6 +425,9 @@ func TestGetStats(t *testing.T) {
 		}
 		s, r = ss, rr
 	}
+	// These values can be verified by using the csv tool to dump the ndt-7hhhv_... file, and awking the first and last lines.
+	// go run cmd/csvtool/main.go netlink/testdata/ndt-7hhhv_1559749627_0000000000062D84.00000.jsonl.zst | tail -1 | awk -F "," '{print $61, $74}'
+	// Confirm the column labels in row 1.
 	if s != 3939771 || r != 1245 {
 		t.Error(s, r)
 	}
