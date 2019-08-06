@@ -233,20 +233,20 @@ func TestHistograms(t *testing.T) {
 
 	// This changes the first connection again, increasing the BytesReceived (20000) and BytesSent (10000) fields.
 	// This also causes the time to roll over a second boundary, and generate stats histogram observations.
-	// 1 snapshot, 1 stats observation (160000 bits received, 80000 bits sent)
+	// 1 snapshot, 1 stats observation (160,000 bits received, 80,000 bits sent)
 	m1b := m1a.copy().setBytesReceived(20000).setBytesSent(10000)
 	mb.V4Messages = []*netlink.NetlinkMessage{&m1b.NetlinkMessage}
 	mb.V4Time = mb.V4Time.Add(401 * time.Millisecond)
 	svrChan <- mb
 
 	// 1 snapshot, no additional stats
-	m1c := m1b.copy().setBytesSent(100000)
+	m1c := m1b.copy().setBytesSent(100000) // This increases BytesSent from 10K to 100K.
 	mb.V4Messages = []*netlink.NetlinkMessage{&m1c.NetlinkMessage}
 	mb.V4Time = mb.V4Time.Add(401 * time.Millisecond)
 	svrChan <- mb
 
 	// This closes the first connection and rolls over another observation boundary.
-	// We should see an observation of 0 Received and 800000 bits Sent.
+	// We should see an observation of 0 Received and 720,000 bits Sent.
 	// 0 snapshots, 1 stats observation.
 	mb.V4Messages = []*netlink.NetlinkMessage{}
 	mb.V4Time = mb.V4Time.Add(401 * time.Millisecond)
@@ -259,7 +259,7 @@ func TestHistograms(t *testing.T) {
 	// This section checks that prom metrics are updated appropriately.
 	c := make(chan prometheus.Metric, 10)
 
-	// There should have been three observations, totalling 816000 bits.
+	// There should have been three observations, (16,000, 80,000, 720,000) totalling 816000 bits.
 	metrics.SendRateHistogram.Collect(c)
 	m := <-c
 	if !histContains(m, "sample_count:3") {
