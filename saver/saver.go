@@ -341,14 +341,24 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 		if msgs.V4Time.Unix() > lastReportTime {
 			// This is the total bytes since program start.
 			totalSent := closedSent + s4 + s6
+			if totalSent-reportedSent > 1e11 {
+				// Some bug in the accounting!!
+				log.Println("Skipping BytesSent report due to bad accounting", reportedSent, closedSent, s4, s6)
+				metrics.ErrorCount.WithLabelValues("bad BytesSent").Inc()
+			} else {
+				metrics.SendRateHistogram.Observe(8 * float64(totalSent-reportedSent))
+				reportedSent = totalSent // the total bytes reported to prometheus.
+			}
+
 			totalReceived := closedReceived + r4 + r6
-
-			metrics.SendRateHistogram.Observe(8 * float64(totalSent-reportedSent))
-			metrics.ReceiveRateHistogram.Observe(8 * float64(totalReceived-reportedReceived))
-
-			// These are the total bytes reported to prometheus.
-			reportedSent = totalSent
-			reportedReceived = totalReceived
+			if totalReceived-reportedReceived > 1e11 {
+				// Some bug in the accounting!!
+				log.Println("Skipping BytesReceived report due to bad accounting", reportedReceived, closedReceived, r4, r6)
+				metrics.ErrorCount.WithLabelValues("bad BytesReceived").Inc()
+			} else {
+				metrics.ReceiveRateHistogram.Observe(8 * float64(totalReceived-reportedReceived))
+				reportedReceived = totalReceived // the total bytes reported to prometheus.
+			}
 
 			lastReportTime = msgs.V4Time.Unix()
 		}
