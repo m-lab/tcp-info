@@ -343,10 +343,19 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 			totalSent := closedSent + s4 + s6
 			totalReceived := closedReceived + r4 + r6
 
+			// NOTE: We are seeing occasions when total < reported.  This messes up prometheus, so
+			// we detect that and skip reporting.
+			// This seems to be persistent, not just a momentary glitch.  The total may drop by 500KB,
+			// and only recover after many seconds of gradual increases (on idle workstation).
+			// This workaround seems to also cure the 2<<67 reports.
 			if totalSent > 1e11+reportedSent || totalSent < reportedSent {
 				// Some bug in the accounting!!
 				log.Println("Skipping BytesSent report due to bad accounting", totalSent, reportedSent, closedSent, s4, s6)
-				metrics.ErrorCount.WithLabelValues("bad BytesSent").Inc()
+				if totalSent < reportedSent {
+					metrics.ErrorCount.WithLabelValues("totalSent < reportedSent").Inc()
+				} else {
+					metrics.ErrorCount.WithLabelValues("totalSent > 1e11+reportedSent").Inc()
+				}
 			} else {
 				metrics.SendRateHistogram.Observe(8 * float64(totalSent-reportedSent))
 				reportedSent = totalSent // the total bytes reported to prometheus.
@@ -355,7 +364,11 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 			if totalReceived > 1e11+reportedReceived || totalReceived < reportedReceived {
 				// Some bug in the accounting!!
 				log.Println("Skipping BytesReceived report due to bad accounting", totalReceived, reportedReceived, closedReceived, r4, r6)
-				metrics.ErrorCount.WithLabelValues("bad BytesReceived").Inc()
+				if totalReceived < reportedReceived {
+					metrics.ErrorCount.WithLabelValues("totalReceived < reportedReceived").Inc()
+				} else {
+					metrics.ErrorCount.WithLabelValues("totalReceived > 1e11+reportedReceived").Inc()
+				}
 			} else {
 				metrics.ReceiveRateHistogram.Observe(8 * float64(totalReceived-reportedReceived))
 				reportedReceived = totalReceived // the total bytes reported to prometheus.
