@@ -352,18 +352,6 @@ func (pm *ArchivalRecord) GetStats() (uint64, uint64) {
 	// The linux fields are actually uint64, though the LinuxTCPInfo struct uses int64 for bigquery compatibility.
 	s := *(*uint64)(unsafe.Pointer(&raw[bytesSentOffset]))
 	r := *(*uint64)(unsafe.Pointer(&raw[bytesReceivedOffset]))
-	// We are seeing anomolous jumps of 1<<67 sometimes, so let's try to detect absurdly large updates.
-	// Any single connection running for a whole day cannot exceed 10Gb/sec at any time, so can't total
-	// more than 86400 * 1e10 = 8.6e14 bits.  Long running connection might, but that should be extremely rare, and suggests
-	// some bug in our system.
-	if s > 9e14 {
-		sendLogger.Printf("Ignoring rediculous %d BytesSent on connection, IDM:%v\n", s, pm.RawIDM)
-		s = 0
-	}
-	if r > 9e14 {
-		rcvLogger.Printf("Ignoring rediculous %d BytesReceived on connection, IDM:%v\n", r, pm.RawIDM)
-		r = 0
-	}
 	return s, r
 }
 
