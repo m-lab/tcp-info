@@ -35,7 +35,7 @@ var (
 		prometheus.HistogramOpts{
 			Name:    "tcpinfo_polling_interval_histogram",
 			Help:    "netlink polling interval distribution (seconds)",
-			Buckets: prometheus.LinearBuckets(0, .001, 20),
+			Buckets: prometheus.LinearBuckets(0, .001, 30),
 		},
 	)
 
