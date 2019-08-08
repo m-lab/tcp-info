@@ -28,6 +28,9 @@ import (
 	"github.com/m-lab/uuid"
 )
 
+// This is the maximum switch/network if speed in bits/sec.  It is used to check for illogical bit rate observations.
+const maxSwitchSpeed = 1e10
+
 // We will send an entire batch of prefiltered ArchivalRecords through a channel from
 // the collection loop to the top level saver.  The saver will detect new connections
 // and significant diffs, maintain the connection cache, determine
@@ -343,12 +346,37 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 			totalSent := closedSent + s4 + s6
 			totalReceived := closedReceived + r4 + r6
 
-			metrics.SendRateHistogram.Observe(8 * float64(totalSent-reportedSent))
-			metrics.ReceiveRateHistogram.Observe(8 * float64(totalReceived-reportedReceived))
+			// NOTE: We are seeing occasions when total < reported.  This messes up prometheus, so
+			// we detect that and skip reporting.
+			// This seems to be persistent, not just a momentary glitch.  The total may drop by 500KB,
+			// and only recover after many seconds of gradual increases (on idle workstation).
+			// This workaround seems to also cure the 2<<67 reports.
+			// We also check for increments larger than 10x the maxSwitchSpeed.
+			if totalSent > 10*maxSwitchSpeed/8+reportedSent || totalSent < reportedSent {
+				// Some bug in the accounting!!
+				log.Println("Skipping BytesSent report due to bad accounting", totalSent, reportedSent, closedSent, s4, s6)
+				if totalSent < reportedSent {
+					metrics.ErrorCount.WithLabelValues("totalSent < reportedSent").Inc()
+				} else {
+					metrics.ErrorCount.WithLabelValues("totalSent-reportedSent exceeds network capacity").Inc()
+				}
+			} else {
+				metrics.SendRateHistogram.Observe(8 * float64(totalSent-reportedSent))
+				reportedSent = totalSent // the total bytes reported to prometheus.
+			}
 
-			// These are the total bytes reported to prometheus.
-			reportedSent = totalSent
-			reportedReceived = totalReceived
+			if totalReceived > 10*maxSwitchSpeed/8+reportedReceived || totalReceived < reportedReceived {
+				// Some bug in the accounting!!
+				log.Println("Skipping BytesReceived report due to bad accounting", totalReceived, reportedReceived, closedReceived, r4, r6)
+				if totalReceived < reportedReceived {
+					metrics.ErrorCount.WithLabelValues("totalReceived < reportedReceived").Inc()
+				} else {
+					metrics.ErrorCount.WithLabelValues("totalReceived-reportedReceived exceeds network capacity").Inc()
+				}
+			} else {
+				metrics.ReceiveRateHistogram.Observe(8 * float64(totalReceived-reportedReceived))
+				reportedReceived = totalReceived // the total bytes reported to prometheus.
+			}
 
 			lastReportTime = msgs.V4Time.Unix()
 		}

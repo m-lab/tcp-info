@@ -13,6 +13,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/m-lab/go/logx"
+
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/tcp"
 )
@@ -334,6 +336,9 @@ func LoadAllArchivalRecords(rdr io.Reader) ([]*ArchivalRecord, error) {
 	}
 }
 
+var sendLogger = logx.NewLogEvery(nil, time.Second)
+var rcvLogger = logx.NewLogEvery(nil, time.Second)
+
 // GetStats returns basic stats from the TCPInfo snapshot.
 func (pm *ArchivalRecord) GetStats() (uint64, uint64) {
 	if len(pm.Attributes) <= inetdiag.INET_DIAG_INFO {
@@ -347,7 +352,6 @@ func (pm *ArchivalRecord) GetStats() (uint64, uint64) {
 	// The linux fields are actually uint64, though the LinuxTCPInfo struct uses int64 for bigquery compatibility.
 	s := *(*uint64)(unsafe.Pointer(&raw[bytesSentOffset]))
 	r := *(*uint64)(unsafe.Pointer(&raw[bytesReceivedOffset]))
-
 	return s, r
 }
 
