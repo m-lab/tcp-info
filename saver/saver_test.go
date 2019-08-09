@@ -286,7 +286,7 @@ func TestHistograms(t *testing.T) {
 	if !histContains(m, "cumulative_count:2 upper_bound:10000") {
 		t.Error("Wrong count for 10000 bucket")
 	}
-	if !histContains(m, "cumulative_count:3 upper_bound:200000") {
+	if !histContains(m, "cumulative_count:3 upper_bound:251000") {
 		t.Error("Wrong bucket count for 200000 bucket")
 	}
 
