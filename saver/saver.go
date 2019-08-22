@@ -267,7 +267,6 @@ func (svr *Saver) queue(msg *netlink.ArchivalRecord) error {
 }
 
 func (svr *Saver) endConn(cookie uint64) {
-	//log.Println("Closing:", cookie)
 	q := svr.MarshalChans[cookie%uint64(len(svr.MarshalChans))]
 	conn, ok := svr.Connections[cookie]
 	if ok && conn.Writer != nil {
@@ -332,8 +331,12 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 		// Remove all missing connections from the cache.
 		// Also keep a metric of the total cumulative send and receive bytes.
 		for cookie := range residual {
-			// residual is the list of all keys that were not updated.
-			s, r := residual[cookie].GetStats()
+			ar := residual[cookie]
+			if !ar.HasDiagInfo() {
+				// Should never happen, because we don't cache these.
+				continue
+			}
+			s, r := ar.GetStats()
 			closedSent += s
 			closedReceived += r
 			svr.endConn(cookie)
@@ -405,6 +408,14 @@ func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
 		if err != nil {
 			// TODO metric
 			log.Println(err)
+			return
+		}
+		if !pm.HasDiagInfo() {
+			// Don't really care about records without DiagInfo.
+			// This makes it much easier to handle closing connections, as we keep
+			// the valid data in the cache.
+			sOld, rOld, _ := old.GetStats()
+			log.Println("Closing:", oldIDM.ID.Cookie(), tcp.State(oldIDM.IDiagState), sOld, rOld, float32(old.Timestamp.UnixNano()/int64(time.Millisecond)/1000.0))
 			return
 		}
 		pmIDM, err := pm.RawIDM.Parse()
