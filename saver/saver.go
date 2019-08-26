@@ -339,7 +339,7 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 			ar := residual[cookie]
 			var stats TcpStats
 			if !ar.HasDiagInfo() {
-				stats, ok := svr.ClosingStats[cookie]
+				stats, ok = svr.ClosingStats[cookie]
 				if ok {
 					// Remove the stats from closing.
 					svr.ClosingTotals.Sent -= stats.Sent
