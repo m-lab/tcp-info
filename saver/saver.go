@@ -316,6 +316,7 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 
 	var reported, closed TcpStats
 	lastReportTime := time.Time{}.Unix()
+	closeLogCount := 10000
 
 	for {
 		msgs, ok := <-readerChannel
@@ -353,11 +354,14 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 			closed.Sent += stats.Sent
 			closed.Received += stats.Received
 
-			idm, err := ar.RawIDM.Parse()
-			if err != nil {
-				log.Println("Closed:", ar.Timestamp.Format("15:04:05.000"), cookie, "idm parse error", stats)
-			} else {
-				log.Println("Closed:", ar.Timestamp.Format("15:04:05.000"), cookie, tcp.State(idm.IDiagState), stats)
+			if closeLogCount > 0 {
+				idm, err := ar.RawIDM.Parse()
+				if err != nil {
+					log.Println("Closed:", ar.Timestamp.Format("15:04:05.000"), cookie, "idm parse error", stats)
+				} else {
+					log.Println("Closed:", ar.Timestamp.Format("15:04:05.000"), cookie, tcp.State(idm.IDiagState), stats)
+				}
+				closeLogCount--
 			}
 
 			svr.endConn(cookie)
@@ -376,6 +380,7 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 			// and only recover after many seconds of gradual increases (on idle workstation).
 			// This workaround seems to also cure the 2<<67 reports.
 			// We also check for increments larger than 10x the maxSwitchSpeed.
+			// TODO: This can all be discarded when we are confident the bug has been fixed.
 			if totalSent > 10*maxSwitchSpeed/8+reported.Sent || totalSent < reported.Sent {
 				// Some bug in the accounting!!
 				log.Println("Skipping BytesSent report due to bad accounting", totalSent, reported.Sent, closed.Sent, svr.ClosingTotals.Sent, s4, s6)
