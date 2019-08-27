@@ -419,7 +419,7 @@ func TestGetStats(t *testing.T) {
 	}
 	var s, r uint64
 	for i := range msgs {
-		if !msgs[i].HasInetDiag() {
+		if !msgs[i].HasDiagInfo() {
 			continue
 		}
 		ss, rr := msgs[i].GetStats()
