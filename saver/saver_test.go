@@ -310,7 +310,7 @@ func TestHistograms(t *testing.T) {
 
 // TODO - this file contains connection data from a connection with FIN_WAIT2 and no DiagInfo.
 // Need to create fake NetlinkMessage stream, and send to saver, and test behavior.
-func TestFinWait2(t *testing.T) {
+func TestFinWait2NotImplemented(t *testing.T) {
 	source := "testdata/finwait2-sample_1554836592_unsafe_000000000135A272.00000.jsonl.zst"
 	rdr := zstd.NewReader(source)
 	defer rdr.Close()
@@ -325,7 +325,7 @@ func TestFinWait2(t *testing.T) {
 	for i := range msgs {
 		ar := msgs[i]
 		s, r := ar.GetStats()
-		// Fill in when we have a way to create NetlinkMessage from ArchiveRecord
+		// TODO Fill in when we have a way to create NetlinkMessage from ArchiveRecord
 		mb := netlink.MessageBlock{}
 		blockChan <- mb
 
@@ -334,6 +334,7 @@ func TestFinWait2(t *testing.T) {
 
 	close(blockChan)
 	svr.Done.Wait()
+	t.Log("Test not implemented")
 }
 
 // If this compiles, the "test" passes

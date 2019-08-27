@@ -29,22 +29,22 @@ func collectDefaultNamespace(svr chan<- netlink.MessageBlock, skipLocal bool) (i
 
 	remoteCount := 0
 	res6, err := OneType(syscall.AF_INET6)
+	buffer.V6Time = time.Now()
 	if err != nil {
 		// Properly handle errors
 		// TODO add metric
 		log.Println(err)
 	} else {
 		buffer.V6Messages = res6
-		buffer.V6Time = time.Now()
 	}
 	res4, err := OneType(syscall.AF_INET)
+	buffer.V4Time = time.Now()
 	if err != nil {
 		// Properly handle errors
 		// TODO add metric
 		log.Println(err)
 	} else {
 		buffer.V4Messages = res4
-		buffer.V4Time = time.Now()
 	}
 
 	// Submit full set of message to the marshalling service.
