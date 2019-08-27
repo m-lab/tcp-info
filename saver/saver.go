@@ -210,6 +210,7 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 	// is not a performance concern.
 	conn := make(map[uint64]*Connection, 500)
 	wg := &sync.WaitGroup{}
+	wg.Add(1)
 	ageLim := 10 * time.Minute
 
 	for i := 0; i < numMarshaller; i++ {
@@ -318,11 +319,7 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 	lastReportTime := time.Time{}.Unix()
 	closeLogCount := 10000
 
-	for {
-		msgs, ok := <-readerChannel
-		if !ok {
-			break
-		}
+	for msgs := range readerChannel {
 
 		// Handle v4 and v6 messages, and return the total bytes sent and received.
 		// TODO - we only need to collect these stats if this is a reporting cycle.
@@ -338,6 +335,7 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 		for cookie := range residual {
 			ar := residual[cookie]
 			var stats TcpStats
+			var ok bool
 			if !ar.HasDiagInfo() {
 				stats, ok = svr.ClosingStats[cookie]
 				if ok {
@@ -488,7 +486,7 @@ func (svr *Saver) Close() {
 	for i := range svr.MarshalChans {
 		close(svr.MarshalChans[i])
 	}
-	svr.Done.Wait()
+	svr.Done.Done()
 }
 
 // LogCacheStats prints out some basic cache stats.
