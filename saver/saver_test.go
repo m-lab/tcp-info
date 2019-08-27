@@ -311,7 +311,7 @@ func TestHistograms(t *testing.T) {
 // TODO - this file contains connection data from a connection with FIN_WAIT2 and no DiagInfo.
 // Need to create fake NetlinkMessage stream, and send to saver, and test behavior.
 func TestFinWait2(t *testing.T) {
-	source := "testdata/gfr14.nyc.corp.google.com_1554836592_unsafe_000000000135A272.00000.jsonl.zst"
+	source := "testdata/finwait2-sample_1554836592_unsafe_000000000135A272.00000.jsonl.zst"
 	rdr := zstd.NewReader(source)
 	defer rdr.Close()
 	msgs, err := netlink.LoadAllArchivalRecords(rdr)
