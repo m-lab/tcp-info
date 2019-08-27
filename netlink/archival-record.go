@@ -336,6 +336,11 @@ func LoadAllArchivalRecords(rdr io.Reader) ([]*ArchivalRecord, error) {
 	}
 }
 
+// HasDiagInfo returns true if there is a DIAG_INFO message.
+func (pm *ArchivalRecord) HasDiagInfo() bool {
+	return len(pm.Attributes) > inetdiag.INET_DIAG_INFO
+}
+
 var sendLogger = logx.NewLogEvery(nil, time.Second)
 var rcvLogger = logx.NewLogEvery(nil, time.Second)
 

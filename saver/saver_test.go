@@ -18,6 +18,7 @@ import (
 	"github.com/m-lab/tcp-info/metrics"
 	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/saver"
+	"github.com/m-lab/tcp-info/zstd"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -305,6 +306,35 @@ func TestHistograms(t *testing.T) {
 	// These may change with different zstd versions.
 	verifySizeBetween(t, 380, 500, "2018/02/06/*_0000000000002BE2.00000.jsonl.zst")
 	verifySizeBetween(t, 350, 450, "2018/02/06/*_00000000000000EB.00000.jsonl.zst")
+}
+
+// TODO - this file contains connection data from a connection with FIN_WAIT2 and no DiagInfo.
+// Need to create fake NetlinkMessage stream, and send to saver, and test behavior.
+func TestFinWait2NotImplemented(t *testing.T) {
+	source := "testdata/finwait2-sample_1554836592_unsafe_000000000135A272.00000.jsonl.zst"
+	rdr := zstd.NewReader(source)
+	defer rdr.Close()
+	msgs, err := netlink.LoadAllArchivalRecords(rdr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	svr := saver.NewSaver("hostname", "fakePod", 1)
+	blockChan := make(chan netlink.MessageBlock, 0)
+	go svr.MessageSaverLoop(blockChan)
+	for i := range msgs {
+		ar := msgs[i]
+		s, r := ar.GetStats()
+		// TODO Fill in when we have a way to create NetlinkMessage from ArchiveRecord
+		mb := netlink.MessageBlock{}
+		blockChan <- mb
+
+		log.Println(s, r, ar.HasDiagInfo())
+	}
+
+	close(blockChan)
+	svr.Done.Wait()
+	t.Log("Test not implemented")
 }
 
 // If this compiles, the "test" passes

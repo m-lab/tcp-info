@@ -419,6 +419,9 @@ func TestGetStats(t *testing.T) {
 	}
 	var s, r uint64
 	for i := range msgs {
+		if !msgs[i].HasDiagInfo() {
+			continue
+		}
 		ss, rr := msgs[i].GetStats()
 		if ss < s || rr < r {
 			t.Error(s, ss, r, rr)

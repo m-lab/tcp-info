@@ -178,17 +178,24 @@ func (s *stats) Print() {
 		s.DiffCount, s.NewCount, s.ExpiredCount)
 }
 
+type TcpStats struct {
+	Sent     uint64 // BytesSent
+	Received uint64 // BytesReceived
+}
+
 // Saver provides functionality for saving tcpinfo diffs to connection files.
 // It handles arbitrary connections, and only writes to file when the significant fields
 // change.  (TODO - what does "significant fields" mean).
 // TODO - just export an interface, instead of the implementation.
 type Saver struct {
-	Host         string // mlabN
-	Pod          string // 3 alpha + 2 decimal
-	FileAgeLimit time.Duration
-	MarshalChans []MarshalChan
-	Done         *sync.WaitGroup // All marshallers will call Done on this.
-	Connections  map[uint64]*Connection
+	Host          string // mlabN
+	Pod           string // 3 alpha + 2 decimal
+	FileAgeLimit  time.Duration
+	MarshalChans  []MarshalChan
+	Done          *sync.WaitGroup // All marshallers will call Done on this.
+	Connections   map[uint64]*Connection
+	ClosingStats  map[uint64]TcpStats // BytesReceived and BytesSent for connections that are closing.
+	ClosingTotals TcpStats
 
 	cache *cache.Cache
 	stats stats
@@ -203,6 +210,7 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 	// is not a performance concern.
 	conn := make(map[uint64]*Connection, 500)
 	wg := &sync.WaitGroup{}
+	wg.Add(1)
 	ageLim := 10 * time.Minute
 
 	for i := 0; i < numMarshaller; i++ {
@@ -216,6 +224,7 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 		MarshalChans: m,
 		Done:         wg,
 		Connections:  conn,
+		ClosingStats: make(map[uint64]TcpStats, 100),
 		cache:        c,
 	}
 }
@@ -238,14 +247,11 @@ func (svr *Saver) queue(msg *netlink.ArchivalRecord) error {
 	q := svr.MarshalChans[int(cookie%uint64(len(svr.MarshalChans)))]
 	conn, ok := svr.Connections[cookie]
 	if !ok {
-		// Likely first time we have seen this connection.  Create a new Connection, unless
-		// the connection is already closing.
+		// Create a new connection for first time cookies.  For late connections already
+		// terminating, log some info for debugging purposes.
 		if idm.IDiagState >= uint8(tcp.FIN_WAIT1) {
-			log.Println("Skipping", idm, msg.Timestamp)
-			return nil
-		}
-		if svr.cache.CycleCount() > 0 || idm.IDiagState != uint8(tcp.ESTABLISHED) {
-			log.Println("New conn:", idm, msg.Timestamp)
+			s, r := msg.GetStats()
+			log.Println("Starting:", msg.Timestamp.Format("15:04:05.000"), cookie, tcp.State(idm.IDiagState), TcpStats{s, r})
 		}
 		conn = newConnection(idm, msg.Timestamp)
 		svr.Connections[cookie] = conn
@@ -267,7 +273,6 @@ func (svr *Saver) queue(msg *netlink.ArchivalRecord) error {
 }
 
 func (svr *Saver) endConn(cookie uint64) {
-	//log.Println("Closing:", cookie)
 	q := svr.MarshalChans[cookie%uint64(len(svr.MarshalChans))]
 	conn, ok := svr.Connections[cookie]
 	if ok && conn.Writer != nil {
@@ -310,15 +315,11 @@ func (svr *Saver) handleType(t time.Time, msgs []*netlink.NetlinkMessage) (uint6
 func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 	log.Println("Starting Saver")
 
-	var closedSent, closedReceived uint64
-	var reportedSent, reportedReceived uint64
+	var reported, closed TcpStats
 	lastReportTime := time.Time{}.Unix()
+	closeLogCount := 10000
 
-	for {
-		msgs, ok := <-readerChannel
-		if !ok {
-			break
-		}
+	for msgs := range readerChannel {
 
 		// Handle v4 and v6 messages, and return the total bytes sent and received.
 		// TODO - we only need to collect these stats if this is a reporting cycle.
@@ -332,10 +333,35 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 		// Remove all missing connections from the cache.
 		// Also keep a metric of the total cumulative send and receive bytes.
 		for cookie := range residual {
-			// residual is the list of all keys that were not updated.
-			s, r := residual[cookie].GetStats()
-			closedSent += s
-			closedReceived += r
+			ar := residual[cookie]
+			var stats TcpStats
+			var ok bool
+			if !ar.HasDiagInfo() {
+				stats, ok = svr.ClosingStats[cookie]
+				if ok {
+					// Remove the stats from closing.
+					svr.ClosingTotals.Sent -= stats.Sent
+					svr.ClosingTotals.Received -= stats.Received
+					delete(svr.ClosingStats, cookie)
+				} else {
+					log.Println("Missing stats for", cookie)
+				}
+			} else {
+				stats.Sent, stats.Received = ar.GetStats()
+			}
+			closed.Sent += stats.Sent
+			closed.Received += stats.Received
+
+			if closeLogCount > 0 {
+				idm, err := ar.RawIDM.Parse()
+				if err != nil {
+					log.Println("Closed:", ar.Timestamp.Format("15:04:05.000"), cookie, "idm parse error", stats)
+				} else {
+					log.Println("Closed:", ar.Timestamp.Format("15:04:05.000"), cookie, tcp.State(idm.IDiagState), stats)
+				}
+				closeLogCount--
+			}
+
 			svr.endConn(cookie)
 			svr.stats.IncExpiredCount()
 		}
@@ -343,8 +369,8 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 		// Every second, update the total throughput for the past second.
 		if msgs.V4Time.Unix() > lastReportTime {
 			// This is the total bytes since program start.
-			totalSent := closedSent + s4 + s6
-			totalReceived := closedReceived + r4 + r6
+			totalSent := closed.Sent + svr.ClosingTotals.Sent + s4 + s6
+			totalReceived := closed.Received + svr.ClosingTotals.Received + r4 + r6
 
 			// NOTE: We are seeing occasions when total < reported.  This messes up prometheus, so
 			// we detect that and skip reporting.
@@ -352,30 +378,31 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 			// and only recover after many seconds of gradual increases (on idle workstation).
 			// This workaround seems to also cure the 2<<67 reports.
 			// We also check for increments larger than 10x the maxSwitchSpeed.
-			if totalSent > 10*maxSwitchSpeed/8+reportedSent || totalSent < reportedSent {
+			// TODO: This can all be discarded when we are confident the bug has been fixed.
+			if totalSent > 10*maxSwitchSpeed/8+reported.Sent || totalSent < reported.Sent {
 				// Some bug in the accounting!!
-				log.Println("Skipping BytesSent report due to bad accounting", totalSent, reportedSent, closedSent, s4, s6)
-				if totalSent < reportedSent {
+				log.Println("Skipping BytesSent report due to bad accounting", totalSent, reported.Sent, closed.Sent, svr.ClosingTotals.Sent, s4, s6)
+				if totalSent < reported.Sent {
 					metrics.ErrorCount.WithLabelValues("totalSent < reportedSent").Inc()
 				} else {
 					metrics.ErrorCount.WithLabelValues("totalSent-reportedSent exceeds network capacity").Inc()
 				}
 			} else {
-				metrics.SendRateHistogram.Observe(8 * float64(totalSent-reportedSent))
-				reportedSent = totalSent // the total bytes reported to prometheus.
+				metrics.SendRateHistogram.Observe(8 * float64(totalSent-reported.Sent))
+				reported.Sent = totalSent // the total bytes reported to prometheus.
 			}
 
-			if totalReceived > 10*maxSwitchSpeed/8+reportedReceived || totalReceived < reportedReceived {
+			if totalReceived > 10*maxSwitchSpeed/8+reported.Received || totalReceived < reported.Received {
 				// Some bug in the accounting!!
-				log.Println("Skipping BytesReceived report due to bad accounting", totalReceived, reportedReceived, closedReceived, r4, r6)
-				if totalReceived < reportedReceived {
+				log.Println("Skipping BytesReceived report due to bad accounting", totalReceived, reported.Received, closed.Received, svr.ClosingTotals.Received, r4, r6)
+				if totalReceived < reported.Received {
 					metrics.ErrorCount.WithLabelValues("totalReceived < reportedReceived").Inc()
 				} else {
 					metrics.ErrorCount.WithLabelValues("totalReceived-reportedReceived exceeds network capacity").Inc()
 				}
 			} else {
-				metrics.ReceiveRateHistogram.Observe(8 * float64(totalReceived-reportedReceived))
-				reportedReceived = totalReceived // the total bytes reported to prometheus.
+				metrics.ReceiveRateHistogram.Observe(8 * float64(totalReceived-reported.Received))
+				reported.Received = totalReceived // the total bytes reported to prometheus.
 			}
 
 			lastReportTime = msgs.V4Time.Unix()
@@ -397,17 +424,28 @@ func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
 		metrics.SnapshotCount.Inc()
 		err := svr.queue(pm)
 		if err != nil {
-			log.Println(err)
-			log.Println("Connections", len(svr.Connections))
+			log.Println(err, "Connections", len(svr.Connections))
 		}
 	} else {
-		oldIDM, err := old.RawIDM.Parse()
+		pmIDM, err := pm.RawIDM.Parse()
 		if err != nil {
 			// TODO metric
 			log.Println(err)
 			return
 		}
-		pmIDM, err := pm.RawIDM.Parse()
+		if !pm.HasDiagInfo() {
+			// If the previous record has DiagInfo, store the send/receive stats.
+			// We will use them when we close the connection.
+			if old.HasDiagInfo() {
+				sOld, rOld := old.GetStats()
+				svr.ClosingStats[pmIDM.ID.Cookie()] = TcpStats{Sent: sOld, Received: rOld}
+				svr.ClosingTotals.Sent += sOld
+				svr.ClosingTotals.Received += rOld
+				log.Println("Closing:", pm.Timestamp.Format("15:04:05.000"), pmIDM.ID.Cookie(), tcp.State(pmIDM.IDiagState), TcpStats{sOld, rOld})
+			}
+		}
+
+		oldIDM, err := old.RawIDM.Parse()
 		if err != nil {
 			// TODO metric
 			log.Println(err)
@@ -415,7 +453,10 @@ func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
 		}
 		if oldIDM.ID != pmIDM.ID {
 			log.Println("Mismatched SockIDs", oldIDM.ID, pmIDM.ID)
+			// TODO metric
+			return
 		}
+
 		change, err := pm.Compare(old)
 		if err != nil {
 			// TODO metric
@@ -445,7 +486,7 @@ func (svr *Saver) Close() {
 	for i := range svr.MarshalChans {
 		close(svr.MarshalChans[i])
 	}
-	svr.Done.Wait()
+	svr.Done.Done()
 }
 
 // LogCacheStats prints out some basic cache stats.
