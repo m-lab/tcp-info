@@ -145,7 +145,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		conn, err = s.unixListener.Accept()
 		if err != nil {
 			log.Printf("Could not Accept on socket %q: %s\n", s.filename, err)
-			break
+			continue
 		}
 		s.addClient(conn)
 	}

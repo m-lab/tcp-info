@@ -68,7 +68,7 @@ func TestServer(t *testing.T) {
 		t.Error("Event differed from expected:", diff)
 	}
 
-	// Close down things the client. When the server next tries to send
+	// Close down things on the client side. When the server next tries to send
 	// something to the client, the client should get removed from the set of
 	// active clients.
 	c.Close()
