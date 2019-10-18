@@ -11,5 +11,5 @@ func TestPrometheusMetrics(t *testing.T) {
 	metrics.ConnectionCountHistogram.WithLabelValues("x")
 	metrics.ErrorCount.WithLabelValues("x")
 	metrics.SyscallTimeHistogram.WithLabelValues("x")
-	promtest.LintMetrics(t)
+	promtest.LintMetrics(nil)
 }
