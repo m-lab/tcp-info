@@ -30,6 +30,7 @@ func TestMain(t *testing.T) {
 		{"TRACE", "true"},
 		{"PROM", fmt.Sprintf(":%d", port)},
 		{"OUTPUT", dir},
+		{"EVENTSOCKET", dir + "/eventsock.sock"},
 	} {
 		cleanup := osx.MustSetenv(v.name, v.val)
 		defer cleanup()
