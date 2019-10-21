@@ -1,6 +1,7 @@
 package saver_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/m-lab/tcp-info/eventsocket"
 
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/inetdiag"
@@ -192,6 +195,15 @@ func counterValue(m prometheus.Metric) float64 {
 	return *ctr.Value
 }
 
+type countingEventSocket struct {
+	opens, closes int
+}
+
+func (*countingEventSocket) Listen() error                                              { return nil }
+func (*countingEventSocket) Serve(context.Context) error                                { return nil }
+func (c *countingEventSocket) FlowCreated(t time.Time, uuid string, id inetdiag.SockID) { c.opens++ }
+func (c *countingEventSocket) FlowDeleted(t time.Time, uuid string)                     { c.closes++ }
+
 func TestHistograms(t *testing.T) {
 	dir, err := ioutil.TempDir("", "tcp-info_saver_TestBasic")
 	rtx.Must(err, "Could not create tempdir")
@@ -203,7 +215,8 @@ func TestHistograms(t *testing.T) {
 		os.RemoveAll(dir)
 		rtx.Must(os.Chdir(oldDir), "Could not switch back to %s", oldDir)
 	}()
-	svr := saver.NewSaver("foo", "bar", 1)
+	eventCounts := &countingEventSocket{}
+	svr := saver.NewSaver("foo", "bar", 1, eventCounts)
 	svrChan := make(chan netlink.MessageBlock, 0) // no buffering
 	go svr.MessageSaverLoop(svrChan)
 
@@ -294,6 +307,10 @@ func TestHistograms(t *testing.T) {
 	// We should have seen 2 different connections.
 	metrics.NewFileCount.Collect(c)
 	checkCounter(t, c, 2)
+	if eventCounts.opens != 2 || eventCounts.closes != 2 {
+		t.Errorf("Should have {opens:2, closes:2} not %+v", *eventCounts)
+	}
+
 	// We should have seen total of 4 snapshots.
 	metrics.SnapshotCount.Collect(c)
 	checkCounter(t, c, 4)
@@ -319,7 +336,7 @@ func TestFinWait2NotImplemented(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	svr := saver.NewSaver("hostname", "fakePod", 1)
+	svr := saver.NewSaver("hostname", "fakePod", 1, eventsocket.NullServer())
 	blockChan := make(chan netlink.MessageBlock, 0)
 	go svr.MessageSaverLoop(blockChan)
 	for i := range msgs {
@@ -334,6 +351,7 @@ func TestFinWait2NotImplemented(t *testing.T) {
 
 	close(blockChan)
 	svr.Done.Wait()
+	svr.LogCacheStats(1, 0)
 	t.Log("Test not implemented")
 }
 

@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"runtime/trace"
 
+	"github.com/m-lab/tcp-info/eventsocket"
+
 	"github.com/m-lab/go/prometheusx"
 	"github.com/m-lab/go/rtx"
 
@@ -62,6 +64,7 @@ var (
 	reps        = flag.Int("reps", 0, "How many cycles should be recorded, 0 means continuous")
 	enableTrace = flag.Bool("trace", false, "Enable trace")
 	outputDir   = flag.String("output", "", "Directory in which to put the resulting tree of data.  Default is the current directory.")
+	eventSocket = flag.String("eventsocket", "", "The filename of the unix-domain socket on which to serve events.")
 
 	ctx, cancel = context.WithCancel(context.Background())
 )
@@ -85,16 +88,24 @@ func main() {
 
 	if *enableTrace {
 		traceFile, err := os.Create("trace")
-		rtx.Must(err, "Could not creat trace file")
+		rtx.Must(err, "Could not create trace file")
 		rtx.Must(trace.Start(traceFile), "failed to start trace: %v", err)
 		defer trace.Stop()
 	}
+
+	// Make and start the event server.
+	eventSrv := eventsocket.NullServer()
+	if *eventSocket != "" {
+		eventSrv = eventsocket.New(*eventSocket)
+	}
+	rtx.Must(eventSrv.Listen(), "Could not listen on", *eventSocket)
+	go eventSrv.Serve(ctx)
 
 	// Make the saver and construct the message channel, buffering up to 2 batches
 	// of messages without stalling producer. We may want to increase the buffer if
 	// we observe main() stalling.
 	svrChan := make(chan netlink.MessageBlock, 2)
-	svr := saver.NewSaver("host", "pod", 3)
+	svr := saver.NewSaver("host", "pod", 3, eventSrv)
 	go svr.MessageSaverLoop(svrChan)
 
 	// Run the collector, possibly forever.

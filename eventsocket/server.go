@@ -8,6 +8,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/m-lab/tcp-info/inetdiag"
 )
 
 //go:generate stringer -type=TCPEvent
@@ -25,21 +27,26 @@ const (
 )
 
 // FlowEvent is the data that is sent down the socket in JSONL form to the
-// clients. The UUID, Timestamp, and Event fields are required, all other fields
-// are optional.
+// clients. The UUID, Timestamp, and Event fields will always be filled in, all
+// other fields are optional.
 type FlowEvent struct {
-	Event        TCPEvent
-	Timestamp    time.Time
-	Src, Dest    string `json:",omitempty"`
-	SPort, DPort uint16 `json:",omitempty"`
-	UUID         string
+	Event     TCPEvent
+	Timestamp time.Time
+	UUID      string
+	ID        *inetdiag.SockID //`json:",omitempty"`
 }
 
-// Server is the struct that has the methods that actually serve the events over
-// the unix domain socket. You should make new Server objects with
-// eventsocket.New unless you really know what you are doing (e.g. you are
-// writing unit tests).
-type Server struct {
+// Server is the interface that has the methods that actually serve the events
+// over the unix domain socket. You should make new Server objects with
+// eventsocket.New or eventsocket.NullServer.
+type Server interface {
+	Listen() error
+	Serve(context.Context) error
+	FlowCreated(timestamp time.Time, uuid string, sockid inetdiag.SockID)
+	FlowDeleted(timestamp time.Time, uuid string)
+}
+
+type server struct {
 	eventC       chan *FlowEvent
 	filename     string
 	clients      map[net.Conn]struct{}
@@ -48,14 +55,14 @@ type Server struct {
 	servingWG    sync.WaitGroup
 }
 
-func (s *Server) addClient(c net.Conn) {
+func (s *server) addClient(c net.Conn) {
 	log.Println("Adding new TCP event client", c)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.clients[c] = struct{}{}
 }
 
-func (s *Server) removeClient(c net.Conn) {
+func (s *server) removeClient(c net.Conn) {
 	s.servingWG.Add(1)
 	defer s.servingWG.Done()
 	s.mutex.Lock()
@@ -68,7 +75,7 @@ func (s *Server) removeClient(c net.Conn) {
 	delete(s.clients, c)
 }
 
-func (s *Server) sendToAllListeners(data string) {
+func (s *server) sendToAllListeners(data string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	for c := range s.clients {
@@ -85,7 +92,7 @@ func (s *Server) sendToAllListeners(data string) {
 	}
 }
 
-func (s *Server) notifyClients(ctx context.Context) {
+func (s *server) notifyClients(ctx context.Context) {
 	s.servingWG.Add(1)
 	defer s.servingWG.Done()
 	for ctx.Err() == nil {
@@ -107,7 +114,7 @@ func (s *Server) notifyClients(ctx context.Context) {
 // server will not immediately fail. In order for them to succeed, Serve()
 // should be called. This function should only be called once for a given
 // Server.
-func (s *Server) Listen() error {
+func (s *server) Listen() error {
 	// Add to the waitgroup inside Listen(), subtract from it in Serve(). That way,
 	// even if the Serve() goroutine is scheduled weirdly, servingWG.Wait() will
 	// definitely wait for Serve() to finish.
@@ -120,7 +127,7 @@ func (s *Server) Listen() error {
 // Serve all clients that connect to this server until the context is canceled.
 // It is expected that this will be called in a goroutine, after Listen has been
 // called.  This function should only be called once for a given server.
-func (s *Server) Serve(ctx context.Context) error {
+func (s *server) Serve(ctx context.Context) error {
 	defer s.servingWG.Done()
 	derivedCtx, derivedCancel := context.WithCancel(ctx)
 	defer derivedCancel()
@@ -153,33 +160,45 @@ func (s *Server) Serve(ctx context.Context) error {
 }
 
 // FlowCreated should be called whenever tcpinfo notices a new flow is created.
-func (s *Server) FlowCreated(src, dest string, sport, dport uint16, uuid string) {
+func (s *server) FlowCreated(timestamp time.Time, uuid string, id inetdiag.SockID) {
 	s.eventC <- &FlowEvent{
 		Event:     Open,
-		Timestamp: time.Now(),
-		Src:       src,
-		Dest:      dest,
-		SPort:     sport,
-		DPort:     dport,
+		Timestamp: timestamp,
+		ID:        &id,
 		UUID:      uuid,
 	}
 }
 
 // FlowDeleted should be called whenever tcpinfo notices a flow has been retired.
-func (s *Server) FlowDeleted(uuid string) {
+func (s *server) FlowDeleted(timestamp time.Time, uuid string) {
 	s.eventC <- &FlowEvent{
 		Event:     Close,
-		Timestamp: time.Now(),
+		Timestamp: timestamp,
 		UUID:      uuid,
 	}
 }
 
 // New makes a new server that serves clients on the provided Unix domain socket.
-func New(filename string) *Server {
+func New(filename string) Server {
 	c := make(chan *FlowEvent, 100)
-	return &Server{
+	return &server{
 		filename: filename,
 		eventC:   c,
 		clients:  make(map[net.Conn]struct{}),
 	}
+}
+
+type nullServer struct{}
+
+// Empty implementations that do no harm.
+func (nullServer) Listen() error                                                    { return nil }
+func (nullServer) Serve(context.Context) error                                      { return nil }
+func (nullServer) FlowCreated(timestamp time.Time, uuid string, id inetdiag.SockID) {}
+func (nullServer) FlowDeleted(timestamp time.Time, uuid string)                     {}
+
+// NullServer returns a Server that does nothing. It is made so that code that
+// may or may not want to use a eventsocket can receive a Server interface and
+// not have to worry about whether it is nil.
+func NullServer() Server {
+	return nullServer{}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/go-test/deep"
 
 	"github.com/m-lab/go/rtx"
+	"github.com/m-lab/tcp-info/inetdiag"
 )
 
 func TestServer(t *testing.T) {
@@ -23,7 +24,7 @@ func TestServer(t *testing.T) {
 	rtx.Must(err, "Could not create tempdir")
 	defer os.RemoveAll(dir)
 
-	srv := New(dir + "/tcpevents.sock")
+	srv := New(dir + "/tcpevents.sock").(*server)
 	srv.Listen()
 	go srv.Serve(ctx)
 	log.Println("About to dial")
@@ -41,7 +42,7 @@ func TestServer(t *testing.T) {
 	}
 
 	// Send an event on the server, to cause the client to be notified by the server.
-	srv.FlowDeleted("fakeuuid")
+	srv.FlowDeleted(time.Now(), "fakeuuid")
 	r := bufio.NewScanner(c)
 	if !r.Scan() {
 		t.Error("Should have been able to scan until the next newline, but couldn't")
@@ -54,7 +55,8 @@ func TestServer(t *testing.T) {
 
 	// Send another event on the server, to cause the client to be notified by the server.
 	before := time.Now()
-	srv.FlowCreated("src", "dst", 1, 2, "fakeuuid2")
+	emptyID := inetdiag.SockID{}
+	srv.FlowCreated(time.Now(), "fakeuuid2", emptyID)
 	if !r.Scan() {
 		t.Error("Should have been able to scan until the next newline, but couldn't")
 	}
@@ -64,7 +66,7 @@ func TestServer(t *testing.T) {
 		t.Error("It should be true that", before, "<", event.Timestamp, "<", after)
 	}
 	event.Timestamp = time.Time{}
-	if diff := deep.Equal(event, FlowEvent{Open, time.Time{}, "src", "dst", 1, 2, "fakeuuid2"}); diff != nil {
+	if diff := deep.Equal(event, FlowEvent{Open, time.Time{}, "fakeuuid2", &emptyID}); diff != nil {
 		t.Error("Event differed from expected:", diff)
 	}
 
@@ -79,7 +81,7 @@ func TestServer(t *testing.T) {
 	// No SIGSEGV == success!
 
 	// Send an event to ensure that cleanup should occur.
-	srv.FlowDeleted("fakeuuid")
+	srv.FlowDeleted(time.Now(), "fakeuuid")
 
 	// Busy wait until the server has unregistered the client
 	for {
@@ -113,4 +115,16 @@ func TestTCPEvent_String(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNullServer(t *testing.T) {
+	// Verify that the null server never crashes or returns a non-null error
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv := NullServer()
+	rtx.Must(srv.Listen(), "Could not listen")
+	rtx.Must(srv.Serve(ctx), "Could not serve")
+	srv.FlowCreated(time.Now(), "", inetdiag.SockID{})
+	srv.FlowDeleted(time.Now(), "")
+	// No crash == success
 }

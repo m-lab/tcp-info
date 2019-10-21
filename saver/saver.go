@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/m-lab/tcp-info/cache"
+	"github.com/m-lab/tcp-info/eventsocket"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/metrics"
 	"github.com/m-lab/tcp-info/netlink"
@@ -60,11 +61,7 @@ type CacheLogger interface {
 type MarshalChan chan<- Task
 
 func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
-	for {
-		task, ok := <-taskChan
-		if !ok {
-			break
-		}
+	for task := range taskChan {
 		if task.Message == nil {
 			task.Writer.Close()
 			continue
@@ -170,14 +167,6 @@ func (s *stats) Copy() stats {
 	return result
 }
 
-// Print prints out some basic stats about saver use.
-// TODO - should also export all of these as Prometheus metrics.  (Issue #32)
-func (s *stats) Print() {
-	log.Printf("Cache info total %d same %d diff %d new %d closed %d\n",
-		s.TotalCount, s.TotalCount-(s.NewCount+s.DiffCount),
-		s.DiffCount, s.NewCount, s.ExpiredCount)
-}
-
 type TcpStats struct {
 	Sent     uint64 // BytesSent
 	Received uint64 // BytesReceived
@@ -197,13 +186,14 @@ type Saver struct {
 	ClosingStats  map[uint64]TcpStats // BytesReceived and BytesSent for connections that are closing.
 	ClosingTotals TcpStats
 
-	cache *cache.Cache
-	stats stats
+	cache       *cache.Cache
+	stats       stats
+	eventServer eventsocket.Server
 }
 
 // NewSaver creates a new Saver for the given host and pod.  numMarshaller controls
 // how many marshalling goroutines are used to distribute the marshalling workload.
-func NewSaver(host string, pod string, numMarshaller int) *Saver {
+func NewSaver(host string, pod string, numMarshaller int, srv eventsocket.Server) *Saver {
 	m := make([]MarshalChan, 0, numMarshaller)
 	c := cache.NewCache()
 	// We start with capacity of 500.  This will be reallocated as needed, but this
@@ -226,6 +216,7 @@ func NewSaver(host string, pod string, numMarshaller int) *Saver {
 		Connections:  conn,
 		ClosingStats: make(map[uint64]TcpStats, 100),
 		cache:        c,
+		eventServer:  srv,
 	}
 }
 
@@ -254,6 +245,7 @@ func (svr *Saver) queue(msg *netlink.ArchivalRecord) error {
 			log.Println("Starting:", msg.Timestamp.Format("15:04:05.000"), cookie, tcp.State(idm.IDiagState), TcpStats{s, r})
 		}
 		conn = newConnection(idm, msg.Timestamp)
+		svr.eventServer.FlowCreated(msg.Timestamp, uuid.FromCookie(cookie), idm.ID.GetSockID())
 		svr.Connections[cookie] = conn
 	} else {
 		//log.Println("Diff inode:", inode)
@@ -273,6 +265,7 @@ func (svr *Saver) queue(msg *netlink.ArchivalRecord) error {
 }
 
 func (svr *Saver) endConn(cookie uint64) {
+	svr.eventServer.FlowDeleted(time.Now(), uuid.FromCookie(cookie))
 	q := svr.MarshalChans[cookie%uint64(len(svr.MarshalChans))]
 	conn, ok := svr.Connections[cookie]
 	if ok && conn.Writer != nil {
@@ -490,7 +483,7 @@ func (svr *Saver) Close() {
 }
 
 // LogCacheStats prints out some basic cache stats.
-// TODO - should also export all of these as Prometheus metrics.  (Issue #32)
+// TODO(https://github.com/m-lab/tcp-info/issues/32) - should also export all of these as Prometheus metrics.
 func (svr *Saver) LogCacheStats(localCount, errCount int) {
 	stats := svr.stats.Copy() // Get a copy
 	log.Printf("Cache info total %d  local %d same %d diff %d new %d err %d\n",
