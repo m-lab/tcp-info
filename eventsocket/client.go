@@ -50,11 +50,14 @@ func MustRun(ctx context.Context, socket string, handler Handler) {
 		}
 	}
 
-	// Reading on a closed socket doesn't give you an EOF error and the error it
-	// does give you is unexported. The error it gives you should be treated the
-	// same as EOF, because it corresponds to the connection terminating.
-	// s.Err() consumes the EOF error, so it should also consume this one.
-	// Because it doesn't, we do so here.
+	// s.Err() is supposed to be nil under normal conditions. Scanner objects
+	// hide the expected EOF error and return nil after they encounter it,
+	// because EOF is the expected error. However, reading on a closed socket
+	// doesn't give you an EOF error and the error it does give you is
+	// unexported. The error it gives you should be treated the same as EOF,
+	// because it corresponds to the connection terminating under normal
+	// conditions. Because Scanner hides the EOF error, it should also hide the
+	// unexported one. Because Scanner doesn't, we do so here.
 	err = s.Err()
 	if strings.Contains(err.Error(), "use of closed network connection") {
 		err = nil
