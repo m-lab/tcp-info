@@ -59,10 +59,8 @@ func MustRun(ctx context.Context, socket string, handler Handler) {
 	// conditions. Because Scanner hides the EOF error, it should also hide the
 	// unexported one. Because Scanner doesn't, we do so here. Other errors
 	// should not be hidden.
-	//
-	// TL;DR: err is non-nil under normal operations. Make it nil in that case.
 	err = s.Err()
-	if strings.Contains(err.Error(), "use of closed network connection") {
+	if err != nil && strings.Contains(err.Error(), "use of closed network connection") {
 		err = nil
 	}
 	rtx.Must(err, "Scanning of %f died with non-EOF error", socket)
