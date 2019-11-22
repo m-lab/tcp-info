@@ -17,12 +17,12 @@ type testHandler struct {
 	wg            sync.WaitGroup
 }
 
-func (t *testHandler) Open(timestamp time.Time, uuid string, id *inetdiag.SockID) {
+func (t *testHandler) Open(ctx context.Context, timestamp time.Time, uuid string, id *inetdiag.SockID) {
 	t.opens++
 	t.wg.Done()
 }
 
-func (t *testHandler) Close(timestamp time.Time, uuid string) {
+func (t *testHandler) Close(ctx context.Context, timestamp time.Time, uuid string) {
 	t.closes++
 	t.wg.Done()
 }
