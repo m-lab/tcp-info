@@ -25,8 +25,8 @@ var (
 // notifications should implement. It has two methods, one called on Open events
 // and one called on Close events.
 type Handler interface {
-	Open(timestamp time.Time, uuid string, ID *inetdiag.SockID)
-	Close(timestamp time.Time, uuid string)
+	Open(ctx context.Context, timestamp time.Time, uuid string, ID *inetdiag.SockID)
+	Close(ctx context.Context, timestamp time.Time, uuid string)
 }
 
 // MustRun will read from the passed-in socket filename until the context is
@@ -50,9 +50,9 @@ func MustRun(ctx context.Context, socket string, handler Handler) {
 		rtx.Must(json.Unmarshal(s.Bytes(), &event), "Could not unmarshall")
 		switch event.Event {
 		case Open:
-			handler.Open(event.Timestamp, event.UUID, event.ID)
+			handler.Open(ctx, event.Timestamp, event.UUID, event.ID)
 		case Close:
-			handler.Close(event.Timestamp, event.UUID)
+			handler.Close(ctx, event.Timestamp, event.UUID)
 		default:
 			log.Println("Unknown event type:", event.Event)
 		}
