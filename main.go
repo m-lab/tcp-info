@@ -64,7 +64,6 @@ var (
 	reps        = flag.Int("reps", 0, "How many cycles should be recorded, 0 means continuous")
 	enableTrace = flag.Bool("trace", false, "Enable trace")
 	outputDir   = flag.String("output", "", "Directory in which to put the resulting tree of data.  Default is the current directory.")
-	eventSocket = flag.String("eventsocket", "", "The filename of the unix-domain socket on which to serve events.")
 
 	ctx, cancel = context.WithCancel(context.Background())
 )
@@ -95,10 +94,10 @@ func main() {
 
 	// Make and start the event server.
 	eventSrv := eventsocket.NullServer()
-	if *eventSocket != "" {
-		eventSrv = eventsocket.New(*eventSocket)
+	if *eventsocket.Filename != "" {
+		eventSrv = eventsocket.New(*eventsocket.Filename)
 	}
-	rtx.Must(eventSrv.Listen(), "Could not listen on", *eventSocket)
+	rtx.Must(eventSrv.Listen(), "Could not listen on", *eventsocket.Filename)
 	go eventSrv.Serve(ctx)
 
 	// Make the saver and construct the message channel, buffering up to 2 batches
