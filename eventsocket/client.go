@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"flag"
 	"log"
 	"net"
 	"strings"
@@ -11,6 +12,13 @@ import (
 
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/inetdiag"
+)
+
+var (
+	// Filename is a command-line flag holding the name of the unix-domain
+	// socket that should be used by the client and server. It is put here in an
+	// attempt to have just one standard flag name.
+	Filename = flag.String("tcpinfo.eventsocket", "", "The filename of the unix-domain socket on which events are served.")
 )
 
 // Handler is the interface that all interested users of the event socket
