@@ -300,8 +300,13 @@ func (raw RawInetDiagMsg) Anonymize(anon anonymize.IPAnonymizer) error {
 	if err != nil {
 		return err
 	}
-	anon.IP(net.IP(msg.ID.IDiagSrc[:]))
-	anon.IP(net.IP(msg.ID.IDiagDst[:]))
+	if isIpv6(msg.ID.IDiagSrc) {
+		anon.IP(net.IP(msg.ID.IDiagSrc[:]))
+		anon.IP(net.IP(msg.ID.IDiagDst[:]))
+	} else {
+		anon.IP(net.IP(msg.ID.IDiagSrc[:4]))
+		anon.IP(net.IP(msg.ID.IDiagDst[:4]))
+	}
 	return nil
 }
 
