@@ -31,6 +31,7 @@ import (
 	"log"
 	"net"
 	"runtime"
+	"syscall"
 	"unsafe"
 
 	"github.com/m-lab/go/anonymize"
@@ -300,12 +301,15 @@ func (raw RawInetDiagMsg) Anonymize(anon anonymize.IPAnonymizer) error {
 	if err != nil {
 		return err
 	}
-	if isIpv6(msg.ID.IDiagSrc) {
+	switch msg.IDiagFamily {
+	case syscall.AF_INET6:
 		anon.IP(net.IP(msg.ID.IDiagSrc[:]))
 		anon.IP(net.IP(msg.ID.IDiagDst[:]))
-	} else {
+	case syscall.AF_INET:
 		anon.IP(net.IP(msg.ID.IDiagSrc[:4]))
 		anon.IP(net.IP(msg.ID.IDiagDst[:4]))
+	default:
+		panic(fmt.Sprintf("unknown address family: %d", msg.IDiagFamily))
 	}
 	return nil
 }
