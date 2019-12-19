@@ -32,6 +32,8 @@ import (
 	"net"
 	"runtime"
 	"unsafe"
+
+	"github.com/m-lab/go/anonymize"
 )
 
 // Constants from linux.
@@ -289,6 +291,20 @@ func (raw RawInetDiagMsg) Parse() (*InetDiagMsg, error) {
 		return nil, ErrParseFailed
 	}
 	return (*InetDiagMsg)(unsafe.Pointer(&raw[0])), nil
+}
+
+// Offsets within the RawInetDiagMsg calculated once.
+const (
+	idOff    = unsafe.Offsetof(InetDiagMsg{}.ID)
+	srcIPOff = unsafe.Offsetof(LinuxSockID{}.IDiagSrc)
+	dstIPOff = unsafe.Offsetof(LinuxSockID{}.IDiagDst)
+)
+
+// Anonymize applies the given IPAnonymizer to the src and dest IP addresses
+// embedded in the RawInetDiagMsg. Anonymization is applied in-place.
+func (raw RawInetDiagMsg) Anonymize(anon anonymize.IPAnonymizer) {
+	anon.IP(net.IP(raw[idOff+srcIPOff : idOff+srcIPOff+16]))
+	anon.IP(net.IP(raw[idOff+dstIPOff : idOff+dstIPOff+16]))
 }
 
 // SocketMemInfo implements the struct associated with INET_DIAG_SKMEMINFO

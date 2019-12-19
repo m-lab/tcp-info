@@ -13,6 +13,7 @@ import (
 
 	"github.com/m-lab/tcp-info/eventsocket"
 
+	"github.com/m-lab/go/anonymize"
 	"github.com/m-lab/go/prometheusx"
 	"github.com/m-lab/go/rtx"
 
@@ -104,7 +105,8 @@ func main() {
 	// of messages without stalling producer. We may want to increase the buffer if
 	// we observe main() stalling.
 	svrChan := make(chan netlink.MessageBlock, 2)
-	svr := saver.NewSaver("host", "pod", 3, eventSrv)
+	anon := anonymize.New(anonymize.IPAnonymizationFlag)
+	svr := saver.NewSaver("host", "pod", 3, eventSrv, anon)
 	go svr.MessageSaverLoop(svrChan)
 
 	// Run the collector, possibly forever.
