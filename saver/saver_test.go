@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m-lab/go/anonymize"
+
 	"github.com/m-lab/tcp-info/eventsocket"
 
 	"github.com/m-lab/go/rtx"
@@ -216,7 +218,8 @@ func TestHistograms(t *testing.T) {
 		rtx.Must(os.Chdir(oldDir), "Could not switch back to %s", oldDir)
 	}()
 	eventCounts := &countingEventSocket{}
-	svr := saver.NewSaver("foo", "bar", 1, eventCounts)
+	anon := anonymize.New(anonymize.None)
+	svr := saver.NewSaver("foo", "bar", 1, eventCounts, anon)
 	svrChan := make(chan netlink.MessageBlock, 0) // no buffering
 	go svr.MessageSaverLoop(svrChan)
 
@@ -336,7 +339,8 @@ func TestFinWait2NotImplemented(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	svr := saver.NewSaver("hostname", "fakePod", 1, eventsocket.NullServer())
+	anon := anonymize.New(anonymize.None)
+	svr := saver.NewSaver("hostname", "fakePod", 1, eventsocket.NullServer(), anon)
 	blockChan := make(chan netlink.MessageBlock, 0)
 	go svr.MessageSaverLoop(blockChan)
 	for i := range msgs {
