@@ -71,7 +71,11 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup, anon anonymize.IPAn
 		if task.Writer == nil {
 			log.Fatal("Nil writer")
 		}
-		task.Message.RawIDM.Anonymize(anon)
+		err := task.Message.RawIDM.Anonymize(anon)
+		if err != nil {
+			log.Println("Failed to anonymize message:", err)
+			continue
+		}
 		b, _ := json.Marshal(task.Message) // FIXME: don't ignore error
 		task.Writer.Write(b)
 		task.Writer.Write([]byte("\n"))

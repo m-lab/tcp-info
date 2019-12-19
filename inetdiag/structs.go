@@ -293,18 +293,16 @@ func (raw RawInetDiagMsg) Parse() (*InetDiagMsg, error) {
 	return (*InetDiagMsg)(unsafe.Pointer(&raw[0])), nil
 }
 
-// Offsets within the RawInetDiagMsg calculated once.
-const (
-	idOff    = unsafe.Offsetof(InetDiagMsg{}.ID)
-	srcIPOff = unsafe.Offsetof(LinuxSockID{}.IDiagSrc)
-	dstIPOff = unsafe.Offsetof(LinuxSockID{}.IDiagDst)
-)
-
 // Anonymize applies the given IPAnonymizer to the src and dest IP addresses
 // embedded in the RawInetDiagMsg. Anonymization is applied in-place.
-func (raw RawInetDiagMsg) Anonymize(anon anonymize.IPAnonymizer) {
-	anon.IP(net.IP(raw[idOff+srcIPOff : idOff+srcIPOff+16]))
-	anon.IP(net.IP(raw[idOff+dstIPOff : idOff+dstIPOff+16]))
+func (raw RawInetDiagMsg) Anonymize(anon anonymize.IPAnonymizer) error {
+	msg, err := raw.Parse()
+	if err != nil {
+		return err
+	}
+	anon.IP(net.IP(msg.ID.IDiagSrc[:]))
+	anon.IP(net.IP(msg.ID.IDiagDst[:]))
+	return nil
 }
 
 // SocketMemInfo implements the struct associated with INET_DIAG_SKMEMINFO
