@@ -445,18 +445,6 @@ func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
 			}
 		}
 
-		oldIDM, err := old.RawIDM.Parse()
-		if err != nil {
-			// TODO metric
-			log.Println(err)
-			return
-		}
-		if oldIDM.ID != pmIDM.ID {
-			log.Println("Mismatched SockIDs", oldIDM.ID, pmIDM.ID)
-			// TODO metric
-			return
-		}
-
 		change, err := pm.Compare(old)
 		if err != nil {
 			// TODO metric
