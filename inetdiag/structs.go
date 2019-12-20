@@ -294,6 +294,9 @@ func (raw RawInetDiagMsg) Parse() (*InetDiagMsg, error) {
 	return (*InetDiagMsg)(unsafe.Pointer(&raw[0])), nil
 }
 
+// ErrUnknownAF is returned when the InetDiagMsg.IDiagFamily is unknown.
+var ErrUnknownAF = errors.New("unknown address family")
+
 // Anonymize applies the given IPAnonymizer to the src and dest IP addresses
 // embedded in the RawInetDiagMsg. Anonymization is applied in-place.
 func (raw RawInetDiagMsg) Anonymize(anon anonymize.IPAnonymizer) error {
@@ -313,7 +316,7 @@ func (raw RawInetDiagMsg) Anonymize(anon anonymize.IPAnonymizer) error {
 		anon.IP(net.IP(msg.ID.IDiagSrc[:4]))
 		anon.IP(net.IP(msg.ID.IDiagDst[:4]))
 	default:
-		return fmt.Errorf("unknown address family: %d", msg.IDiagFamily)
+		return ErrUnknownAF
 	}
 	return nil
 }
