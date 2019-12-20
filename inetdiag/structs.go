@@ -299,6 +299,9 @@ var ErrUnknownAF = errors.New("unknown address family")
 
 // Anonymize applies the given IPAnonymizer to the src and dest IP addresses
 // embedded in the RawInetDiagMsg. Anonymization is applied in-place.
+//
+// NOTE: references to the InetDiagMsg are modified in-place. Cached references
+// may change unexpectedly.
 func (raw RawInetDiagMsg) Anonymize(anon anonymize.IPAnonymizer) error {
 	msg, err := raw.Parse()
 	if err != nil {
