@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/m-lab/go/anonymize"
+
 	"github.com/m-lab/tcp-info/cache"
 	"github.com/m-lab/tcp-info/eventsocket"
 	"github.com/m-lab/tcp-info/inetdiag"
@@ -60,7 +62,7 @@ type CacheLogger interface {
 // MarshalChan is a channel of marshalling tasks.
 type MarshalChan chan<- Task
 
-func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
+func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup, anon anonymize.IPAnonymizer) {
 	for task := range taskChan {
 		if task.Message == nil {
 			task.Writer.Close()
@@ -68,6 +70,11 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 		}
 		if task.Writer == nil {
 			log.Fatal("Nil writer")
+		}
+		err := task.Message.RawIDM.Anonymize(anon)
+		if err != nil {
+			log.Println("Failed to anonymize message:", err)
+			continue
 		}
 		b, _ := json.Marshal(task.Message) // FIXME: don't ignore error
 		task.Writer.Write(b)
@@ -77,10 +84,10 @@ func runMarshaller(taskChan <-chan Task, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func newMarshaller(wg *sync.WaitGroup) MarshalChan {
+func newMarshaller(wg *sync.WaitGroup, anon anonymize.IPAnonymizer) MarshalChan {
 	marshChan := make(chan Task, 100)
 	wg.Add(1)
-	go runMarshaller(marshChan, wg)
+	go runMarshaller(marshChan, wg, anon)
 	return marshChan
 }
 
@@ -193,7 +200,7 @@ type Saver struct {
 
 // NewSaver creates a new Saver for the given host and pod.  numMarshaller controls
 // how many marshalling goroutines are used to distribute the marshalling workload.
-func NewSaver(host string, pod string, numMarshaller int, srv eventsocket.Server) *Saver {
+func NewSaver(host string, pod string, numMarshaller int, srv eventsocket.Server, anon anonymize.IPAnonymizer) *Saver {
 	m := make([]MarshalChan, 0, numMarshaller)
 	c := cache.NewCache()
 	// We start with capacity of 500.  This will be reallocated as needed, but this
@@ -204,7 +211,7 @@ func NewSaver(host string, pod string, numMarshaller int, srv eventsocket.Server
 	ageLim := 10 * time.Minute
 
 	for i := 0; i < numMarshaller; i++ {
-		m = append(m, newMarshaller(wg))
+		m = append(m, newMarshaller(wg, anon))
 	}
 
 	return &Saver{
@@ -436,18 +443,6 @@ func (svr *Saver) swapAndQueue(pm *netlink.ArchivalRecord) {
 				svr.ClosingTotals.Received += rOld
 				log.Println("Closing:", pm.Timestamp.Format("15:04:05.000"), pmIDM.ID.Cookie(), tcp.State(pmIDM.IDiagState), TcpStats{sOld, rOld})
 			}
-		}
-
-		oldIDM, err := old.RawIDM.Parse()
-		if err != nil {
-			// TODO metric
-			log.Println(err)
-			return
-		}
-		if oldIDM.ID != pmIDM.ID {
-			log.Println("Mismatched SockIDs", oldIDM.ID, pmIDM.ID)
-			// TODO metric
-			return
 		}
 
 		change, err := pm.Compare(old)

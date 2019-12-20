@@ -31,7 +31,10 @@ import (
 	"log"
 	"net"
 	"runtime"
+	"syscall"
 	"unsafe"
+
+	"github.com/m-lab/go/anonymize"
 )
 
 // Constants from linux.
@@ -289,6 +292,36 @@ func (raw RawInetDiagMsg) Parse() (*InetDiagMsg, error) {
 		return nil, ErrParseFailed
 	}
 	return (*InetDiagMsg)(unsafe.Pointer(&raw[0])), nil
+}
+
+// ErrUnknownAF is returned when the InetDiagMsg.IDiagFamily is unknown.
+var ErrUnknownAF = errors.New("unknown address family")
+
+// Anonymize applies the given IPAnonymizer to the src and dest IP addresses
+// embedded in the RawInetDiagMsg. Anonymization is applied in-place.
+//
+// NOTE: references to the InetDiagMsg are modified in-place. Cached references
+// may change unexpectedly.
+func (raw RawInetDiagMsg) Anonymize(anon anonymize.IPAnonymizer) error {
+	msg, err := raw.Parse()
+	if err != nil {
+		return err
+	}
+	// IDiagSrc and IDiagDst addresses encode IPv4 addresses in the first 4 bytes
+	// of a 16 byte array. Unfortunately the net.IP package expects IPv4 addresses
+	// to be encoded in the last 4 bytes of a 16 byte array. As a result, we must
+	// pass only 4 bytes to net.IP for AF_INET.
+	switch msg.IDiagFamily {
+	case syscall.AF_INET6:
+		anon.IP(net.IP(msg.ID.IDiagSrc[:]))
+		anon.IP(net.IP(msg.ID.IDiagDst[:]))
+	case syscall.AF_INET:
+		anon.IP(net.IP(msg.ID.IDiagSrc[:4]))
+		anon.IP(net.IP(msg.ID.IDiagDst[:4]))
+	default:
+		return ErrUnknownAF
+	}
+	return nil
 }
 
 // SocketMemInfo implements the struct associated with INET_DIAG_SKMEMINFO
