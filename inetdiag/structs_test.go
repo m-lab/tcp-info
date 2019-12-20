@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"net"
 	"syscall"
 	"testing"
 	"unsafe"
 
 	"github.com/gocarina/gocsv"
+	"github.com/m-lab/go/anonymize"
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/tcp"
 )
@@ -166,5 +168,123 @@ func TestID6(t *testing.T) {
 	}
 	if hdr.ID.DstIP().IsLoopback() {
 		t.Errorf("Should not be identified as loopback")
+	}
+}
+
+func TestID4Anonymize(t *testing.T) {
+	var data [unsafe.Sizeof(InetDiagMsg{})]byte
+	// Setup Src.
+	var srcOrig = [16]byte{127, 0, 0, 1}
+	var srcAnon = [16]byte{127, 0, 0, 0}
+	srcIPOffset := unsafe.Offsetof(InetDiagMsg{}.ID) + unsafe.Offsetof(InetDiagMsg{}.ID.IDiagSrc)
+	data[srcIPOffset] = 127
+	data[srcIPOffset+1] = 0
+	data[srcIPOffset+2] = 0
+	data[srcIPOffset+3] = 1
+
+	// Setup Dst.
+	var dstOrig = [16]byte{192, 168, 5, 100}
+	var dstAnon = [16]byte{192, 168, 5, 0}
+	dstIPOffset := unsafe.Offsetof(InetDiagMsg{}.ID) + unsafe.Offsetof(InetDiagMsg{}.ID.IDiagDst)
+	data[dstIPOffset] = 192
+	data[dstIPOffset+1] = 168
+	data[dstIPOffset+2] = 5
+	data[dstIPOffset+3] = 100
+
+	// Setup AF.
+	afOffset := unsafe.Offsetof(InetDiagMsg{}.IDiagFamily)
+	data[afOffset] = syscall.AF_INET
+
+	raw, _ := SplitInetDiagMsg(data[:])
+	hdr, err := raw.Parse()
+	rtx.Must(err, "Failed to parse InetDiagMsg")
+
+	// Verify anonymize.None does nothing.
+	err = raw.Anonymize(anonymize.New(anonymize.None))
+	rtx.Must(err, "Failed to anonymize")
+	soip := net.IP(srcOrig[:])
+	doip := net.IP(dstOrig[:])
+	srip := net.IP(hdr.ID.IDiagSrc[:])
+	drip := net.IP(hdr.ID.IDiagDst[:])
+	if !soip.Equal(srip) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", soip, srip)
+	}
+	if !doip.Equal(drip) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", doip, drip)
+	}
+
+	// Verify anonymize.Netblock equals expected anonymized addrs.
+	err = raw.Anonymize(anonymize.New(anonymize.Netblock))
+	rtx.Must(err, "Failed to anonymize")
+	saip := net.IP(srcAnon[:])
+	daip := net.IP(dstAnon[:])
+	srip = net.IP(hdr.ID.IDiagSrc[:])
+	drip = net.IP(hdr.ID.IDiagDst[:])
+	if !saip.Equal(srip) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", saip, srip)
+	}
+	if !daip.Equal(drip) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", daip, drip)
+	}
+}
+
+func TestID6Anonymize(t *testing.T) {
+	var data [unsafe.Sizeof(InetDiagMsg{})]byte
+	var srcOrig [16]byte
+	var dstOrig [16]byte
+	var srcAnon [16]byte
+	var dstAnon [16]byte
+	// Setup src IP.
+	srcIPOffset := unsafe.Offsetof(InetDiagMsg{}.ID) + unsafe.Offsetof(InetDiagMsg{}.ID.IDiagSrc)
+	for i := 0; i < 16; i++ {
+		data[srcIPOffset+uintptr(i)] = byte(0x0A + i)
+		srcOrig[i] = byte(0x0A + i)
+		if i < 8 {
+			srcAnon[i] = srcOrig[i]
+		}
+	}
+	// Setup dst IP.
+	dstIPOffset := unsafe.Offsetof(InetDiagMsg{}.ID) + unsafe.Offsetof(InetDiagMsg{}.ID.IDiagDst)
+	for i := 0; i < 16; i++ {
+		data[dstIPOffset+uintptr(i)] = byte(i + 1)
+		dstOrig[i] = byte(i + 1)
+		if i < 8 {
+			dstAnon[i] = dstOrig[i]
+		}
+	}
+	// Setup AF.
+	afOffset := unsafe.Offsetof(InetDiagMsg{}.IDiagFamily)
+	data[afOffset] = syscall.AF_INET6
+
+	raw, _ := SplitInetDiagMsg(data[:])
+	hdr, err := raw.Parse()
+	rtx.Must(err, "")
+
+	// Verify anonymize.None does nothing.
+	err = raw.Anonymize(anonymize.New(anonymize.None))
+	rtx.Must(err, "Failed to anonymize")
+	soip := net.IP(srcOrig[:])
+	doip := net.IP(dstOrig[:])
+	srip := net.IP(hdr.ID.IDiagSrc[:])
+	drip := net.IP(hdr.ID.IDiagDst[:])
+	if !soip.Equal(srip) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", soip, srip)
+	}
+	if !doip.Equal(drip) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", doip, drip)
+	}
+
+	// Verify anonymize.Netblock equals expected anonymized addrs.
+	err = raw.Anonymize(anonymize.New(anonymize.Netblock))
+	rtx.Must(err, "Failed to anonymize")
+	saip := net.IP(srcAnon[:])
+	daip := net.IP(dstAnon[:])
+	srip = net.IP(hdr.ID.IDiagSrc[:])
+	drip = net.IP(hdr.ID.IDiagDst[:])
+	if !saip.Equal(srip) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", saip, srip)
+	}
+	if !daip.Equal(drip) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", daip, drip)
 	}
 }
