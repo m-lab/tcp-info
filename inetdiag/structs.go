@@ -301,6 +301,10 @@ func (raw RawInetDiagMsg) Anonymize(anon anonymize.IPAnonymizer) error {
 	if err != nil {
 		return err
 	}
+	// IDiagSrc and IDiagDst addresses encode IPv4 addresses in the first 4 bytes
+	// of a 16 byte array. Unfortunately the net.IP package expects IPv4 addresses
+	// to be encoded in the last 4 bytes of a 16 byte array. As a result, we must
+	// pass only 4 bytes to net.IP for AF_INET.
 	switch msg.IDiagFamily {
 	case syscall.AF_INET6:
 		anon.IP(net.IP(msg.ID.IDiagSrc[:]))
@@ -309,7 +313,7 @@ func (raw RawInetDiagMsg) Anonymize(anon anonymize.IPAnonymizer) error {
 		anon.IP(net.IP(msg.ID.IDiagSrc[:4]))
 		anon.IP(net.IP(msg.ID.IDiagDst[:4]))
 	default:
-		panic(fmt.Sprintf("unknown address family: %d", msg.IDiagFamily))
+		return fmt.Errorf("unknown address family: %d", msg.IDiagFamily)
 	}
 	return nil
 }
