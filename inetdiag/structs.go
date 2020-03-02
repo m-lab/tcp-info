@@ -244,7 +244,9 @@ type InetDiagMsg struct {
 	IDiagTimer   uint8 `csv:"IDM.Timer"`
 	IDiagRetrans uint8 `csv:"IDM.Retrans"`
 	// The ID is handled separately for both CSV and BigQuery, so they are tagged with "-"
-	ID           LinuxSockID `csv:"-" bigquery:"-"`
+	// See TCPRow.SockID in tcpinfo repo.
+	// Field also suppressed in json, for use in BQ load exports.
+	ID           LinuxSockID `csv:"-" bigquery:"-" json:"-"`
 	IDiagExpires uint32      `csv:"IDM.Expires"`
 	IDiagRqueue  uint32      `csv:"IDM.Rqueue"`
 	IDiagWqueue  uint32      `csv:"IDM.Wqueue"`
@@ -253,7 +255,7 @@ type InetDiagMsg struct {
 }
 
 const (
-	// This previously came from syscall, but explicit here to work on Darwin.
+	// RTA_ALIGNTO previously came from syscall, but explicit here to work on Darwin.
 	RTA_ALIGNTO = 4
 )
 
@@ -265,6 +267,7 @@ func rtaAlignOf(attrlen int) int {
 // RawInetDiagMsg holds the []byte representation of an InetDiagMsg
 type RawInetDiagMsg []byte
 
+// SplitInetDiagMsg pulls the InetDiagMsg out, and returns the msg and the remaining data slice.
 func SplitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
 	// TODO - why using rtaAlign on InetDiagMsg ???
 	align := rtaAlignOf(int(unsafe.Sizeof(InetDiagMsg{})))
@@ -277,6 +280,7 @@ func SplitInetDiagMsg(data []byte) (RawInetDiagMsg, []byte) {
 	return RawInetDiagMsg(data[:align]), data[align:]
 }
 
+// ErrParseFailed is returned if InetDiagMsg parsing fails.
 var ErrParseFailed = errors.New("Unable to parse InetDiagMsg")
 
 // Parse returns the InetDiagMsg itself
