@@ -174,13 +174,14 @@ func TestID6(t *testing.T) {
 func TestID4Anonymize(t *testing.T) {
 	var data [unsafe.Sizeof(InetDiagMsg{})]byte
 	// Setup Src.
-	var srcOrig = [16]byte{127, 0, 0, 1}
-	var srcAnon = [16]byte{127, 0, 0, 0}
+	// NOTE: anonymize package identifies 127.0.0.1 as a local IP and declines to anonymize it.
+	var srcOrig = [16]byte{10, 4, 3, 2}
+	var srcAnon = [16]byte{10, 4, 3, 0}
 	srcIPOffset := unsafe.Offsetof(InetDiagMsg{}.ID) + unsafe.Offsetof(InetDiagMsg{}.ID.IDiagSrc)
-	data[srcIPOffset] = 127
-	data[srcIPOffset+1] = 0
-	data[srcIPOffset+2] = 0
-	data[srcIPOffset+3] = 1
+	data[srcIPOffset] = 10
+	data[srcIPOffset+1] = 4
+	data[srcIPOffset+2] = 3
+	data[srcIPOffset+3] = 2
 
 	// Setup Dst.
 	var dstOrig = [16]byte{192, 168, 5, 100}
@@ -202,29 +203,29 @@ func TestID4Anonymize(t *testing.T) {
 	// Verify anonymize.None does nothing.
 	err = raw.Anonymize(anonymize.New(anonymize.None))
 	rtx.Must(err, "Failed to anonymize")
-	soip := net.IP(srcOrig[:])
-	doip := net.IP(dstOrig[:])
-	srip := net.IP(hdr.ID.IDiagSrc[:])
-	drip := net.IP(hdr.ID.IDiagDst[:])
-	if !soip.Equal(srip) {
-		t.Errorf("Anonymize IPs modified using method None! %s != %s", soip, srip)
+	origSrcIP := net.IP(srcOrig[:])
+	origDstIP := net.IP(dstOrig[:])
+	hdrSrcIP := net.IP(hdr.ID.IDiagSrc[:])
+	hdrDstIP := net.IP(hdr.ID.IDiagDst[:])
+	if !origSrcIP.Equal(hdrSrcIP) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", origSrcIP, hdrSrcIP)
 	}
-	if !doip.Equal(drip) {
-		t.Errorf("Anonymize IPs modified using method None! %s != %s", doip, drip)
+	if !origDstIP.Equal(hdrDstIP) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", origDstIP, hdrDstIP)
 	}
 
 	// Verify anonymize.Netblock equals expected anonymized addrs.
 	err = raw.Anonymize(anonymize.New(anonymize.Netblock))
 	rtx.Must(err, "Failed to anonymize")
-	saip := net.IP(srcAnon[:])
-	daip := net.IP(dstAnon[:])
-	srip = net.IP(hdr.ID.IDiagSrc[:])
-	drip = net.IP(hdr.ID.IDiagDst[:])
-	if !saip.Equal(srip) {
-		t.Errorf("Anonymize IPs modified using method None! %s != %s", saip, srip)
+	anonSrcIP := net.IP(srcAnon[:])
+	anonDstIP := net.IP(dstAnon[:])
+	hdrSrcIP = net.IP(hdr.ID.IDiagSrc[:])
+	hdrDstIP = net.IP(hdr.ID.IDiagDst[:])
+	if !anonSrcIP.Equal(hdrSrcIP) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", anonSrcIP, hdrSrcIP)
 	}
-	if !daip.Equal(drip) {
-		t.Errorf("Anonymize IPs modified using method None! %s != %s", daip, drip)
+	if !anonDstIP.Equal(hdrDstIP) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", anonDstIP, hdrDstIP)
 	}
 }
 
@@ -263,28 +264,28 @@ func TestID6Anonymize(t *testing.T) {
 	// Verify anonymize.None does nothing.
 	err = raw.Anonymize(anonymize.New(anonymize.None))
 	rtx.Must(err, "Failed to anonymize")
-	soip := net.IP(srcOrig[:])
-	doip := net.IP(dstOrig[:])
-	srip := net.IP(hdr.ID.IDiagSrc[:])
-	drip := net.IP(hdr.ID.IDiagDst[:])
-	if !soip.Equal(srip) {
-		t.Errorf("Anonymize IPs modified using method None! %s != %s", soip, srip)
+	origSrcIP := net.IP(srcOrig[:])
+	origDstIP := net.IP(dstOrig[:])
+	hdrSrcIP := net.IP(hdr.ID.IDiagSrc[:])
+	hdrDstIP := net.IP(hdr.ID.IDiagDst[:])
+	if !origSrcIP.Equal(hdrSrcIP) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", origSrcIP, hdrSrcIP)
 	}
-	if !doip.Equal(drip) {
-		t.Errorf("Anonymize IPs modified using method None! %s != %s", doip, drip)
+	if !origDstIP.Equal(hdrDstIP) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", origDstIP, hdrDstIP)
 	}
 
 	// Verify anonymize.Netblock equals expected anonymized addrs.
 	err = raw.Anonymize(anonymize.New(anonymize.Netblock))
 	rtx.Must(err, "Failed to anonymize")
-	saip := net.IP(srcAnon[:])
-	daip := net.IP(dstAnon[:])
-	srip = net.IP(hdr.ID.IDiagSrc[:])
-	drip = net.IP(hdr.ID.IDiagDst[:])
-	if !saip.Equal(srip) {
-		t.Errorf("Anonymize IPs modified using method None! %s != %s", saip, srip)
+	anonSrcIP := net.IP(srcAnon[:])
+	anonDstIP := net.IP(dstAnon[:])
+	hdrSrcIP = net.IP(hdr.ID.IDiagSrc[:])
+	hdrDstIP = net.IP(hdr.ID.IDiagDst[:])
+	if !anonSrcIP.Equal(hdrSrcIP) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", anonSrcIP, hdrSrcIP)
 	}
-	if !daip.Equal(drip) {
-		t.Errorf("Anonymize IPs modified using method None! %s != %s", daip, drip)
+	if !anonDstIP.Equal(hdrDstIP) {
+		t.Errorf("Anonymize IPs modified using method None! %s != %s", anonDstIP, hdrDstIP)
 	}
 }
