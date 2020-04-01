@@ -110,8 +110,17 @@ func newConnection(info *inetdiag.InetDiagMsg, timestamp time.Time) *Connection 
 }
 
 // Rotate opens the next writer for a connection.
+// Note that long running connections will have data in multiple directories,
+// and dates in later filenames will not match directory.
+// Prior to April 2020, the files were placed in date corresponding to
+// connection's start time.
 func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Duration) error {
 	datePath := conn.StartTime.Format("2006/01/02")
+	// For long running connections, later blocks may
+	if conn.Sequence > 0 {
+		now := time.Now().UTC()
+		datePath = now.Format("2006/01/02")
+	}
 	err := os.MkdirAll(datePath, 0777)
 	if err != nil {
 		return err
@@ -174,14 +183,15 @@ func (s *stats) Copy() stats {
 	return result
 }
 
+// TcpStats is used to save the connection stats as connection is closing.
 type TcpStats struct {
 	Sent     uint64 // BytesSent
 	Received uint64 // BytesReceived
 }
 
 // Saver provides functionality for saving tcpinfo diffs to connection files.
-// It handles arbitrary connections, and only writes to file when the significant fields
-// change.  (TODO - what does "significant fields" mean).
+// It handles arbitrary connections, and only writes to file when the
+// significant fields change.  (TODO - what does "significant fields" mean).
 // TODO - just export an interface, instead of the implementation.
 type Saver struct {
 	Host          string // mlabN
@@ -323,8 +333,9 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 
 		// Handle v4 and v6 messages, and return the total bytes sent and received.
 		// TODO - we only need to collect these stats if this is a reporting cycle.
-		s4, r4 := svr.handleType(msgs.V4Time, msgs.V4Messages)
-		s6, r6 := svr.handleType(msgs.V6Time, msgs.V6Messages)
+		// NOTE: Prior to April 2020, we were not using UTC here.
+		s4, r4 := svr.handleType(msgs.V4Time.UTC(), msgs.V4Messages)
+		s6, r6 := svr.handleType(msgs.V6Time.UTC(), msgs.V6Messages)
 
 		// Note that the connections that have closed may have had traffic that
 		// we never see, and therefore can't account for in metrics.
