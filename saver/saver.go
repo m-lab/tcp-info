@@ -110,8 +110,21 @@ func newConnection(info *inetdiag.InetDiagMsg, timestamp time.Time) *Connection 
 }
 
 // Rotate opens the next writer for a connection.
+// Note that long running connections will have data in multiple directories,
+// because, for all segments after the first one, we choose the directory
+// based on the time Rotate() was called, and not on the StartTime of the
+// connection. Long-running connections with data on multiple days will
+// therefore likely have data in multiple date directories.
+// (This behavior is new as of April 2020. Prior to then, all files were
+// placed in the directory corresponding to the StartTime.)
 func (conn *Connection) Rotate(Host string, Pod string, FileAgeLimit time.Duration) error {
 	datePath := conn.StartTime.Format("2006/01/02")
+	// For first block, date directory is based on the connection start time.
+	// For all other blocks, (sequence > 0) it is based on the current time.
+	if conn.Sequence > 0 {
+		now := time.Now().UTC()
+		datePath = now.Format("2006/01/02")
+	}
 	err := os.MkdirAll(datePath, 0777)
 	if err != nil {
 		return err
@@ -174,14 +187,15 @@ func (s *stats) Copy() stats {
 	return result
 }
 
+// TcpStats is used to save the connection stats as connection is closing.
 type TcpStats struct {
 	Sent     uint64 // BytesSent
 	Received uint64 // BytesReceived
 }
 
 // Saver provides functionality for saving tcpinfo diffs to connection files.
-// It handles arbitrary connections, and only writes to file when the significant fields
-// change.  (TODO - what does "significant fields" mean).
+// It handles arbitrary connections, and only writes to file when the
+// significant fields change.  (TODO - what does "significant fields" mean).
 // TODO - just export an interface, instead of the implementation.
 type Saver struct {
 	Host          string // mlabN
@@ -323,8 +337,10 @@ func (svr *Saver) MessageSaverLoop(readerChannel <-chan netlink.MessageBlock) {
 
 		// Handle v4 and v6 messages, and return the total bytes sent and received.
 		// TODO - we only need to collect these stats if this is a reporting cycle.
-		s4, r4 := svr.handleType(msgs.V4Time, msgs.V4Messages)
-		s6, r6 := svr.handleType(msgs.V6Time, msgs.V6Messages)
+		// NOTE: Prior to April 2020, we were not using UTC here.  The servers
+		// are configured to use UTC time, so this should not make any difference.
+		s4, r4 := svr.handleType(msgs.V4Time.UTC(), msgs.V4Messages)
+		s6, r6 := svr.handleType(msgs.V6Time.UTC(), msgs.V6Messages)
 
 		// Note that the connections that have closed may have had traffic that
 		// we never see, and therefore can't account for in metrics.
