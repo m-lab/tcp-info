@@ -160,6 +160,14 @@ var (
 			Help: "Number of oversize netlink messages.",
 		}, []string{"type"},
 	)
+
+	// LargeNetlinkMsgTotal counts the total number of snapshots collected across all connections.
+	NetlinkNotDecoded = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "netlink_skipped_total",
+			Help: "Number of skipped netlink messages.",
+		}, []string{"type"},
+	)
 )
 
 // init() prints a log message to let the user know that the package has been

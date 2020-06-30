@@ -4,6 +4,7 @@ package snapshot
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"time"
@@ -18,6 +19,8 @@ import (
 
 // ErrEmptyRecord is returned if an ArchivalRecord is empty.
 var ErrEmptyRecord = errors.New("Message should contain Metadata or RawIDM")
+
+var missingDecodeLog = logx.NewLogEvery(nil, time.Second)
 
 // Decode decodes a netlink.ArchivalRecord into a single Snapshot
 // Initial ArchivalRecord may have just a Snapshot, just Metadata, or both.
@@ -63,13 +66,17 @@ func Decode(ar *netlink.ArchivalRecord) (*netlink.Metadata, *Snapshot, error) {
 		case inetdiag.INET_DIAG_PROTOCOL:
 			result.Protocol, ok = rta.toProtocol()
 		case inetdiag.INET_DIAG_SKV6ONLY:
-			log.Println("SKV6ONLY not handled", len(rta))
+			metrics.NetlinkNotDecoded.WithLabelValues("INET_DIAG_SKV6ONLY").Inc()
+			missingDecodeLog.Println("SKV6ONLY not handled", len(rta))
 		case inetdiag.INET_DIAG_LOCALS:
-			log.Println("LOCAL not handled", len(rta))
+			metrics.NetlinkNotDecoded.WithLabelValues("INET_DIAG_LOCALS").Inc()
+			missingDecodeLog.Println("LOCAL not handled", len(rta))
 		case inetdiag.INET_DIAG_PEERS:
-			log.Println("PEERS not handled", len(rta))
+			metrics.NetlinkNotDecoded.WithLabelValues("INET_DIAG_PEERS").Inc()
+			missingDecodeLog.Println("PEERS not handled", len(rta))
 		case inetdiag.INET_DIAG_PAD:
-			log.Println("PAD not handled", len(rta))
+			metrics.NetlinkNotDecoded.WithLabelValues("INET_DIAG_PAD").Inc()
+			missingDecodeLog.Println("PAD not handled", len(rta))
 		case inetdiag.INET_DIAG_MARK:
 			result.Mark, ok = rta.toMark()
 		case inetdiag.INET_DIAG_BBRINFO:
@@ -77,10 +84,10 @@ func Decode(ar *netlink.ArchivalRecord) (*netlink.Metadata, *Snapshot, error) {
 		case inetdiag.INET_DIAG_CLASS_ID:
 			result.ClassID, ok = rta.toClassID()
 		case inetdiag.INET_DIAG_MD5SIG:
-			log.Println("MD5SIGnot handled", len(rta))
+			missingDecodeLog.Println("MD5SIGnot handled", len(rta))
 		default:
-			// TODO metric so we can alert.
-			log.Println("unhandled attribute type:", t)
+			metrics.NetlinkNotDecoded.WithLabelValues(fmt.Sprint(t)).Inc()
+			missingDecodeLog.Println("unhandled attribute type:", t)
 		}
 		bit := uint32(1) << uint8(t-1)
 		result.Observed |= bit
