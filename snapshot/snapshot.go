@@ -11,6 +11,7 @@ import (
 
 	"github.com/m-lab/go/logx"
 	"github.com/m-lab/tcp-info/inetdiag"
+	"github.com/m-lab/tcp-info/metrics"
 	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/tcp"
 )
@@ -102,20 +103,23 @@ type RouteAttrValue []byte
 // maybeCopy checks whether the src is the full size of the intended struct size.
 // If so, it just returns the pointer, otherwise it copies the content to an
 // appropriately sized new byte slice, and returns pointer to that.
-func maybeCopy(src []byte, size int) (unsafe.Pointer, bool) {
+func maybeCopy(src []byte, size int, msgType string) (unsafe.Pointer, bool) {
 	if len(src) < size {
 		data := make([]byte, size)
 		copy(data, src)
 		return unsafe.Pointer(&data[0]), true
 	}
 	// TODO Check for larger than expected, and increment a metric with appropriate label.
+	if len(src) > size {
+		metrics.LargeNetlinkMsgTotal.WithLabelValues(msgType).Inc()
+	}
 	return unsafe.Pointer(&src[0]), len(src) == size
 }
 
 // toMemInfo maps the raw RouteAttrValue onto a MemInfo.
 func (raw RouteAttrValue) toMemInfo() (*inetdiag.MemInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(inetdiag.MemInfo{}))
-	data, ok := maybeCopy(raw, structSize)
+	data, ok := maybeCopy(raw, structSize, "MemInfo")
 	if !ok {
 		oneSecondLog.Println("memInfo data is larger than struct")
 	}
@@ -126,7 +130,7 @@ func (raw RouteAttrValue) toMemInfo() (*inetdiag.MemInfo, bool) {
 // For older data, it may have to copy the bytes.
 func (raw RouteAttrValue) toLinuxTCPInfo() (*tcp.LinuxTCPInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(tcp.LinuxTCPInfo{}))
-	data, ok := maybeCopy(raw, structSize)
+	data, ok := maybeCopy(raw, structSize, "TCPInfo")
 	if !ok {
 		oneSecondLog.Println("tcpinfo data is larger than struct")
 	}
@@ -137,7 +141,7 @@ func (raw RouteAttrValue) toLinuxTCPInfo() (*tcp.LinuxTCPInfo, bool) {
 // For older data, it may have to copy the bytes.
 func (raw RouteAttrValue) toVegasInfo() (*inetdiag.VegasInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(inetdiag.VegasInfo{}))
-	data, ok := maybeCopy(raw, structSize)
+	data, ok := maybeCopy(raw, structSize, "VegasInfo")
 	return (*inetdiag.VegasInfo)(data), ok
 }
 
@@ -174,7 +178,7 @@ func (raw RouteAttrValue) toClassID() (uint8, bool) {
 // For older data, it may have to copy the bytes.
 func (raw RouteAttrValue) toSockMemInfo() (*inetdiag.SocketMemInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(inetdiag.SocketMemInfo{}))
-	data, ok := maybeCopy(raw, structSize)
+	data, ok := maybeCopy(raw, structSize, "SockMemInfo")
 	return (*inetdiag.SocketMemInfo)(data), ok
 }
 
@@ -186,7 +190,7 @@ func (raw RouteAttrValue) toShutdown() (uint8, bool) {
 // For older data, it may have to copy the bytes.
 func (raw RouteAttrValue) toDCTCPInfo() (*inetdiag.DCTCPInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(inetdiag.DCTCPInfo{}))
-	data, ok := maybeCopy(raw, structSize)
+	data, ok := maybeCopy(raw, structSize, "DCTCPInfo")
 	return (*inetdiag.DCTCPInfo)(data), ok
 }
 
@@ -206,7 +210,7 @@ func (raw RouteAttrValue) toMark() (uint32, bool) {
 // For older data, it may have to copy the bytes.
 func (raw RouteAttrValue) toBBRInfo() (*inetdiag.BBRInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(inetdiag.BBRInfo{}))
-	data, ok := maybeCopy(raw, structSize)
+	data, ok := maybeCopy(raw, structSize, "BBRInfo")
 	return (*inetdiag.BBRInfo)(data), ok
 }
 

@@ -152,6 +152,14 @@ var (
 			Help: "Number of snapshots taken.",
 		},
 	)
+
+	// LargeNetlinkMsgTotal counts the total number of snapshots collected across all connections.
+	LargeNetlinkMsgTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "large_netlink_total",
+			Help: "Number of oversize netlink messages.",
+		}, []string{"type"},
+	)
 )
 
 // init() prints a log message to let the user know that the package has been
