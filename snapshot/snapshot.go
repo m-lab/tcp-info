@@ -9,6 +9,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/m-lab/go/logx"
 	"github.com/m-lab/tcp-info/inetdiag"
 	"github.com/m-lab/tcp-info/netlink"
 	"github.com/m-lab/tcp-info/tcp"
@@ -93,6 +94,8 @@ func Decode(ar *netlink.ArchivalRecord) (*netlink.Metadata, *Snapshot, error) {
 /*          Conversions from RouteAttr.Value to various tcp and inetdiag structs             */
 /*********************************************************************************************/
 
+var oneSecondLog = logx.NewLogEvery(nil, time.Second)
+
 // RouteAttrValue is the type of RouteAttr.Value
 type RouteAttrValue []byte
 
@@ -114,7 +117,7 @@ func (raw RouteAttrValue) toMemInfo() (*inetdiag.MemInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(inetdiag.MemInfo{}))
 	data, ok := maybeCopy(raw, structSize)
 	if !ok {
-		log.Println("not ok")
+		oneSecondLog.Println("memInfo data is larger than struct")
 	}
 	return (*inetdiag.MemInfo)(data), ok
 }
@@ -125,7 +128,7 @@ func (raw RouteAttrValue) toLinuxTCPInfo() (*tcp.LinuxTCPInfo, bool) {
 	structSize := (int)(unsafe.Sizeof(tcp.LinuxTCPInfo{}))
 	data, ok := maybeCopy(raw, structSize)
 	if !ok {
-		log.Println("not ok")
+		oneSecondLog.Println("tcpinfo data is larger than struct")
 	}
 	return (*tcp.LinuxTCPInfo)(data), ok
 }
