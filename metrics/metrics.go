@@ -161,7 +161,7 @@ var (
 		}, []string{"type"},
 	)
 
-	// LargeNetlinkMsgTotal counts the total number of snapshots collected across all connections.
+	// NetlinkNotDecoded counts the total number of snapshots collected across all connections.
 	NetlinkNotDecoded = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "netlink_skipped_total",
