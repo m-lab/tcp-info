@@ -53,7 +53,8 @@ func (x State) String() string {
 }
 
 // LinuxTCPInfo is the linux defined structure returned in RouteAttr DIAG_INFO messages.
-// It corresponds to the struct tcp_info in include/uapi/linux/tcp.h
+// It corresponds to the struct tcp_info in
+// https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/tcp.h
 type LinuxTCPInfo struct {
 	State       uint8 `csv:"TCP.State"`
 	CAState     uint8 `csv:"TCP.CAState"`
