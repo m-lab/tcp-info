@@ -128,4 +128,8 @@ type LinuxTCPInfo struct {
 
 	DSackDups uint32 `csv:"TCP.DSackDups"` /* RFC4898 tcpEStatsStackDSACKDups */
 	ReordSeen uint32 `csv:"TCP.ReordSeen"` /* reordering events seen */
+
+	RcvOooPack uint32 `csv:"TCP.RcvOooPack"` /* Out-of-order packets received */
+
+	SndWnd uint32 `csv:"TCP.SndWnd"` /* peer's advertised receive window after scaling (bytes) */
 }
