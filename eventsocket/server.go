@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -120,6 +121,10 @@ func (s *server) Listen() error {
 	// definitely wait for Serve() to finish.
 	s.servingWG.Add(1)
 	var err error
+	// Delete any existing socket file before trying to listen on it. Unclean
+	// shutdowns can cause orphaned, stale socket files to hang around, causing
+	// this service to fail to start because it can't create the socket.
+	os.Readlink(s.filename)
 	s.unixListener, err = net.Listen("unix", s.filename)
 	return err
 }
