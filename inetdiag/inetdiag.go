@@ -28,15 +28,14 @@ https://pdfs.semanticscholar.org/6efd/e161a2582ba5846e4b8fea5a53bc305a64f3.pdf
 expressed in host-byte order"
 */
 
-import (
-        "golang.org/x/sys/unix"
-)
-
 // inet_diag.h
 
 // NOTE: darwin unix.AF_INET6 and syscall.AF_INET6 are incorrect for
 // our purposes (0x1e), so, we set this explicitly.
 const AF_INET6 = 0x0a
+
+// NOTE: windows does not have unix.AF_INET available.
+const AF_INET = 0x02
 
 const (
 	INET_DIAG_NONE = iota
@@ -85,8 +84,8 @@ var InetDiagType = map[int32]string{
 }
 
 var diagFamilyMap = map[uint8]string{
-	unix.AF_INET: "tcp",
-	AF_INET6:     "tcp6", 	// because darwin values for AF_INET6 are incorrect.
+	AF_INET:  "tcp",
+	AF_INET6: "tcp6", // because darwin values for AF_INET6 are incorrect.
 }
 
 // Protocol defines the type corresponding to INET_DIAG_PROTOCOL 8 bit field.
