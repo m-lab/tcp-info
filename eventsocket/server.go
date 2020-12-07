@@ -124,7 +124,7 @@ func (s *server) Listen() error {
 	// Delete any existing socket file before trying to listen on it. Unclean
 	// shutdowns can cause orphaned, stale socket files to hang around, causing
 	// this service to fail to start because it can't create the socket.
-	os.Readlink(s.filename)
+	os.Remove(s.filename)
 	s.unixListener, err = net.Listen("unix", s.filename)
 	return err
 }
