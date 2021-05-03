@@ -44,7 +44,7 @@ type Server interface {
 	Listen() error
 	Serve(context.Context) error
 	FlowCreated(timestamp time.Time, uuid string, sockid inetdiag.SockID)
-	FlowDeleted(timestamp time.Time, uuid string)
+	FlowDeleted(timestamp time.Time, uuid string, sockid *inetdiag.SockID)
 }
 
 type server struct {
@@ -175,11 +175,13 @@ func (s *server) FlowCreated(timestamp time.Time, uuid string, id inetdiag.SockI
 }
 
 // FlowDeleted should be called whenever tcpinfo notices a flow has been retired.
-func (s *server) FlowDeleted(timestamp time.Time, uuid string) {
+// id is optional.
+func (s *server) FlowDeleted(timestamp time.Time, uuid string, id *inetdiag.SockID) {
 	s.eventC <- &FlowEvent{
 		Event:     Close,
 		Timestamp: timestamp,
 		UUID:      uuid,
+		ID:        id,
 	}
 }
 
@@ -196,10 +198,10 @@ func New(filename string) Server {
 type nullServer struct{}
 
 // Empty implementations that do no harm.
-func (nullServer) Listen() error                                                    { return nil }
-func (nullServer) Serve(context.Context) error                                      { return nil }
-func (nullServer) FlowCreated(timestamp time.Time, uuid string, id inetdiag.SockID) {}
-func (nullServer) FlowDeleted(timestamp time.Time, uuid string)                     {}
+func (nullServer) Listen() error                                                     { return nil }
+func (nullServer) Serve(context.Context) error                                       { return nil }
+func (nullServer) FlowCreated(timestamp time.Time, uuid string, id inetdiag.SockID)  {}
+func (nullServer) FlowDeleted(timestamp time.Time, uuid string, id *inetdiag.SockID) {}
 
 // NullServer returns a Server that does nothing. It is made so that code that
 // may or may not want to use a eventsocket can receive a Server interface and
