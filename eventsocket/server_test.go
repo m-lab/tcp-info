@@ -42,7 +42,7 @@ func TestServer(t *testing.T) {
 	}
 
 	// Send an event on the server, to cause the client to be notified by the server.
-	srv.FlowDeleted(time.Now(), "fakeuuid")
+	srv.FlowDeleted(time.Now(), "fakeuuid", nil)
 	r := bufio.NewScanner(c)
 	if !r.Scan() {
 		t.Error("Should have been able to scan until the next newline, but couldn't")
@@ -81,7 +81,7 @@ func TestServer(t *testing.T) {
 	// No SIGSEGV == success!
 
 	// Send an event to ensure that cleanup should occur.
-	srv.FlowDeleted(time.Now(), "fakeuuid")
+	srv.FlowDeleted(time.Now(), "fakeuuid", nil)
 
 	// Busy wait until the server has unregistered the client
 	for {
@@ -125,6 +125,6 @@ func TestNullServer(t *testing.T) {
 	rtx.Must(srv.Listen(), "Could not listen")
 	rtx.Must(srv.Serve(ctx), "Could not serve")
 	srv.FlowCreated(time.Now(), "", inetdiag.SockID{})
-	srv.FlowDeleted(time.Now(), "")
+	srv.FlowDeleted(time.Now(), "", nil)
 	// No crash == success
 }
