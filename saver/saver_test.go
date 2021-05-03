@@ -201,10 +201,10 @@ type countingEventSocket struct {
 	opens, closes int
 }
 
-func (*countingEventSocket) Listen() error                                              { return nil }
-func (*countingEventSocket) Serve(context.Context) error                                { return nil }
-func (c *countingEventSocket) FlowCreated(t time.Time, uuid string, id inetdiag.SockID) { c.opens++ }
-func (c *countingEventSocket) FlowDeleted(t time.Time, uuid string)                     { c.closes++ }
+func (*countingEventSocket) Listen() error                                               { return nil }
+func (*countingEventSocket) Serve(context.Context) error                                 { return nil }
+func (c *countingEventSocket) FlowCreated(t time.Time, uuid string, id inetdiag.SockID)  { c.opens++ }
+func (c *countingEventSocket) FlowDeleted(t time.Time, uuid string, id *inetdiag.SockID) { c.closes++ }
 
 func TestHistograms(t *testing.T) {
 	dir, err := ioutil.TempDir("", "tcp-info_saver_TestBasic")
