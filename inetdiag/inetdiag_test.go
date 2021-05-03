@@ -1,6 +1,7 @@
 package inetdiag_test
 
 import (
+	"log"
 	"syscall"
 	"testing"
 	"unsafe"
@@ -8,6 +9,10 @@ import (
 	"github.com/m-lab/tcp-info/inetdiag"
 )
 
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
 func TestSizes(t *testing.T) {
 	if unsafe.Offsetof(inetdiag.LinuxSockID{}.IDiagDPort) != 2 {
 		t.Error("Incorrect DPort offset")
