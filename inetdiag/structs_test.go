@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"syscall"
 	"testing"
 	"unsafe"
 
@@ -14,6 +13,11 @@ import (
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/tcp-info/tcp"
 )
+
+func init() {
+	// Always prepend the filename and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
 
 // This needs to be a whitebox test because it tests unexported types.
 func TestStructAndCSVExport(t *testing.T) {
@@ -90,7 +94,7 @@ func TestParseInetDiagMsg(t *testing.T) {
 	if hdr.ID.Interface() == 0 || hdr.ID.Cookie() == 0 || hdr.ID.DPort() == 0 || toString(hdr.ID) == "" {
 		t.Errorf("None of the accessed values should be zero")
 	}
-	if hdr.IDiagFamily != syscall.AF_INET {
+	if hdr.IDiagFamily != AF_INET {
 		t.Errorf("Failed %+v\n", hdr)
 	}
 	if tcp.State(hdr.IDiagState) != tcp.SYN_RECV {
@@ -194,7 +198,7 @@ func TestID4Anonymize(t *testing.T) {
 
 	// Setup AF.
 	afOffset := unsafe.Offsetof(InetDiagMsg{}.IDiagFamily)
-	data[afOffset] = syscall.AF_INET
+	data[afOffset] = AF_INET
 
 	raw, _ := SplitInetDiagMsg(data[:])
 	hdr, err := raw.Parse()
@@ -255,7 +259,7 @@ func TestID6Anonymize(t *testing.T) {
 	}
 	// Setup AF.
 	afOffset := unsafe.Offsetof(InetDiagMsg{}.IDiagFamily)
-	data[afOffset] = syscall.AF_INET6
+	data[afOffset] = AF_INET6
 
 	raw, _ := SplitInetDiagMsg(data[:])
 	hdr, err := raw.Parse()

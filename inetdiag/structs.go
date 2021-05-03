@@ -31,7 +31,6 @@ import (
 	"log"
 	"net"
 	"runtime"
-	"syscall"
 	"unsafe"
 
 	"github.com/m-lab/go/anonymize"
@@ -316,13 +315,14 @@ func (raw RawInetDiagMsg) Anonymize(anon anonymize.IPAnonymizer) error {
 	// to be encoded in the last 4 bytes of a 16 byte array. As a result, we must
 	// pass only 4 bytes to net.IP for AF_INET.
 	switch msg.IDiagFamily {
-	case syscall.AF_INET6:
+	case AF_INET6:
 		anon.IP(net.IP(msg.ID.IDiagSrc[:]))
 		anon.IP(net.IP(msg.ID.IDiagDst[:]))
-	case syscall.AF_INET:
+	case AF_INET:
 		anon.IP(net.IP(msg.ID.IDiagSrc[:4]))
 		anon.IP(net.IP(msg.ID.IDiagDst[:4]))
 	default:
+		log.Println(ErrUnknownAF, msg.IDiagFamily)
 		return ErrUnknownAF
 	}
 	return nil
