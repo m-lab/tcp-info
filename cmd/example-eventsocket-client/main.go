@@ -30,13 +30,22 @@ type handler struct {
 	events chan event
 }
 
-// Open is called by the tcp-info synchronously, and blocks for every TCP open event.
+// Open is called by tcp-info synchronously for every TCP open event.
 func (h *handler) Open(ctx context.Context, timestamp time.Time, uuid string, id *inetdiag.SockID) {
-	log.Println("open ", uuid, timestamp, id)
-	h.events <- event{timestamp: timestamp, uuid: uuid, id: id}
+	// NOTE: Until this function returns, tcp-info cannot send additional
+	// events. So, immediately attempt to send the event on a channel that will
+	// be read by an asynchronous processing goroutine.
+	select {
+	case h.events <- event{timestamp: timestamp, uuid: uuid, id: id}:
+		log.Println("open ", "sent", uuid, timestamp, id)
+	default:
+		// If the write to the events channel would have blocked, discard this
+		// event instead.
+		log.Println("open ", "skipped", uuid, timestamp, id)
+	}
 }
 
-// Close is called single-threaded and blocking for every TCP close event.
+// Close is called by tcp-info synchronously and blocks for every TCP close event.
 func (h *handler) Close(ctx context.Context, timestamp time.Time, uuid string) {
 	log.Println("close", uuid, timestamp)
 }
