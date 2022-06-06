@@ -12,7 +12,7 @@ metrics published on port 7070:
 docker run --network=host -v ~/data:/home/ -it measurementlab/tcp-info -prom=7070
 ```
 
-# Fast tcp-info collector in Go
+## Fast tcp-info collector in Go
 
 This repository uses the netlink API to collect inet_diag messages, partially parses them, and caches the intermediate representation.
 It then detects differences from one scan to the next, and queues connections that have changed for logging.
@@ -33,14 +33,32 @@ OR
 sudo apt-get update && sudo apt-get install -y zstd
 ```
 
-# Parse library and command line tools
+## Example sidecar
 
-## CSV tool
+The tcp-info eventsocket interface allows sidecar services to receive "open" and
+"close" events on a unix domain socket connection. A simple reference
+implementation `cmd/example-eventsocket-client` can be started using
+`docker-compose`.
+
+```bash
+docker-compse up
+```
+
+New TCP events are processed by the `example-eventsocket-client` sidecar and
+logged to stderr. You may trigger a TCP connection from within the TCPINFO
+container using a command like:
+
+```bash
+docker exec -it tcp-info_tcpinfo_1 wget www.google.com
+```
+
+## Parse library and command line tools
+
+### CSV tool
 
 The cmd/csvtool directory contains a tool for parsing ArchivedRecord and producing CSV files.  Currently reads netlink-jSONL from stdin and writes CSV to stdout.
 
-
-# Code Layout
+## Code Layout
 
 * inetdiag - code related to include/uapi/linux/inet_diag.h.  All structs will be in structs.go
 * tcp - Should include ONLY the code related to include/uapi/linux/tcp.h
@@ -50,7 +68,7 @@ The cmd/csvtool directory contains a tool for parsing ArchivedRecord and produci
 * cache - code to cache netlink messages and detect changes.
 * collector - code related to collecting netlink messages from the kernel.
 
-## Dependencies (as of March 2019)
+### Dependencies (as of March 2019)
 
 * saver: inetdiag, cache, parse, tcp, zstd
 * collector: parse, saver, inetdiag, tcp
@@ -60,14 +78,14 @@ The cmd/csvtool directory contains a tool for parsing ArchivedRecord and produci
 
 And (almost) all package use metrics.
 
-### Layers for main.go (each layer depends only on items to right, or lower layers)
+#### Layers for main.go (each layer depends only on items to right, or lower layers)
 
 1. main.go
 1. collector > saver > cache
 1. netlink > inetdiag
 1. tcp, zstd, metrics
 
-### Layers for parse package:
+#### Layers for parse package
 
 1. parse (used by command line tools, etl)
 1. netlink > inetdiag

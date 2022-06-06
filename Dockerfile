@@ -1,5 +1,5 @@
 # An image for building zstd
-FROM ubuntu as zstd-builder
+FROM ubuntu:20.04 as zstd-builder
 
 # Get zstd source and compile zstd as a static binary.
 RUN apt-get update && apt-get update -y && apt-get install -y make gcc libc-dev git
@@ -8,7 +8,7 @@ RUN mkdir /pkg && cd /src && make MOREFLAGS="-static" zstd && make DESTDIR=/pkg 
 
 
 # An image for building tcp-info
-FROM golang:1.12 as tcp-info-builder
+FROM golang:1.18 as tcp-info-builder
 
 ENV CGO_ENABLED 0
 
@@ -17,12 +17,13 @@ ADD . /go/src/github.com/m-lab/tcp-info
 WORKDIR /go/src/github.com/m-lab/tcp-info
 
 # Get all of our imports and compile the tcp-info binary into /go/bin
-RUN go get -v \
+RUN go get -v . && \
+    go install -v \
       -ldflags "-X github.com/m-lab/go/prometheusx.GitShortCommit=$(git log -1 --format=%h)" \
       .
 
 # Build the image containing both binaries.
-FROM alpine
+FROM alpine:3.16
 
 # Copy the zstd binary and license.
 COPY --from=zstd-builder /pkg/usr/local/bin/zstd /bin/zstd

@@ -1,17 +1,15 @@
 # Travis configuration for tcp-info fast sidestream tool.
 language: go
-# We must specify go 1.12 when using logx.
 go:
- - 1.12
+ - 1.18
 
-dist: xenial
 services:
 - docker
 
 ###########################################################################
 before_install:
 # Coverage tools
-- go get github.com/mattn/goveralls
+- go install github.com/mattn/goveralls@latest
 - echo Branch is ${TRAVIS_BRANCH} and Tag is $TRAVIS_TAG
 
 install:
