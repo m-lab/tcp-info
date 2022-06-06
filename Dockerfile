@@ -1,5 +1,5 @@
 # An image for building zstd
-FROM ubuntu as zstd-builder
+FROM ubuntu:20.04 as zstd-builder
 
 # Get zstd source and compile zstd as a static binary.
 RUN apt-get update && apt-get update -y && apt-get install -y make gcc libc-dev git
