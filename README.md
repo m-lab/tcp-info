@@ -45,7 +45,12 @@ docker-compse up
 ```
 
 New TCP events are processed by the `example-eventsocket-client` sidecar and
-logged to stderr.
+logged to stderr. You may trigger a TCP connection from within the TCPINFO
+container using a command like:
+
+```bash
+docker exec -it tcp-info_tcpinfo_1 wget www.google.com
+```
 
 ## Parse library and command line tools
 
