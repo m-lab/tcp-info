@@ -1,0 +1,41 @@
+version: '3.7'
+services:
+  tcpinfo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./local:/local
+    # NOTE: All service containers will use the same network and IP. All ports
+    # must be configured on the first.
+    ports:
+      - target: 9990
+        published: 9990
+        protocol: tcp
+        mode: bridge
+      - target: 9991
+        published: 9991
+        protocol: tcp
+        mode: bridge
+    command:
+      - -prometheusx.listen-address=:9990
+      - -output=/local/tcpinfo
+      - -tcpinfo.eventsocket=/local/tcpevents.sock
+      - -anonymize.ip=none
+
+  example-eventsocket-client:
+    build:
+      context: .
+      dockerfile: Dockerfile.example
+    volumes:
+      - ./local:/local
+    network_mode: "service:tcpinfo"
+    deploy:
+      # NOTE: container may fail on startup if it tries to read a
+      # socket that the above services are not yet listening on.
+      # So, allow restart.
+      restart_policy:
+        condition: any
+        delay: 5s
+    command:
+      - -tcpinfo.eventsocket=/local/tcpevents.sock
