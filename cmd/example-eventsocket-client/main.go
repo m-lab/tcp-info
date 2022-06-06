@@ -45,7 +45,7 @@ func (h *handler) Open(ctx context.Context, timestamp time.Time, uuid string, id
 	}
 }
 
-// Close is called by tcp-info synchronously and blocks for every TCP close event.
+// Close is called by tcp-info synchronously for every TCP close event.
 func (h *handler) Close(ctx context.Context, timestamp time.Time, uuid string) {
 	log.Println("close", uuid, timestamp)
 }
