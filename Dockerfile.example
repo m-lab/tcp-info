@@ -1,4 +1,4 @@
-# Build uuid-annotator
+# Build example-eventsocket-client.
 FROM golang:1.18-alpine as build
 RUN apk --no-cache add git
 COPY . /go/src/github.com/m-lab/tcp-info
