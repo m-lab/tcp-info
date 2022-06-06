@@ -1,3 +1,5 @@
+// example-eventsocket-client is a minimal reference implementation of a tcpinfo
+// eventsocket client.
 package main
 
 import (
@@ -5,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/m-lab/go/flagx"
@@ -18,17 +19,19 @@ var (
 	mainCtx, mainCancel = context.WithCancel(context.Background())
 )
 
+// event contains fields for an open event.
 type event struct {
 	timestamp time.Time
 	uuid      string
 	id        *inetdiag.SockID
 }
 
+// handler implements the eventsocket.Handler interface.
 type handler struct {
 	events chan event
 }
 
-// Open is called single-threaded and blocking for every TCP open event.
+// Open is called by the tcp-info synchronously, and blocks for every TCP open event.
 func (h *handler) Open(ctx context.Context, timestamp time.Time, uuid string, id *inetdiag.SockID) {
 	log.Println("open ", uuid, timestamp, id)
 	h.events <- event{timestamp: timestamp, uuid: uuid, id: id}
@@ -61,22 +64,16 @@ func main() {
 		panic("-tcpinfo.eventsocket path is required")
 	}
 
-	wg := sync.WaitGroup{}
 	h := &handler{events: make(chan event)}
 
-	wg.Add(1)
-	go func() {
-		h.ProcessOpenEvents(mainCtx)
-		wg.Done()
-	}()
+	// Process events received by the eventsocket handler. The goroutine will
+	// block until an open even occurs.
+	go h.ProcessOpenEvents(mainCtx)
 
-	// Listen to the event socket to find out about new UUIDs and then process them.
-	wg.Add(1)
-	go func() {
-		eventsocket.MustRun(mainCtx, *eventsocket.Filename, h)
-		wg.Done()
-	}()
+	// Begin listening on the eventsocket for new events, and dispatch them to
+	// the given handler.
+	go eventsocket.MustRun(mainCtx, *eventsocket.Filename, h)
 
-	wg.Wait()
+	<-mainCtx.Done()
 	fmt.Println("ok")
 }
