@@ -76,7 +76,7 @@ func main() {
 	h := &handler{events: make(chan event)}
 
 	// Process events received by the eventsocket handler. The goroutine will
-	// block until an open even occurs.
+	// block until an open event occurs or the context is cancelled.
 	go h.ProcessOpenEvents(mainCtx)
 
 	// Begin listening on the eventsocket for new events, and dispatch them to
