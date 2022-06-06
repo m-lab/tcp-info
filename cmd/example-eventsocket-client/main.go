@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"time"
 
@@ -56,12 +55,13 @@ func (h *handler) ProcessOpenEvents(ctx context.Context) {
 }
 
 func main() {
-	flag.Parse()
-	rtx.Must(flagx.ArgsFromEnv(flag.CommandLine), "Could not get args from environment variables")
 	defer mainCancel()
 
+	flag.Parse()
+	rtx.Must(flagx.ArgsFromEnv(flag.CommandLine), "could not get args from environment variables")
+
 	if *eventsocket.Filename == "" {
-		panic("-tcpinfo.eventsocket path is required")
+		log.Fatal("-tcpinfo.eventsocket path is required")
 	}
 
 	h := &handler{events: make(chan event)}
@@ -75,5 +75,4 @@ func main() {
 	go eventsocket.MustRun(mainCtx, *eventsocket.Filename, h)
 
 	<-mainCtx.Done()
-	fmt.Println("ok")
 }
