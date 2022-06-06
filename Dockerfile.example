@@ -7,7 +7,7 @@ RUN go get -v ./cmd/example-eventsocket-client && \
     go install ./cmd/example-eventsocket-client
 
 # Put it in its own image.
-FROM alpine
+FROM alpine:3.16
 COPY --from=build /go/bin/example-eventsocket-client /example-eventsocket-client
 WORKDIR /
 ENTRYPOINT ["/example-eventsocket-client"]
