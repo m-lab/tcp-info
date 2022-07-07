@@ -41,7 +41,7 @@ implementation `cmd/example-eventsocket-client` can be started using
 `docker-compose`.
 
 ```bash
-docker-compse up
+docker-compose up
 ```
 
 New TCP events are processed by the `example-eventsocket-client` sidecar and
