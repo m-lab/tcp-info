@@ -244,7 +244,7 @@ func TestID6Anonymize(t *testing.T) {
 	for i := 0; i < 16; i++ {
 		data[srcIPOffset+uintptr(i)] = byte(0x0A + i)
 		srcOrig[i] = byte(0x0A + i)
-		if i < 8 {
+		if i < 6 { // IPv6/48 truncation preserves the first 6 bytes.
 			srcAnon[i] = srcOrig[i]
 		}
 	}
@@ -253,7 +253,7 @@ func TestID6Anonymize(t *testing.T) {
 	for i := 0; i < 16; i++ {
 		data[dstIPOffset+uintptr(i)] = byte(i + 1)
 		dstOrig[i] = byte(i + 1)
-		if i < 8 {
+		if i < 6 {
 			dstAnon[i] = dstOrig[i]
 		}
 	}
@@ -287,9 +287,9 @@ func TestID6Anonymize(t *testing.T) {
 	hdrSrcIP = net.IP(hdr.ID.IDiagSrc[:])
 	hdrDstIP = net.IP(hdr.ID.IDiagDst[:])
 	if !anonSrcIP.Equal(hdrSrcIP) {
-		t.Errorf("Anonymize IPs modified using method None! %s != %s", anonSrcIP, hdrSrcIP)
+		t.Errorf("Anonymize IPs modified using method Netblock! %s != %s", anonSrcIP, hdrSrcIP)
 	}
 	if !anonDstIP.Equal(hdrDstIP) {
-		t.Errorf("Anonymize IPs modified using method None! %s != %s", anonDstIP, hdrDstIP)
+		t.Errorf("Anonymize IPs modified using method Netblock! %s != %s", anonDstIP, hdrDstIP)
 	}
 }
