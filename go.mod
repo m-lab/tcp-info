@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/go-test/deep v1.0.6
 	github.com/gocarina/gocsv v0.0.0-20200827134620-49f5c3fa2b3e
-	github.com/m-lab/go v0.1.47
+	github.com/m-lab/go v0.1.59
 	github.com/m-lab/uuid v0.0.0-20191115203855-549727171666
 	github.com/prometheus/client_golang v1.11.1
 	github.com/prometheus/client_model v0.2.0
