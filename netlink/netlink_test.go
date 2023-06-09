@@ -33,7 +33,7 @@ func TestParse(t *testing.T) {
 	err := json.Unmarshal([]byte(json1), &nm)
 	t.Log("Data len = ", len(nm.Data))
 	rtx.Must(err, "")
-	mp, err := netlink.MakeArchivalRecord(&nm, true)
+	mp, err := netlink.MakeArchivalRecord(&nm, &netlink.ExcludeConfig{Local: true})
 	rtx.Must(err, "")
 	idm, err := mp.RawIDM.Parse()
 	rtx.Must(err, "")
@@ -71,14 +71,14 @@ func TestParseGarbage(t *testing.T) {
 	// Truncate the data down to something that makes no sense.
 	badNm := nm
 	badNm.Data = badNm.Data[:1]
-	_, err = netlink.MakeArchivalRecord(&badNm, true)
+	_, err = netlink.MakeArchivalRecord(&badNm, &netlink.ExcludeConfig{Local: true})
 	if err == nil {
 		t.Error("The parse should have failed")
 	}
 
 	// Replace the header type with one that we don't support.
 	nm.Header.Type = 10
-	_, err = netlink.MakeArchivalRecord(&nm, false)
+	_, err = netlink.MakeArchivalRecord(&nm, nil)
 	if err == nil {
 		t.Error("Should detect wrong type")
 	}
@@ -91,14 +91,14 @@ func TestParseGarbage(t *testing.T) {
 		nm.Data[i] = byte(i)
 	}
 
-	_, err = netlink.MakeArchivalRecord(&nm, false)
+	_, err = netlink.MakeArchivalRecord(&nm, nil)
 	if err == nil || err.Error() != "invalid argument" {
 		t.Error(err)
 	}
 
 	// Replace length with garbage so that data is incomplete.
 	nm.Header.Len = 400
-	_, err = netlink.MakeArchivalRecord(&nm, false)
+	_, err = netlink.MakeArchivalRecord(&nm, nil)
 	if err == nil || err.Error() != "invalid argument" {
 		t.Error(err)
 	}
@@ -132,7 +132,7 @@ func TestCompare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mp1, err := netlink.MakeArchivalRecord(&nm, true)
+	mp1, err := netlink.MakeArchivalRecord(&nm, &netlink.ExcludeConfig{Local: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestCompare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mp2, err := netlink.MakeArchivalRecord(&nm2, true)
+	mp2, err := netlink.MakeArchivalRecord(&nm2, &netlink.ExcludeConfig{Local: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +193,7 @@ func TestNLMsgSerialize(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		pm, err := netlink.MakeArchivalRecord(msg, false)
+		pm, err := netlink.MakeArchivalRecord(msg, nil)
 		rtx.Must(err, "Could not parse test data")
 		// Parse doesn't fill the Timestamp, so for now, populate it with something...
 		pm.Timestamp = time.Date(2009, time.May, 29, 23, 59, 59, 0, time.UTC)
@@ -248,7 +248,7 @@ func TestCompressionSize(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		pm, err := netlink.MakeArchivalRecord(msg, false)
+		pm, err := netlink.MakeArchivalRecord(msg, nil)
 		pm.Timestamp = ts.Truncate(time.Millisecond).UTC()
 		ts = ts.Add(6 * time.Millisecond)
 		rtx.Must(err, "Could not parse test data")
@@ -304,7 +304,7 @@ func BenchmarkNLMsgSerialize(b *testing.B) {
 			}
 			b.Fatal(err)
 		}
-		pm, err := netlink.MakeArchivalRecord(msg, false)
+		pm, err := netlink.MakeArchivalRecord(msg, nil)
 		rtx.Must(err, "Could not parse test data")
 		msgs = append(msgs, pm)
 	}
@@ -341,7 +341,7 @@ func BenchmarkNLMsgParseSerializeCompress(b *testing.B) {
 			b.Fatal(err)
 		}
 		raw = append(raw, msg)
-		pm, err := netlink.MakeArchivalRecord(msg, false)
+		pm, err := netlink.MakeArchivalRecord(msg, nil)
 		rtx.Must(err, "Could not parse test data")
 		msgs = append(msgs, pm)
 	}
@@ -358,7 +358,7 @@ func BenchmarkNLMsgParseSerializeCompress(b *testing.B) {
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		for _, msg := range raw {
-			m, err := netlink.MakeArchivalRecord(msg, false)
+			m, err := netlink.MakeArchivalRecord(msg, nil)
 			rtx.Must(err, "Could not parse test data")
 			jsonBytes, err := json.Marshal(m)
 			rtx.Must(err, "Could not serialize %v", m)

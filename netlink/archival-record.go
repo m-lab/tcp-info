@@ -47,6 +47,14 @@ type ArchivalRecord struct {
 	Metadata *Metadata `json:",omitempty"`
 }
 
+// ExcludeConfig provides options for excluding some measurements from archival messages.
+type ExcludeConfig struct {
+	// Local excludes connections from loopback, local unicast, multicast, or unspecified connections.
+	Local bool
+	// SrcPorts excludes connections from specific source ports.
+	SrcPorts map[uint16]bool
+}
+
 // ParseRouteAttr parses a byte array into slice of NetlinkRouteAttr struct.
 // Derived from "github.com/vishvananda/netlink/nl/nl_linux.go"
 func ParseRouteAttr(b []byte) ([]NetlinkRouteAttr, error) {
@@ -63,10 +71,11 @@ func ParseRouteAttr(b []byte) ([]NetlinkRouteAttr, error) {
 	return attrs, nil
 }
 
-// MakeArchivalRecord parses the NetlinkMessage into a ArchivalRecord.  If skipLocal is true, it will return nil for
-// loopback, local unicast, multicast, and unspecified connections.
-// Note that Parse does not populate the Timestamp field, so caller should do so.
-func MakeArchivalRecord(msg *NetlinkMessage, skipLocal bool) (*ArchivalRecord, error) {
+// MakeArchivalRecord parses the NetlinkMessage into a ArchivalRecord. If
+// exclude is not nil, MakeArchivalRecord will return nil for any condition
+// matching the exclude config options, e.g. localhost, or source ports. Note
+// that Parse does not populate the Timestamp field, so caller should do so.
+func MakeArchivalRecord(msg *NetlinkMessage, exclude *ExcludeConfig) (*ArchivalRecord, error) {
 	if msg.Header.Type != 20 {
 		return nil, ErrNotType20
 	}
@@ -74,13 +83,15 @@ func MakeArchivalRecord(msg *NetlinkMessage, skipLocal bool) (*ArchivalRecord, e
 	if raw == nil {
 		return nil, ErrParseFailed
 	}
-	if skipLocal {
+	if exclude != nil {
 		idm, err := raw.Parse()
 		if err != nil {
 			return nil, err
 		}
-
-		if isLocal(idm.ID.SrcIP()) || isLocal(idm.ID.DstIP()) {
+		if exclude.SrcPorts != nil && exclude.SrcPorts[idm.ID.SPort()] {
+			return nil, nil
+		}
+		if exclude.Local && (isLocal(idm.ID.SrcIP()) || isLocal(idm.ID.DstIP())) {
 			return nil, nil
 		}
 	}
@@ -149,10 +160,10 @@ func isLocal(addr net.IP) bool {
 
 // Compare compares important fields to determine whether significant updates have occurred.
 // We ignore a bunch of fields:
-//  * The TCPInfo fields matching last_* are rapidly changing, but don't have much significance.
-//    Are they elapsed time fields?
-//  * The InetDiagMsg.Expires is also rapidly changing in many connections, but also seems
-//    unimportant.
+//   - The TCPInfo fields matching last_* are rapidly changing, but don't have much significance.
+//     Are they elapsed time fields?
+//   - The InetDiagMsg.Expires is also rapidly changing in many connections, but also seems
+//     unimportant.
 //
 // Significant updates are reflected in the packet, segment and byte count updates, so we
 // generally want to record a snapshot when any of those change.  They are in the latter
@@ -290,7 +301,7 @@ func (raw *rawReader) Next() (*ArchivalRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	return MakeArchivalRecord(msg, false)
+	return MakeArchivalRecord(msg, nil)
 }
 
 type archiveReader struct {
