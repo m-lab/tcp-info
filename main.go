@@ -111,8 +111,12 @@ func main() {
 	rtx.Must(eventSrv.Listen(), "Could not listen on", *eventsocket.Filename)
 	go eventSrv.Serve(ctx)
 
-	srcPorts := map[uint16]bool{}
+	ex := &netlink.ExcludeConfig{
+		Local: true,
+	}
+
 	if len(excludeSrcPorts) != 0 {
+		srcPorts := map[uint16]bool{}
 		for _, port := range excludeSrcPorts {
 			i, err := strconv.ParseInt(port, 10, 16)
 			if err != nil {
@@ -121,11 +125,7 @@ func main() {
 			}
 			srcPorts[uint16(i)] = true
 		}
-	}
-
-	ex := &netlink.ExcludeConfig{
-		Local:    true,
-		SrcPorts: srcPorts,
+		ex.SrcPorts = srcPorts
 	}
 
 	// Make the saver and construct the message channel, buffering up to 2 batches
