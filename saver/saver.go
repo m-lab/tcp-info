@@ -210,11 +210,12 @@ type Saver struct {
 	cache       *cache.Cache
 	stats       stats
 	eventServer eventsocket.Server
+	exclude     *netlink.ExcludeConfig
 }
 
 // NewSaver creates a new Saver for the given host and pod.  numMarshaller controls
 // how many marshalling goroutines are used to distribute the marshalling workload.
-func NewSaver(host string, pod string, numMarshaller int, srv eventsocket.Server, anon anonymize.IPAnonymizer) *Saver {
+func NewSaver(host string, pod string, numMarshaller int, srv eventsocket.Server, anon anonymize.IPAnonymizer, ex *netlink.ExcludeConfig) *Saver {
 	m := make([]MarshalChan, 0, numMarshaller)
 	c := cache.NewCache()
 	// We start with capacity of 500.  This will be reallocated as needed, but this
@@ -238,6 +239,7 @@ func NewSaver(host string, pod string, numMarshaller int, srv eventsocket.Server
 		ClosingStats: make(map[uint64]TcpStats, 100),
 		cache:        c,
 		eventServer:  srv,
+		exclude:      ex,
 	}
 }
 
@@ -306,7 +308,7 @@ func (svr *Saver) handleType(t time.Time, msgs []*netlink.NetlinkMessage) (uint6
 			log.Println("Nil message")
 			continue
 		}
-		ar, err := netlink.MakeArchivalRecord(msg, true)
+		ar, err := netlink.MakeArchivalRecord(msg, svr.exclude)
 		if ar == nil {
 			if err != nil {
 				log.Println(err)

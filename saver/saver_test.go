@@ -94,7 +94,7 @@ func (msg *TestMsg) setDPort(dport uint16) *TestMsg {
 }
 
 func (msg *TestMsg) mustAR() *netlink.ArchivalRecord {
-	ar, err := netlink.MakeArchivalRecord(&msg.NetlinkMessage, true)
+	ar, err := netlink.MakeArchivalRecord(&msg.NetlinkMessage, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -219,7 +219,7 @@ func TestHistograms(t *testing.T) {
 	}()
 	eventCounts := &countingEventSocket{}
 	anon := anonymize.New(anonymize.None)
-	svr := saver.NewSaver("foo", "bar", 1, eventCounts, anon)
+	svr := saver.NewSaver("foo", "bar", 1, eventCounts, anon, nil)
 	svrChan := make(chan netlink.MessageBlock, 0) // no buffering
 	go svr.MessageSaverLoop(svrChan)
 
@@ -340,7 +340,7 @@ func TestFinWait2NotImplemented(t *testing.T) {
 	}
 
 	anon := anonymize.New(anonymize.None)
-	svr := saver.NewSaver("hostname", "fakePod", 1, eventsocket.NullServer(), anon)
+	svr := saver.NewSaver("hostname", "fakePod", 1, eventsocket.NullServer(), anon, nil)
 	blockChan := make(chan netlink.MessageBlock, 0)
 	go svr.MessageSaverLoop(blockChan)
 	for i := range msgs {
