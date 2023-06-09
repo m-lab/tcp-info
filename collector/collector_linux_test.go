@@ -110,7 +110,7 @@ func TestRun(t *testing.T) {
 			if v4 == nil {
 				continue
 			}
-			m, err := netlink.MakeArchivalRecord(v4, false)
+			m, err := netlink.MakeArchivalRecord(v4, nil)
 			testFatal(t, err)
 			idm, err := m.RawIDM.Parse()
 			testFatal(t, err)
@@ -128,7 +128,7 @@ func TestRun(t *testing.T) {
 			if v6 == nil {
 				continue
 			}
-			m, err := netlink.MakeArchivalRecord(v6, false)
+			m, err := netlink.MakeArchivalRecord(v6, nil)
 			testFatal(t, err)
 			idm, err := m.RawIDM.Parse()
 			testFatal(t, err)

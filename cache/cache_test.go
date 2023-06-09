@@ -27,11 +27,14 @@ func fakeMsg(t *testing.T, cookie uint64, dport uint16) netlink.ArchivalRecord {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mp, err := netlink.MakeArchivalRecord(&nm, true)
+	mp, err := netlink.MakeArchivalRecord(&nm, &netlink.ExcludeConfig{Local: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	idm, err := mp.RawIDM.Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 8; i++ {
 		idm.ID.IDiagCookie[i] = byte(cookie & 0x0FF)
 		cookie >>= 8
