@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/trace"
+	"strconv"
 
 	"github.com/m-lab/tcp-info/eventsocket"
 
@@ -51,9 +52,21 @@ flat  flat%   sum%        cum   cum%
 0.01s   0.2% 95.82%      0.07s  1.39%  runtime.makeslice
 */
 
+var (
+	reps            int
+	enableTrace     bool
+	outputDir       string
+	excludeSrcPorts = flagx.StringArray{}
+)
+
 func init() {
 	// Always prepend the filename and line number.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	flag.IntVar(&reps, "reps", 0, "How many cycles should be recorded, 0 means continuous")
+	flag.BoolVar(&enableTrace, "trace", false, "Enable trace")
+	flag.StringVar(&outputDir, "output", "", "Directory in which to put the resulting tree of data. Default is the current directory.")
+	flag.Var(&excludeSrcPorts, "exclude-srcport", "Exclude snapshots with these local ports from saved archives.")
 }
 
 // NOTES:
@@ -62,20 +75,17 @@ func init() {
 //  3. zstd seems to result in similar file size using proto or raw output.
 
 var (
-	reps        = flag.Int("reps", 0, "How many cycles should be recorded, 0 means continuous")
-	enableTrace = flag.Bool("trace", false, "Enable trace")
-	outputDir   = flag.String("output", "", "Directory in which to put the resulting tree of data.  Default is the current directory.")
-
 	ctx, cancel = context.WithCancel(context.Background())
 )
 
 func main() {
 	flag.Parse()
 	flagx.ArgsFromEnv(flag.CommandLine)
+	defer cancel()
 
-	if *outputDir != "" {
-		rtx.PanicOnError(os.MkdirAll(*outputDir, 0755), "Could not create the output dir %s", *outputDir)
-		rtx.Must(os.Chdir(*outputDir), "Could not change to the directory %s", *outputDir)
+	if outputDir != "" {
+		rtx.PanicOnError(os.MkdirAll(outputDir, 0755), "Could not create the output dir %s", outputDir)
+		rtx.Must(os.Chdir(outputDir), "Could not change to the directory %s", outputDir)
 	}
 
 	// Performance instrumentation.
@@ -86,7 +96,7 @@ func main() {
 	promSrv := prometheusx.MustServeMetrics()
 	defer promSrv.Shutdown(ctx)
 
-	if *enableTrace {
+	if enableTrace {
 		traceFile, err := os.Create("trace")
 		rtx.Must(err, "Could not create trace file")
 		rtx.Must(trace.Start(traceFile), "failed to start trace: %v", err)
@@ -101,16 +111,33 @@ func main() {
 	rtx.Must(eventSrv.Listen(), "Could not listen on", *eventsocket.Filename)
 	go eventSrv.Serve(ctx)
 
+	srcPorts := map[uint16]bool{}
+	if len(excludeSrcPorts) != 0 {
+		for _, port := range excludeSrcPorts {
+			i, err := strconv.ParseInt(port, 10, 16)
+			if err != nil {
+				log.Printf("skipping; cannot convert %q to integer", port)
+				continue
+			}
+			srcPorts[uint16(i)] = true
+		}
+	}
+
+	ex := &netlink.ExcludeConfig{
+		Local:    true,
+		SrcPorts: srcPorts,
+	}
+
 	// Make the saver and construct the message channel, buffering up to 2 batches
 	// of messages without stalling producer. We may want to increase the buffer if
 	// we observe main() stalling.
 	svrChan := make(chan netlink.MessageBlock, 2)
 	anon := anonymize.New(anonymize.IPAnonymizationFlag)
-	svr := saver.NewSaver("host", "pod", 3, eventSrv, anon)
+	svr := saver.NewSaver("host", "pod", 3, eventSrv, anon, ex)
 	go svr.MessageSaverLoop(svrChan)
 
 	// Run the collector, possibly forever.
-	totalSeen, totalErr := collector.Run(ctx, *reps, svrChan, svr, true)
+	totalSeen, totalErr := collector.Run(ctx, reps, svrChan, svr, true)
 
 	// Shut down and clean up after the collector terminates.
 	close(svrChan)
