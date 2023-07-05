@@ -7,11 +7,9 @@ import (
 	"context"
 	"flag"
 	"log"
-	"net"
 	"os"
 	"runtime"
 	"runtime/trace"
-	"strconv"
 
 	"github.com/m-lab/tcp-info/eventsocket"
 
@@ -119,38 +117,22 @@ func main() {
 	}
 
 	if len(excludeDstIPs) != 0 {
-		dstIPs := map[[16]byte]bool{}
-		for _, ipstr := range excludeDstIPs {
-			ip := net.ParseIP(ipstr)
-			if ip == nil {
-				log.Printf("skipping; cannot convert %q to ip", ipstr)
-				continue
-			}
-			ipbuf := [16]byte{}
-			if ip.To4() != nil {
-				// NOTE: The Linux-native byte position for IPv4 addresses is the first four bytes.
-				// The net.IP package format uses the last four bytes. Copy the net.IP bytes to a
-				// new array to generate a key for dstIPs.
-				copy(ipbuf[:], ip[12:])
-			} else {
-				copy(ipbuf[:], ip[:])
-			}
-			dstIPs[ipbuf] = true
-		}
-		ex.DstIPs = dstIPs
-	}
-
-	if len(excludeSrcPorts) != 0 {
-		srcPorts := map[uint16]bool{}
-		for _, port := range excludeSrcPorts {
-			i, err := strconv.ParseInt(port, 10, 16)
+		for _, dip := range excludeDstIPs {
+			err := ex.AddDstIP(dip)
 			if err != nil {
-				log.Printf("skipping; cannot convert %q to integer", port)
+				log.Printf("skipping; cannot convert ip %q; %v", dip, err)
 				continue
 			}
-			srcPorts[uint16(i)] = true
 		}
-		ex.SrcPorts = srcPorts
+	}
+	if len(excludeSrcPorts) != 0 {
+		for _, port := range excludeSrcPorts {
+			err := ex.AddSrcPort(port)
+			if err != nil {
+				log.Printf("skipping; cannot convert port %q; %v", port, err)
+				continue
+			}
+		}
 	}
 
 	// Make the saver and construct the message channel, buffering up to 2 batches
