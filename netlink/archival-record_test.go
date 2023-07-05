@@ -82,7 +82,7 @@ func TestExcludeConfig_AddSrcPort(t *testing.T) {
 	}{
 		{
 			name: "success",
-			port: "9999", // "not-a-port"},
+			port: "9999",
 			wantPorts: map[uint16]bool{
 				9999: true,
 			},
