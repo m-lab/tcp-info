@@ -71,8 +71,6 @@ func TestMakeArchivalRecord(t *testing.T) {
 			}
 		})
 	}
-	/*
-	 */
 }
 
 func TestExcludeConfig_AddSrcPort(t *testing.T) {
