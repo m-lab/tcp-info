@@ -53,6 +53,7 @@ type ExcludeConfig struct {
 	Local bool
 	// SrcPorts excludes connections from specific source ports.
 	SrcPorts map[uint16]bool
+	DstIPs   map[[16]byte]bool
 }
 
 // ParseRouteAttr parses a byte array into slice of NetlinkRouteAttr struct.
@@ -92,6 +93,12 @@ func MakeArchivalRecord(msg *NetlinkMessage, exclude *ExcludeConfig) (*ArchivalR
 			return nil, nil
 		}
 		if exclude.Local && (isLocal(idm.ID.SrcIP()) || isLocal(idm.ID.DstIP())) {
+			return nil, nil
+		}
+		if exclude.DstIPs != nil && exclude.DstIPs[idm.ID.IDiagDst] {
+			// Note: byte-key lookup is preferable for performance than
+			// net.IP-to-String formatting. And, a byte array can be a map key,
+			// while a net.IP byte slice cannot.
 			return nil, nil
 		}
 	}
