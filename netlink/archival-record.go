@@ -58,6 +58,7 @@ type ExcludeConfig struct {
 	DstIPs   map[[16]byte]bool
 }
 
+// AddSrcPort adds the given port to the set of source ports to exclude.
 func (ex *ExcludeConfig) AddSrcPort(port string) error {
 	i, err := strconv.ParseInt(port, 10, 16)
 	if err != nil {
@@ -70,6 +71,7 @@ func (ex *ExcludeConfig) AddSrcPort(port string) error {
 	return nil
 }
 
+// AddDstIP adds the given dst IP address to the set of destination IPs to exclude.
 func (ex *ExcludeConfig) AddDstIP(dst string) error {
 	ip := net.ParseIP(dst)
 	if ip == nil {
