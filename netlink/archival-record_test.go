@@ -2,10 +2,9 @@
 package netlink
 
 import (
+	"reflect"
 	"testing"
 	"unsafe"
-
-	//"github.com/m-lab/go/pretty"
 
 	"github.com/m-lab/tcp-info/inetdiag"
 )
@@ -16,10 +15,6 @@ func inet2bytes(inet *inetdiag.InetDiagMsg) []byte {
 }
 
 func TestMakeArchivalRecord(t *testing.T) {
-	//fmt.Println(s)
-	// ptr := unsafe.Pointer(&inet)
-	// (*[len]ArbitraryType)(unsafe.Pointer(ptr))[:]
-	// return (*InetDiagMsg)(unsafe.Pointer(&raw[0])), nil
 	id := inetdiag.LinuxSockID{
 		IDiagSPort: [2]byte{0, 77},          // src port
 		IDiagSrc:   [16]byte{127, 0, 0, 1},  // localhost
@@ -78,4 +73,77 @@ func TestMakeArchivalRecord(t *testing.T) {
 	}
 	/*
 	 */
+}
+
+func TestExcludeConfig_AddSrcPort(t *testing.T) {
+	tests := []struct {
+		name      string
+		port      string
+		wantPorts map[uint16]bool
+		wantErr   bool
+	}{
+		{
+			name: "success",
+			port: "9999", // "not-a-port"},
+			wantPorts: map[uint16]bool{
+				9999: true,
+			},
+		},
+		{
+			name:    "error",
+			port:    "not-a-port",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ex := &ExcludeConfig{}
+			if err := ex.AddSrcPort(tt.port); (err != nil) != tt.wantErr {
+				t.Errorf("ExcludeConfig.AddSrcPort() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !reflect.DeepEqual(ex.SrcPorts, tt.wantPorts) {
+				t.Errorf("ExcludeConfig.SrcPorts = %#v, want %#v", ex.SrcPorts, tt.wantPorts)
+			}
+		})
+	}
+}
+
+func TestExcludeConfig_AddDstIP(t *testing.T) {
+	tests := []struct {
+		name    string
+		dst     string
+		wantIPs map[[16]byte]bool
+		wantErr bool
+	}{
+		{
+			name: "success-ipv4",
+			dst:  "172.25.0.1",
+			wantIPs: map[[16]byte]bool{
+				[16]byte{172, 25, 0, 1}: true,
+			},
+		},
+		{
+			name: "success-ipv6",
+			dst:  "fd0a:008d:ba3f:a834::",
+			wantIPs: map[[16]byte]bool{
+				[16]byte{0xfd, 0x0a, 0x00, 0x8d, 0xba, 0x3f, 0xa8, 0x34}: true,
+			},
+		},
+		{
+			name:    "error",
+			dst:     ";not-an-ip;",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ex := &ExcludeConfig{}
+			if err := ex.AddDstIP(tt.dst); (err != nil) != tt.wantErr {
+				t.Errorf("ExcludeConfig.AddDstIP() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !reflect.DeepEqual(ex.DstIPs, tt.wantIPs) {
+				t.Errorf("ExcludeConfig.DstIPs = %#v, want %#v", ex.DstIPs, tt.wantIPs)
+			}
+		})
+	}
 }

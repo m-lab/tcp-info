@@ -6,10 +6,12 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"flag"
 	"io"
 	"log"
 	"net"
+	"strconv"
 	"time"
 	"unsafe"
 
@@ -54,6 +56,39 @@ type ExcludeConfig struct {
 	// SrcPorts excludes connections from specific source ports.
 	SrcPorts map[uint16]bool
 	DstIPs   map[[16]byte]bool
+}
+
+func (ex *ExcludeConfig) AddSrcPort(port string) error {
+	i, err := strconv.ParseInt(port, 10, 16)
+	if err != nil {
+		return err
+	}
+	if ex.SrcPorts == nil {
+		ex.SrcPorts = map[uint16]bool{}
+	}
+	ex.SrcPorts[uint16(i)] = true
+	return nil
+}
+
+func (ex *ExcludeConfig) AddDstIP(dst string) error {
+	ip := net.ParseIP(dst)
+	if ip == nil {
+		return errors.New("invalid ip: " + dst)
+	}
+	if ex.DstIPs == nil {
+		ex.DstIPs = map[[16]byte]bool{}
+	}
+	buf := [16]byte{}
+	if ip.To4() != nil {
+		// NOTE: The Linux-native byte position for IPv4 addresses is the first four bytes.
+		// The net.IP package format uses the last four bytes. Copy the net.IP bytes to a
+		// new array to generate a key for dstIPs.
+		copy(buf[:], ip[12:])
+	} else {
+		copy(buf[:], ip[:])
+	}
+	ex.DstIPs[buf] = true
+	return nil
 }
 
 // ParseRouteAttr parses a byte array into slice of NetlinkRouteAttr struct.
