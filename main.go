@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net"
 	"os"
 	"runtime"
 	"runtime/trace"
@@ -57,6 +58,7 @@ var (
 	enableTrace     bool
 	outputDir       string
 	excludeSrcPorts = flagx.StringArray{}
+	excludeDstIPs   = flagx.StringArray{}
 )
 
 func init() {
@@ -67,6 +69,7 @@ func init() {
 	flag.BoolVar(&enableTrace, "trace", false, "Enable trace")
 	flag.StringVar(&outputDir, "output", "", "Directory in which to put the resulting tree of data. Default is the current directory.")
 	flag.Var(&excludeSrcPorts, "exclude-srcport", "Exclude snapshots with these local ports from saved archives.")
+	flag.Var(&excludeDstIPs, "exclude-dstip", "Exclude snapshots with these remote IPs from saved archives.")
 }
 
 // NOTES:
@@ -113,6 +116,28 @@ func main() {
 
 	ex := &netlink.ExcludeConfig{
 		Local: true,
+	}
+
+	if len(excludeDstIPs) != 0 {
+		dstIPs := map[[16]byte]bool{}
+		for _, ipstr := range excludeDstIPs {
+			ip := net.ParseIP(ipstr)
+			if ip == nil {
+				log.Printf("skipping; cannot convert %q to ip", ipstr)
+				continue
+			}
+			ipbuf := [16]byte{}
+			if ip.To4() != nil {
+				// NOTE: The Linux-native byte position for IPv4 addresses is the first four bytes.
+				// The net.IP package format uses the last four bytes. Copy the net.IP bytes to a
+				// new array to generate a key for dstIPs.
+				copy(ipbuf[:], ip[12:])
+			} else {
+				copy(ipbuf[:], ip[:])
+			}
+			dstIPs[ipbuf] = true
+		}
+		ex.DstIPs = dstIPs
 	}
 
 	if len(excludeSrcPorts) != 0 {
