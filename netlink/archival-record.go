@@ -80,16 +80,16 @@ func (ex *ExcludeConfig) AddDstIP(dst string) error {
 	if ex.DstIPs == nil {
 		ex.DstIPs = map[[16]byte]bool{}
 	}
-	buf := [16]byte{}
+	key := [16]byte{}
 	if ip.To4() != nil {
 		// NOTE: The Linux-native byte position for IPv4 addresses is the first four bytes.
 		// The net.IP package format uses the last four bytes. Copy the net.IP bytes to a
 		// new array to generate a key for dstIPs.
-		copy(buf[:], ip[12:])
+		copy(key[:], ip[12:])
 	} else {
-		copy(buf[:], ip[:])
+		copy(key[:], ip[:])
 	}
-	ex.DstIPs[buf] = true
+	ex.DstIPs[key] = true
 	return nil
 }
 
