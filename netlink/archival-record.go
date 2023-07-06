@@ -6,10 +6,12 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"flag"
 	"io"
 	"log"
 	"net"
+	"strconv"
 	"time"
 	"unsafe"
 
@@ -53,6 +55,42 @@ type ExcludeConfig struct {
 	Local bool
 	// SrcPorts excludes connections from specific source ports.
 	SrcPorts map[uint16]bool
+	DstIPs   map[[16]byte]bool
+}
+
+// AddSrcPort adds the given port to the set of source ports to exclude.
+func (ex *ExcludeConfig) AddSrcPort(port string) error {
+	i, err := strconv.ParseInt(port, 10, 16)
+	if err != nil {
+		return err
+	}
+	if ex.SrcPorts == nil {
+		ex.SrcPorts = map[uint16]bool{}
+	}
+	ex.SrcPorts[uint16(i)] = true
+	return nil
+}
+
+// AddDstIP adds the given dst IP address to the set of destination IPs to exclude.
+func (ex *ExcludeConfig) AddDstIP(dst string) error {
+	ip := net.ParseIP(dst)
+	if ip == nil {
+		return errors.New("invalid ip: " + dst)
+	}
+	if ex.DstIPs == nil {
+		ex.DstIPs = map[[16]byte]bool{}
+	}
+	key := [16]byte{}
+	if ip.To4() != nil {
+		// NOTE: The Linux-native byte position for IPv4 addresses is the first four bytes.
+		// The net.IP package format uses the last four bytes. Copy the net.IP bytes to a
+		// new array to generate a key for dstIPs.
+		copy(key[:], ip[12:])
+	} else {
+		copy(key[:], ip[:])
+	}
+	ex.DstIPs[key] = true
+	return nil
 }
 
 // ParseRouteAttr parses a byte array into slice of NetlinkRouteAttr struct.
@@ -92,6 +130,12 @@ func MakeArchivalRecord(msg *NetlinkMessage, exclude *ExcludeConfig) (*ArchivalR
 			return nil, nil
 		}
 		if exclude.Local && (isLocal(idm.ID.SrcIP()) || isLocal(idm.ID.DstIP())) {
+			return nil, nil
+		}
+		if exclude.DstIPs != nil && exclude.DstIPs[idm.ID.IDiagDst] {
+			// Note: byte-key lookup is preferable for performance than
+			// net.IP-to-String formatting. And, a byte array can be a map key,
+			// while a net.IP byte slice cannot.
 			return nil, nil
 		}
 	}

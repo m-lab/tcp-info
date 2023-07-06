@@ -10,7 +10,6 @@ import (
 	"os"
 	"runtime"
 	"runtime/trace"
-	"strconv"
 
 	"github.com/m-lab/tcp-info/eventsocket"
 
@@ -57,6 +56,7 @@ var (
 	enableTrace     bool
 	outputDir       string
 	excludeSrcPorts = flagx.StringArray{}
+	excludeDstIPs   = flagx.StringArray{}
 )
 
 func init() {
@@ -67,6 +67,7 @@ func init() {
 	flag.BoolVar(&enableTrace, "trace", false, "Enable trace")
 	flag.StringVar(&outputDir, "output", "", "Directory in which to put the resulting tree of data. Default is the current directory.")
 	flag.Var(&excludeSrcPorts, "exclude-srcport", "Exclude snapshots with these local ports from saved archives.")
+	flag.Var(&excludeDstIPs, "exclude-dstip", "Exclude snapshots with these remote IPs from saved archives.")
 }
 
 // NOTES:
@@ -115,17 +116,23 @@ func main() {
 		Local: true,
 	}
 
-	if len(excludeSrcPorts) != 0 {
-		srcPorts := map[uint16]bool{}
-		for _, port := range excludeSrcPorts {
-			i, err := strconv.ParseInt(port, 10, 16)
+	if len(excludeDstIPs) != 0 {
+		for _, dip := range excludeDstIPs {
+			err := ex.AddDstIP(dip)
 			if err != nil {
-				log.Printf("skipping; cannot convert %q to integer", port)
+				log.Printf("skipping; cannot convert ip %q; %v", dip, err)
 				continue
 			}
-			srcPorts[uint16(i)] = true
 		}
-		ex.SrcPorts = srcPorts
+	}
+	if len(excludeSrcPorts) != 0 {
+		for _, port := range excludeSrcPorts {
+			err := ex.AddSrcPort(port)
+			if err != nil {
+				log.Printf("skipping; cannot convert port %q; %v", port, err)
+				continue
+			}
+		}
 	}
 
 	// Make the saver and construct the message channel, buffering up to 2 batches
