@@ -8,7 +8,7 @@ RUN mkdir /pkg && cd /src && make MOREFLAGS="-static" zstd && make DESTDIR=/pkg 
 
 
 # An image for building tcp-info
-FROM golang:1.18 as tcp-info-builder
+FROM golang:1.20 as tcp-info-builder
 
 ENV CGO_ENABLED 0
 
