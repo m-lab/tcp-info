@@ -1,4 +1,5 @@
 # Travis configuration for tcp-info fast sidestream tool.
+dist: focal
 language: go
 go:
  - 1.20
