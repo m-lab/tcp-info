@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/m-lab/tcp-info/inetdiag"
+	"github.com/m-lab/tcp-info/metrics"
 )
 
 //go:generate stringer -type=TCPEvent
@@ -172,6 +173,7 @@ func (s *server) FlowCreated(timestamp time.Time, uuid string, id inetdiag.SockI
 		ID:        &id,
 		UUID:      uuid,
 	}
+	metrics.FlowEventsCounter.WithLabelValues("open").Inc()
 }
 
 // FlowDeleted should be called whenever tcpinfo notices a flow has been retired.

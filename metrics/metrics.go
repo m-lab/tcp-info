@@ -2,9 +2,9 @@
 // methods to add accounting to various parts of the pipeline.
 //
 // When defining new operations or metrics, these are helpful values to track:
-//  - things coming into or go out of the system: requests, files, tests, api calls.
-//  - the success or error status of any of the above.
-//  - the distribution of processing latency.
+//   - things coming into or go out of the system: requests, files, tests, api calls.
+//   - the success or error status of any of the above.
+//   - the distribution of processing latency.
 package metrics
 
 import (
@@ -167,6 +167,13 @@ var (
 			Name: "netlink_skipped_total",
 			Help: "Number of skipped netlink messages.",
 		}, []string{"type"},
+	)
+
+	FlowEventsCounter = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "tcpinfo_flow_events_total",
+			Help: "Number of flow events by event type.",
+		}, []string{"event"},
 	)
 )
 
