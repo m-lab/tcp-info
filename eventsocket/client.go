@@ -26,7 +26,7 @@ var (
 // and one called on Close events.
 type Handler interface {
 	Open(ctx context.Context, timestamp time.Time, uuid string, ID *inetdiag.SockID)
-	Close(ctx context.Context, timestamp time.Time, uuid string)
+	Close(ctx context.Context, timestamp time.Time, uuid string, ID *inetdiag.SockID)
 }
 
 // MustRun will read from the passed-in socket filename until the context is
@@ -52,7 +52,7 @@ func MustRun(ctx context.Context, socket string, handler Handler) {
 		case Open:
 			handler.Open(ctx, event.Timestamp, event.UUID, event.ID)
 		case Close:
-			handler.Close(ctx, event.Timestamp, event.UUID)
+			handler.Close(ctx, event.Timestamp, event.UUID, event.ID)
 		default:
 			log.Println("Unknown event type:", event.Event)
 		}

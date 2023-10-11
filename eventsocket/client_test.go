@@ -22,7 +22,7 @@ func (t *testHandler) Open(ctx context.Context, timestamp time.Time, uuid string
 	t.wg.Done()
 }
 
-func (t *testHandler) Close(ctx context.Context, timestamp time.Time, uuid string) {
+func (t *testHandler) Close(ctx context.Context, timestamp time.Time, uuid string, id *inetdiag.SockID) {
 	t.closes++
 	t.wg.Done()
 }
@@ -58,7 +58,7 @@ func TestClient(t *testing.T) {
 		UUID:      "fakeuuid",
 	}
 	// Send a deletion event
-	srv.FlowDeleted(time.Now(), "fakeuuid")
+	srv.FlowDeleted(time.Now(), "fakeuuid", nil)
 	th.wg.Wait() // Wait until the handler gets two events!
 
 	// Cancel the context and wait until the client stops running.

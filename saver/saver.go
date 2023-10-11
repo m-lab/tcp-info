@@ -288,12 +288,14 @@ func (svr *Saver) queue(msg *netlink.ArchivalRecord) error {
 }
 
 func (svr *Saver) endConn(cookie uint64) {
-	svr.eventServer.FlowDeleted(time.Now(), uuid.FromCookie(cookie))
 	q := svr.MarshalChans[cookie%uint64(len(svr.MarshalChans))]
 	conn, ok := svr.Connections[cookie]
 	if ok && conn.Writer != nil {
+		svr.eventServer.FlowDeleted(time.Now(), uuid.FromCookie(cookie), &conn.ID)
 		q <- Task{nil, conn.Writer}
 		delete(svr.Connections, cookie)
+	} else {
+		svr.eventServer.FlowDeleted(time.Now(), uuid.FromCookie(cookie), nil)
 	}
 }
 
