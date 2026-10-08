@@ -15,35 +15,81 @@ import (
 )
 
 var (
-	// Filename is a command-line flag holding the name of the unix-domain
-	// socket that should be used by the client and server. It is put here in an
-	// attempt to have just one standard flag name.
+	// Filename is a flag for the unix-domain socket on which events are served.
 	Filename = flag.String("tcpinfo.eventsocket", "", "The filename of the unix-domain socket on which events are served.")
+
+	// Bounds for the exponential backoff between (re)connection attempts.
+	reconnectMinDelay = 100 * time.Millisecond
+	reconnectMaxDelay = 10 * time.Second
 )
 
-// Handler is the interface that all interested users of the event socket
-// notifications should implement. It has two methods, one called on Open events
-// and one called on Close events.
+// Handler is the interface that all users of the eventsocket client should
+// implement.
 type Handler interface {
+	// Open is called when a new flow is created.
 	Open(ctx context.Context, timestamp time.Time, uuid string, ID *inetdiag.SockID)
+	// Close is called when a flow is closed.
 	Close(ctx context.Context, timestamp time.Time, uuid string)
 }
 
-// MustRun will read from the passed-in socket filename until the context is
-// cancelled. Any errors are fatal.
+// MustRun connects to the given unix-domain socket and dispatches every
+// received event to the handler until the context is canceled.
+//
+// The connection is maintained for the lifetime of the context: if the socket
+// cannot be dialed, or an established connection is lost (for example because
+// the server process restarted and created a new socket), MustRun waits with
+// exponential backoff and connects again. Without this, a client would
+// silently stop receiving events after a server restart. Events that occur
+// while the client is disconnected are not delivered.
+//
+// It is still a "Must" function in the sense that it panics on events it
+// cannot decode, which indicates a client/server version mismatch.
 func MustRun(ctx context.Context, socket string, handler Handler) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	delay := reconnectMinDelay
+	for ctx.Err() == nil {
+		connected, err := runConnection(ctx, socket, handler)
+		if ctx.Err() != nil {
+			return
+		}
+		if connected {
+			// The last connection succeeded, so start over with a short delay.
+			delay = reconnectMinDelay
+		}
+		if err != nil {
+			log.Printf("Event socket %q: %v (retrying in %v)", socket, err, delay)
+		} else {
+			log.Printf("Event socket %q closed by server (reconnecting in %v)", socket, delay)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+		delay *= 2
+		if delay > reconnectMaxDelay {
+			delay = reconnectMaxDelay
+		}
+	}
+}
+
+// runConnection dials the socket and dispatches events until the connection
+// is closed or the context is canceled. It returns whether the dial succeeded
+// and the error that ended the connection, if any.
+func runConnection(ctx context.Context, socket string, handler Handler) (bool, error) {
 	c, err := net.Dial("unix", socket)
-	rtx.Must(err, "Could not connect to %q", socket)
+	if err != nil {
+		return false, err
+	}
+	// Close the connection when the context is canceled, which unblocks the
+	// scanner below. The per-connection context ensures the goroutine exits
+	// when this function returns, not just when the parent is canceled.
+	connCtx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
 	go func() {
-		// Close the connection when the context is done. Closing the underlying
-		// connection means that the scanner will soon terminate.
-		<-ctx.Done()
+		<-connCtx.Done()
 		c.Close()
 	}()
 
-	// By default bufio.Scanner is based on newlines, which is perfect for our JSONL protocol.
 	s := bufio.NewScanner(c)
 	for s.Scan() {
 		var event FlowEvent
@@ -58,18 +104,9 @@ func MustRun(ctx context.Context, socket string, handler Handler) {
 		}
 	}
 
-	// s.Err() is supposed to be nil under normal conditions. Scanner objects
-	// hide the expected EOF error and return nil after they encounter it,
-	// because EOF is the expected error. However, reading on a closed socket
-	// doesn't give you an EOF error and the error it does give you is
-	// unexported. The error it gives you should be treated the same as EOF,
-	// because it corresponds to the connection terminating under normal
-	// conditions. Because Scanner hides the EOF error, it should also hide the
-	// unexported one. Because Scanner doesn't, we do so here. Other errors
-	// should not be hidden.
 	err = s.Err()
 	if err != nil && strings.Contains(err.Error(), "use of closed network connection") {
 		err = nil
 	}
-	rtx.Must(err, "Scanning of %f died with non-EOF error", socket)
+	return true, err
 }
