@@ -11,7 +11,18 @@ import (
 	"time"
 
 	"github.com/m-lab/tcp-info/inetdiag"
-	"github.com/m-lab/tcp-info/metrics"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+// flowEventsCounter is defined here rather than in the metrics package so that
+// importing eventsocket (e.g. only for the client) does not register every
+// tcp-info metric.
+var flowEventsCounter = promauto.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "tcpinfo_flow_events_total",
+		Help: "Number of flow events by event type.",
+	}, []string{"event"},
 )
 
 //go:generate stringer -type=TCPEvent
@@ -173,7 +184,7 @@ func (s *server) FlowCreated(timestamp time.Time, uuid string, id inetdiag.SockI
 		ID:        &id,
 		UUID:      uuid,
 	}
-	metrics.FlowEventsCounter.WithLabelValues("open").Inc()
+	flowEventsCounter.WithLabelValues("open").Inc()
 }
 
 // FlowDeleted should be called whenever tcpinfo notices a flow has been retired.
