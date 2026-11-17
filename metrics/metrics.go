@@ -168,13 +168,6 @@ var (
 			Help: "Number of skipped netlink messages.",
 		}, []string{"type"},
 	)
-
-	FlowEventsCounter = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "tcpinfo_flow_events_total",
-			Help: "Number of flow events by event type.",
-		}, []string{"event"},
-	)
 )
 
 // init() prints a log message to let the user know that the package has been
